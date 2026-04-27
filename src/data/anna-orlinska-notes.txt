@@ -1,0 +1,70 @@
+Anna Orlinska fireplace quote
+Customer: Anna Orlinska
+Customer ID: BS-10482
+Customer Phone: 815-555-0184
+Invoice Address: 4270 Guilford Road
+Invoice City/State/Zip: Rockford, IL 61107
+Project Address: 4270 Guilford Road
+Project City/State/Zip: Rockford, IL 61107
+
+Quote No: FP-260427-01
+Quote Date: 04/27/2026
+Project Title: Great Room Gas Insert Upgrade
+PO Number:
+Taken By: Drew
+Sales Rep: Benson Showroom
+
+Project Overview:
+- Replace aging fireplace with a direct vent gas insert package
+- Rework surround finish to clean up the opening and improve draft performance
+- Present two package options for customer review
+
+Package 1: Mendota FullView 34 Classic
+- Mendota FV34 Decor Front - $5,899.00
+- Black interior liner - $425.00
+- Remote kit - $189.00
+- Standard media kit - $165.00
+- Vent liner kit - $1,240.00
+- Install direct vent insert with basic hookup - $2,150.00
+
+Package 2: Mendota FullView 34 Deluxe
+- Mendota FV34 Decor Front Deluxe - $6,499.00
+- Ledgestone interior liner - $695.00
+- Remote kit - $189.00
+- Premium media kit - $325.00
+- Vent liner kit - $1,240.00
+- Install direct vent insert with trim modifications - $2,450.00
+
+Installation Scope:
+- Remove existing unit
+- Install new gas insert and vent liner system
+- Basic startup and homeowner walkthrough
+
+Detail Section 1: Package 1 Venting + Components
+Subtotal: $7,918.00
+- Mendota FV34 Decor Front | 1 | $5,899.00 | $5,899.00
+- Black interior liner | 1 | $425.00 | $425.00
+- Remote kit | 1 | $189.00 | $189.00
+- Standard media kit | 1 | $165.00 | $165.00
+- Vent liner kit | 1 | $1,240.00 | $1,240.00
+
+Detail Section 2: Package 2 Venting + Components
+Subtotal: $8,948.00
+- Mendota FV34 Decor Front Deluxe | 1 | $6,499.00 | $6,499.00
+- Ledgestone interior liner | 1 | $695.00 | $695.00
+- Remote kit | 1 | $189.00 | $189.00
+- Premium media kit | 1 | $325.00 | $325.00
+- Vent liner kit | 1 | $1,240.00 | $1,240.00
+
+Installation Total: $4,600.00
+Project Notes:
+- Customer still deciding between traditional and ledgestone interior look
+- Delivery date discussed internally for late June but do not show on proposal
+
+Total Amount: $12,518.00
+IR Tax: $0.00
+Quotation Total: $12,518.00
+Amount Paid: $0.00
+Balance Due: $12,518.00
+Legal Terms:
+- Subject to final field verification before order placement
