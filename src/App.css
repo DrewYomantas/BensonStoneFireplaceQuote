@@ -749,3 +749,388 @@
   cursor: not-allowed;
 }
 
+/* Customer-facing proposal modal + print layout */
+
+.customer-pdf-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(33, 25, 18, 0.78);
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.customer-pdf-modal__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  background: #1f2a20;
+  color: #f3ead4;
+  border-bottom: 2px solid #b48650;
+}
+
+.customer-pdf-modal__controls strong {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.customer-pdf-modal__controls span {
+  display: block;
+  opacity: 0.78;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.customer-pdf-modal__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #f3ead4;
+}
+
+.customer-pdf-modal__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.customer-pdf-modal__actions .ghost-button {
+  background: transparent;
+  color: #f3ead4;
+  border: 1px solid rgba(243, 234, 212, 0.4);
+}
+
+.customer-pdf-modal__stage {
+  overflow: auto;
+  padding: 36px 24px 60px;
+  display: flex;
+  justify-content: center;
+}
+
+.customer-proposal {
+  width: min(820px, 100%);
+  display: grid;
+  gap: 24px;
+  font-family: 'Georgia', 'Source Serif Pro', serif;
+  color: #2d2217;
+}
+
+.cp-page {
+  background: #faf3e2;
+  background-image: radial-gradient(circle at top right, rgba(180, 134, 80, 0.08), transparent 55%);
+  border: 1px solid rgba(94, 73, 51, 0.18);
+  border-radius: 4px;
+  box-shadow: 0 18px 40px rgba(36, 26, 18, 0.18);
+  padding: 48px 52px;
+  page-break-after: always;
+}
+
+.cp-page:last-child { page-break-after: auto; }
+
+.cp-brand-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 2px solid #2f4632;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+.cp-brand-mark {
+  margin: 0;
+  font-family: 'Georgia', serif;
+  font-size: 26px;
+  letter-spacing: 0.04em;
+  color: #2f4632;
+  font-weight: 700;
+}
+
+.cp-brand-tag {
+  margin: 4px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b5a2b;
+}
+
+.cp-brand-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  color: #5c4837;
+}
+
+.cp-title-band {
+  margin-bottom: 28px;
+}
+
+.cp-eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8b5a2b;
+}
+
+.cp-title {
+  margin: 0;
+  font-size: 34px;
+  color: #2f4632;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.cp-subtitle {
+  margin: 8px 0 0;
+  font-size: 16px;
+  color: #5c4837;
+  font-style: italic;
+}
+
+.cp-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.cp-card {
+  background: rgba(255, 252, 244, 0.8);
+  border: 1px solid rgba(94, 73, 51, 0.18);
+  border-radius: 4px;
+  padding: 16px 18px;
+}
+
+.cp-card h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #2f4632;
+  font-weight: 700;
+}
+
+.cp-card--accent {
+  background: #2f4632;
+  color: #f3ead4;
+  border-color: #2f4632;
+}
+
+.cp-card--accent h2 { color: #d9b079; }
+.cp-card--accent .cp-line strong { color: #f3ead4; }
+
+.cp-line {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cp-muted { color: #6b5a47; font-size: 13px; }
+
+.cp-callout {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: rgba(180, 134, 80, 0.18);
+  border-radius: 3px;
+  color: #f3ead4;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cp-callout-soft {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: rgba(47, 70, 50, 0.08);
+  border-left: 3px solid #2f4632;
+  color: #2f4632;
+  font-style: italic;
+}
+
+.cp-section {
+  margin-bottom: 28px;
+}
+
+.cp-section h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #2f4632;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.2);
+  padding-bottom: 6px;
+}
+
+.cp-section h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #2f4632;
+}
+
+.cp-package-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cp-package {
+  border: 1px solid rgba(94, 73, 51, 0.2);
+  border-radius: 4px;
+  padding: 16px;
+  background: rgba(255, 252, 244, 0.6);
+}
+
+.cp-list, .cp-totals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cp-list li,
+.cp-totals li,
+.cp-inline-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(94, 73, 51, 0.15);
+  font-size: 14px;
+}
+
+.cp-list li:last-child,
+.cp-totals li:last-child {
+  border-bottom: none;
+}
+
+.cp-totals-major {
+  font-weight: 700;
+  color: #2f4632;
+  border-top: 1px solid rgba(94, 73, 51, 0.3);
+  padding-top: 8px !important;
+  margin-top: 4px;
+}
+
+.cp-investment .cp-totals {
+  max-width: 360px;
+  margin-left: auto;
+}
+
+.cp-page-header {
+  border-bottom: 2px solid #b48650;
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+.cp-page-header h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #2f4632;
+}
+
+.cp-detail-section { margin-bottom: 22px; }
+
+.cp-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.cp-detail-subtotal {
+  font-weight: 700;
+  color: #8b5a2b;
+}
+
+.cp-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cp-detail-table th {
+  text-align: left;
+  background: rgba(47, 70, 50, 0.08);
+  color: #2f4632;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.25);
+}
+
+.cp-detail-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.1);
+  vertical-align: top;
+}
+
+.cp-detail-table th:nth-child(2),
+.cp-detail-table th:nth-child(3),
+.cp-detail-table th:nth-child(4),
+.cp-detail-table td:nth-child(2),
+.cp-detail-table td:nth-child(3),
+.cp-detail-table td:nth-child(4) {
+  text-align: right;
+  width: 80px;
+}
+
+.cp-terms .cp-line { margin-bottom: 8px; }
+
+.cp-signature {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-top: 32px;
+}
+
+.cp-sig-line {
+  margin: 0 0 28px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8b5a2b;
+}
+
+.cp-sig-rule {
+  display: block;
+  border-bottom: 1px solid #2d2217;
+  height: 1px;
+  margin-bottom: 6px;
+}
+
+.cp-sig-meta {
+  margin: 0;
+  font-size: 12px;
+  color: #6b5a47;
+}
+
+.cp-footer {
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(94, 73, 51, 0.2);
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #6b5a47;
+  letter-spacing: 0.04em;
+}
+
+@media print {
+  .app-shell { display: none !important; }
+  .customer-pdf-modal {
+    position: static;
+    background: white;
+    overflow: visible;
+  }
+  .customer-pdf-modal__controls { display: none !important; }
+  .customer-pdf-modal__stage { padding: 0; overflow: visible; }
+  .cp-page {
+    box-shadow: none;
+    border: none;
+    margin: 0;
+    padding: 36px 40px;
+  }
+  .customer-proposal { width: 100%; }
+}
+
+

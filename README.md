@@ -23,7 +23,21 @@ This app never invents customer info, products, prices, tax, totals, or terms. I
 3. review warnings, the document-type badge, unmatched lines, and blank required fields
 4. edit the structured proposal fields until export blockers are cleared
 5. copy the grouped fields or export JSON for recordkeeping
-6. preview internally; **Generate Customer PDF** is disabled until a PDF rendering layer is added
+6. click **Generate Customer PDF** to open the customer-facing preview
+7. in the preview modal, click **Print / Save as PDF** to email or print the polished proposal/order summary
+
+## Customer-facing PDF
+
+The Generate Customer PDF flow renders an HTML/CSS proposal styled for Benson Stone (warm ivory background, deep green panels, bronze/copper accents) and uses the browser's Print → Save-as-PDF to produce the final file. It reads only the reviewed fields — no reparsing, no invented data.
+
+Output rules:
+
+- **Quote / Quotation** → "Fireplace Project Proposal" (or "Outdoor Living Proposal" when the line items are grills/outdoor). Quote-good-for and deposit terms appear; signature block is included.
+- **Order / Bill** → "Project Confirmation". Quote-only language is suppressed.
+- **Invoice / Receipt / outdoor non-quote** → "Order Summary".
+- **Fully paid** (Balance Due = $0.00, Amount Paid > 0) → deposit language is hidden and a "Paid in full — thank you!" callout is shown.
+- **Delivery date** stays hidden unless the modal's "Include delivery date" toggle is checked.
+- **Internal warnings** and the raw extracted PDF text are never shown on the customer-facing output.
 
 ## What the app does
 
@@ -126,7 +140,7 @@ The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, 
 ## Limitations
 
 - PDF text extraction uses `pdfjs-dist`. OCR fallback for scanned PDFs is not implemented.
-- Generate Customer PDF is intentionally disabled — next pass needs a PDF rendering layer (e.g., react-pdf or html-to-pdf) wired to the reviewed fields.
+- Customer PDF output relies on the browser's print engine (Save as PDF). Margins and page breaks may vary slightly across browsers.
 - No git remote is configured for this repo.
 - Real customer PDFs and CSVs from the Benson Stone Drive are **not committed** to this repo. Tests use sanitized fixtures based on the real layout.
 

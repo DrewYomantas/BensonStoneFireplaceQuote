@@ -17,6 +17,7 @@ import {
 } from './lib/parser.js'
 import { parseBisTrackText } from './lib/biztrackPdfParser.js'
 import { extractTextFromPdf } from './lib/pdfTextExtraction.js'
+import CustomerProposal from './components/CustomerProposal.jsx'
 
 const workflowSteps = [
   { number: 1, label: 'Paste Notes', anchor: 'step-1' },
@@ -128,6 +129,8 @@ function App() {
   const [pdfRawText, setPdfRawText] = useState('')
   const [pdfLineItems, setPdfLineItems] = useState([])
   const [pdfExtractionConfidence, setPdfExtractionConfidence] = useState('')
+  const [showCustomerPdf, setShowCustomerPdf] = useState(false)
+  const [includeDeliveryDate, setIncludeDeliveryDate] = useState(false)
   const [audit, setAudit] = useState(buildAudit(emptyFields, emptySources, parseContext))
   const [copyState, setCopyState] = useState('')
   const [parsedOnce, setParsedOnce] = useState(false)
@@ -830,17 +833,20 @@ function App() {
             </button>
             <button
               type="button"
-              className="ghost-button is-disabled"
-              disabled
-              title="Customer PDF generation is not wired up yet. Next pass needs a layout/PDF rendering step (e.g., react-pdf or html-to-pdf) using the reviewed fields above."
+              className="primary-button"
+              onClick={() => {
+                setShowCustomerPdf(true)
+                setCopyState('Opened customer-facing preview')
+                setCurrentStep(4)
+              }}
             >
-              Generate Customer PDF (coming soon)
+              Generate Customer PDF
             </button>
           </div>
 
           <p className="quiet-status">
-            Generate Customer PDF is disabled until a PDF rendering layer is added. Current preview uses the
-            "{parseContext.outputLabel || 'Fireplace Project Proposal'}" label based on the detected source document type.
+            Review fields before generating. Epicor BisTrack remains the official source of truth.
+            Customer-facing label: "{parseContext.outputLabel || 'Fireplace Project Proposal'}".
           </p>
 
           <div className="output-grid">
@@ -1026,6 +1032,45 @@ function App() {
           </section>
         </section>
       </main>
+
+      {showCustomerPdf ? (
+        <div
+          className="customer-pdf-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Customer-facing proposal preview"
+        >
+          <div className="customer-pdf-modal__controls">
+            <div>
+              <strong>Customer-facing preview</strong>
+              <span>Review fields before generating. Epicor BisTrack remains the official source of truth.</span>
+            </div>
+            <label className="customer-pdf-modal__toggle">
+              <input
+                type="checkbox"
+                checked={includeDeliveryDate}
+                onChange={(event) => setIncludeDeliveryDate(event.target.checked)}
+              />
+              Include delivery date
+            </label>
+            <div className="customer-pdf-modal__actions">
+              <button type="button" className="primary-button" onClick={() => window.print()}>
+                Print / Save as PDF
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setShowCustomerPdf(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="customer-pdf-modal__stage">
+            <CustomerProposal
+              fields={fields}
+              parseContext={parseContext}
+              includeDeliveryDate={includeDeliveryDate}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
