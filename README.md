@@ -110,11 +110,25 @@ Current automated checks cover:
 | Invoice / Receipt | Order Summary | No deposit language; if fully paid, deposit panel hidden |
 | Unknown | Project Summary | Warning surfaced — verify source document |
 
+## Real BisTrack PDF behavior
+
+The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, Bill, Invoice, Receipt). What to expect:
+
+- **Embedded-text PDFs** (the normal BisTrack export) parse correctly: document type, number, date, customer ID, terms, PO#, delivery date, taken-by/sales-rep, invoice and delivery addresses, customer phone, line items, and totals (Total Amount, Tax, Order/Quotation Total, Amount Paid, Balance Due).
+- **Scanned / image-based PDFs** surface a clear warning ("This Epicor BisTrack PDF looks scanned or image-based — review extracted fields carefully") instead of failing silently. OCR fallback is not implemented in this pass.
+- **Column-reordered output**: pdfjs sometimes emits BisTrack line-item columns in a non-row-by-row order (descriptions stacked, then qty/price/total stacked). The parser handles the common case but may miss qty/price pairings on heavily reordered layouts. Codes and descriptions still extract; totals remain authoritative. The mandatory human review step catches anything off.
+- **Delivery date** is captured but intentionally excluded from customer-facing fields. An info note is surfaced.
+- **Document type** drives output wording: Quotes use proposal language and apply quote-only defaults (30 days, 50% deposit). Orders/Bills/Invoices/Receipts skip those defaults and use "Project Confirmation" or "Order Summary".
+- **Fully paid orders** (Balance Due = $0.00, Amount Paid > 0) automatically hide deposit-terms language in the preview.
+- **Total mismatch** (Total + Tax ≠ Document Total) raises a warning. The official BisTrack values are never recalculated.
+- Human review of every field is mandatory before export.
+
 ## Limitations
 
-- PDF text extraction uses `pdfjs-dist`. Scanned/image-only PDFs surface a "looks scanned or image-based" warning instead of failing silently. OCR fallback is not implemented in this pass.
+- PDF text extraction uses `pdfjs-dist`. OCR fallback for scanned PDFs is not implemented.
 - Generate Customer PDF is intentionally disabled — next pass needs a PDF rendering layer (e.g., react-pdf or html-to-pdf) wired to the reviewed fields.
 - No git remote is configured for this repo.
+- Real customer PDFs and CSVs from the Benson Stone Drive are **not committed** to this repo. Tests use sanitized fixtures based on the real layout.
 
 ## V3+ roadmap
 
