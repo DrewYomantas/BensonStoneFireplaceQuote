@@ -616,3 +616,136 @@
     page-break-after: always;
   }
 }
+
+.input-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 16px 0 12px;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.15);
+}
+
+.input-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #5c4837;
+  cursor: pointer;
+}
+
+.input-tab.is-active {
+  color: #2d2217;
+  border-bottom-color: #8a6d4c;
+}
+
+.pdf-upload {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed rgba(94, 73, 51, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.6);
+}
+
+.pdf-upload__intro {
+  margin: 0;
+  color: #5c4837;
+}
+
+.pdf-upload__input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.pdf-upload__file {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #2d2217;
+}
+
+.pdf-upload__status {
+  margin: 0;
+  color: #5c4837;
+}
+
+.pdf-upload__confidence {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pdf-upload__confidence.is-high { color: #2f6f3a; }
+.pdf-upload__confidence.is-medium { color: #8a6d10; }
+.pdf-upload__confidence.is-low { color: #a13a18; }
+
+.pdf-line-items {
+  overflow-x: auto;
+}
+
+.pdf-line-items table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pdf-line-items th,
+.pdf-line-items td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.1);
+  vertical-align: top;
+}
+
+.pdf-line-items th {
+  background: rgba(94, 73, 51, 0.06);
+  font-weight: 700;
+}
+
+.pdf-raw-text pre {
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  background: #1f1812;
+  color: #f7efe2;
+  font-size: 12px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.document-type-banner {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(94, 73, 51, 0.18);
+  background: rgba(255, 248, 235, 0.85);
+}
+
+.document-type-banner.is-quote { border-color: #5c8a4c; background: rgba(232, 245, 226, 0.7); }
+.document-type-banner.is-order,
+.document-type-banner.is-bill,
+.document-type-banner.is-invoice,
+.document-type-banner.is-receipt { border-color: #b07a30; background: rgba(255, 240, 215, 0.85); }
+.document-type-banner.is-unknown { border-color: #a13a18; background: rgba(255, 224, 214, 0.7); }
+
+.document-type-banner strong {
+  display: block;
+  font-size: 16px;
+}
+
+.document-type-banner__warning {
+  margin: 0;
+  font-size: 13px;
+  color: #6b3210;
+}
+
+.ghost-button.is-disabled,
+.ghost-button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+

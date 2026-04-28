@@ -340,6 +340,8 @@ export function parseNotes(rawNotes) {
   const context = {
     unmatchedLines: [],
     deliveryDateMentioned: /delivery date/i.test(rawNotes),
+    documentType: 'notes',
+    outputLabel: 'Fireplace Project Proposal',
   }
 
   Object.entries(defaultFieldValues).forEach(([field, value]) => {

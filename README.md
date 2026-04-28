@@ -1,17 +1,29 @@
 # Benson Stone Fireplace Quote Proposal Generator
 
-Local web app for turning messy fireplace quote notes into structured proposal fields that match the approved Benson Stone Canva/PPTX template placeholders.
+Local web app that takes the official Epicor BisTrack PDF (or pasted notes as a fallback) and turns it into a polished customer-facing proposal/order summary after human review.
+
+## Source of truth
+
+Benson Stone creates the official quote/order in **Epicor BisTrack** — the ERP that handles quoting, order management, inventory/pricing, delivery, customer data, and financials. This app is a **presentation layer after BisTrack**, not a replacement.
+
+Workflow:
+
+1. Create the official quote/order in Epicor BisTrack.
+2. Export/save the BisTrack PDF.
+3. Upload the PDF into this app (or paste notes as a fallback).
+4. Review extracted official values.
+5. Generate the polished customer-facing output.
+
+This app never invents customer info, products, prices, tax, totals, or terms. If extraction is unclear, fields stay blank and the app surfaces a warning.
 
 ## Department workflow
 
-1. paste quote notes from the working sales/process notes
-2. click **Parse / organize**
-3. review warnings, unmatched lines, and blank required fields
+1. on Step 1, choose **Paste Notes** or **Upload BisTrack PDF**
+2. for PDF: select the file — text is extracted, document type is detected, and line items are parsed
+3. review warnings, the document-type badge, unmatched lines, and blank required fields
 4. edit the structured proposal fields until export blockers are cleared
-5. copy the grouped fields into the Canva template workflow
-6. export JSON for recordkeeping
-
-The official quote system is still the source of truth. This app organizes data for proposal assembly, but it does not replace quote approval or pricing review.
+5. copy the grouped fields or export JSON for recordkeeping
+6. preview internally; **Generate Customer PDF** is disabled until a PDF rendering layer is added
 
 ## What the app does
 
@@ -72,14 +84,41 @@ Use **Load Anna sample** only for testing the parser flow.
 
 Current automated checks cover:
 
+**Notes parser (`src/lib/parser.test.js`)**
 - Anna sample exact output
 - two-package quote parsing
 - delivery date mentioned but excluded
 - missing PO number
 - total mismatch warning
 
-## V3 roadmap
+**Epicor BisTrack PDF parser (`src/lib/biztrackPdfParser.test.js`)**
+- quote document type, defaults applied, customer/address/totals/line items extracted
+- order/bill document type warning + no quote defaults
+- delivery date detected but kept out of customer-facing fields
+- fully paid order surfaces info and hides deposit language
+- line items round-trip into DETAIL fields
+- empty/sparse text raises scanned-PDF warning
+- total mismatch warning
+- grill/outdoor keyword detection adjusts output label
 
-- generated customer-facing PDF
+## Document-type behavior
+
+| Detected type | Customer-facing label | Notes |
+|---|---|---|
+| Quote / Quotation | Fireplace Project Proposal (or Outdoor Living Proposal) | Defaults apply: 30-day window, 50% deposit |
+| Order / Bill | Project Confirmation | No quote-only language; balance-due aware |
+| Invoice / Receipt | Order Summary | No deposit language; if fully paid, deposit panel hidden |
+| Unknown | Project Summary | Warning surfaced — verify source document |
+
+## Limitations
+
+- PDF text extraction uses `pdfjs-dist`. Scanned/image-only PDFs surface a "looks scanned or image-based" warning instead of failing silently. OCR fallback is not implemented in this pass.
+- Generate Customer PDF is intentionally disabled — next pass needs a PDF rendering layer (e.g., react-pdf or html-to-pdf) wired to the reviewed fields.
+- No git remote is configured for this repo.
+
+## V3+ roadmap
+
+- generated customer-facing PDF (rendering layer for the reviewed fields)
+- OCR fallback for scanned BisTrack PDFs
 - CSV/import support
 - Canva autofill only after field review is proven reliable

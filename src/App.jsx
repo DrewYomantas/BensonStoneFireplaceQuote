@@ -15,6 +15,8 @@ import {
   mergeAssignedValue,
   parseNotes,
 } from './lib/parser.js'
+import { parseBisTrackText } from './lib/biztrackPdfParser.js'
+import { extractTextFromPdf } from './lib/pdfTextExtraction.js'
 
 const workflowSteps = [
   { number: 1, label: 'Paste Notes', anchor: 'step-1' },
@@ -114,7 +116,18 @@ function App() {
   const [rawNotes, setRawNotes] = useState('')
   const [fields, setFields] = useState(emptyFields)
   const [sources, setSources] = useState(emptySources)
-  const [parseContext, setParseContext] = useState({ unmatchedLines: [], deliveryDateMentioned: false })
+  const [parseContext, setParseContext] = useState({
+    unmatchedLines: [],
+    deliveryDateMentioned: false,
+    documentType: 'notes',
+    outputLabel: 'Fireplace Project Proposal',
+  })
+  const [inputMode, setInputMode] = useState('notes')
+  const [pdfFileName, setPdfFileName] = useState('')
+  const [pdfStatus, setPdfStatus] = useState('')
+  const [pdfRawText, setPdfRawText] = useState('')
+  const [pdfLineItems, setPdfLineItems] = useState([])
+  const [pdfExtractionConfidence, setPdfExtractionConfidence] = useState('')
   const [audit, setAudit] = useState(buildAudit(emptyFields, emptySources, parseContext))
   const [copyState, setCopyState] = useState('')
   const [parsedOnce, setParsedOnce] = useState(false)
@@ -176,13 +189,50 @@ function App() {
   }
 
   function handleClearAll() {
-    const nextContext = { unmatchedLines: [], deliveryDateMentioned: false }
+    const nextContext = {
+      unmatchedLines: [],
+      deliveryDateMentioned: false,
+      documentType: 'notes',
+      outputLabel: 'Fireplace Project Proposal',
+    }
     setParsedOnce(false)
     setSectionOverrides({})
     setAssignmentTargets({})
     syncState(emptyFields, emptySources, nextContext, 1)
     setRawNotes('')
+    setPdfFileName('')
+    setPdfStatus('')
+    setPdfRawText('')
+    setPdfLineItems([])
+    setPdfExtractionConfidence('')
     setCopyState('Cleared')
+  }
+
+  async function handlePdfUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setPdfFileName(file.name)
+    setPdfStatus('Extracting text from Epicor BisTrack PDF…')
+    setCopyState('')
+    try {
+      const extracted = await extractTextFromPdf(file)
+      setPdfRawText(extracted.rawText)
+      const parsed = parseBisTrackText(extracted.rawText)
+      if (extracted.embeddedTextLikelyMissing && !parsed.warnings.some((w) => /scanned/i.test(w))) {
+        parsed.warnings.unshift('This Epicor BisTrack PDF looks scanned or image-based. Embedded text is missing or very sparse — review extracted fields carefully.')
+      }
+      setPdfLineItems(parsed.lineItems)
+      setPdfExtractionConfidence(parsed.extractionConfidence)
+      setParsedOnce(true)
+      setSectionOverrides({})
+      setAssignmentTargets({})
+      const docLabel = parsed.documentType === 'unknown' ? 'unknown type' : parsed.documentType.toUpperCase()
+      setPdfStatus(`Parsed — ${docLabel}${parsed.fields.QUOTE_NO ? ` ${parsed.fields.QUOTE_NO}` : ''} (${parsed.lineItems.length} line item${parsed.lineItems.length === 1 ? '' : 's'})`)
+      syncState(parsed.fields, parsed.sources, parsed.context, 2)
+      setCopyState('BisTrack PDF parsed into review fields')
+    } catch (err) {
+      setPdfStatus(`Could not extract PDF text: ${err.message || err}`)
+    }
   }
 
   function handleLoadSample() {
@@ -348,38 +398,120 @@ function App() {
           </div>
 
           <div className="step-intro">
-            <p>Paste the working quote notes exactly as they exist. This tool organizes them, but it does not invent missing data.</p>
+            <p>
+              Benson Stone creates the official quote/order in Epicor BisTrack. This tool is a presentation
+              layer — paste the working notes or upload the BisTrack PDF, review the extracted fields,
+              then export a polished customer-facing version.
+            </p>
             <div className="sample-box">
               <strong>Sample / testing only</strong>
-              <span>Use Anna Orlinska to test the parser. This is not part of the normal department workflow.</span>
+              <span>Use Anna Orlinska to test the notes parser. This is not part of the normal department workflow.</span>
               <button type="button" className="ghost-button ghost-button--subtle" onClick={handleLoadSample}>
                 Load Anna sample
               </button>
             </div>
           </div>
 
-          <textarea
-            className="notes-input"
-            rows={20}
-            placeholder="Paste fireplace quote notes here..."
-            value={rawNotes}
-            onChange={(event) => setRawNotes(event.target.value)}
-          />
-
-          <div className="action-row">
-            <button type="button" className="primary-button" onClick={handleParse}>
-              Parse / organize
+          <div className="input-tabs">
+            <button
+              type="button"
+              className={`input-tab ${inputMode === 'notes' ? 'is-active' : ''}`}
+              onClick={() => setInputMode('notes')}
+            >
+              Paste Notes
             </button>
-            <button type="button" className="ghost-button" onClick={handleClearAll}>
-              Clear all
+            <button
+              type="button"
+              className={`input-tab ${inputMode === 'pdf' ? 'is-active' : ''}`}
+              onClick={() => setInputMode('pdf')}
+            >
+              Upload BisTrack PDF
             </button>
           </div>
 
+          {inputMode === 'notes' ? (
+            <>
+              <textarea
+                className="notes-input"
+                rows={20}
+                placeholder="Paste fireplace quote notes here..."
+                value={rawNotes}
+                onChange={(event) => setRawNotes(event.target.value)}
+              />
+              <div className="action-row">
+                <button type="button" className="primary-button" onClick={handleParse}>
+                  Parse / organize
+                </button>
+                <button type="button" className="ghost-button" onClick={handleClearAll}>
+                  Clear all
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="pdf-upload">
+              <p className="pdf-upload__intro">
+                Upload an Epicor BisTrack PDF (Quote, Order, Bill, Invoice, or Receipt). The official BisTrack
+                document remains the source of truth — values are extracted as-is, never invented.
+              </p>
+              <label className="pdf-upload__input">
+                <span>Choose BisTrack PDF</span>
+                <input type="file" accept="application/pdf,.pdf" onChange={handlePdfUpload} />
+              </label>
+              {pdfFileName ? <p className="pdf-upload__file">{pdfFileName}</p> : null}
+              {pdfStatus ? <p className="pdf-upload__status">{pdfStatus}</p> : null}
+              {pdfExtractionConfidence ? (
+                <p className={`pdf-upload__confidence is-${pdfExtractionConfidence}`}>
+                  Extraction confidence: {pdfExtractionConfidence}
+                </p>
+              ) : null}
+              {pdfLineItems.length ? (
+                <div className="pdf-line-items">
+                  <h4>Parsed line items</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Code</th>
+                        <th>Description</th>
+                        <th>Qty</th>
+                        <th>Unit Price</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pdfLineItems.map((item) => (
+                        <tr key={`${item.lineNumber}-${item.code}`}>
+                          <td>{item.lineNumber}</td>
+                          <td>{item.code}</td>
+                          <td>{item.description}</td>
+                          <td>{item.qty}</td>
+                          <td>{item.unitPrice}</td>
+                          <td>{item.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {pdfRawText ? (
+                <details className="pdf-raw-text">
+                  <summary>Show raw extracted text (debug)</summary>
+                  <pre>{pdfRawText}</pre>
+                </details>
+              ) : null}
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={handleClearAll}>
+                  Clear all
+                </button>
+              </div>
+            </div>
+          )}
+
           <ul className="rule-list">
-            <li>Quote good for defaults to 30 days.</li>
-            <li>Payment terms and deposit terms default to 50% down at time of signing.</li>
-            <li>Delivery date stays out of the customer-facing proposal unless explicitly requested.</li>
-            <li>Product names, prices, tax, and totals stay exactly as entered in the notes.</li>
+            <li>Epicor BisTrack is the source of truth. This app never invents customers, prices, tax, totals, or terms.</li>
+            <li>Quote good for and deposit terms defaults only apply when the document is a Quote/Quotation.</li>
+            <li>Delivery date stays out of the customer-facing proposal unless explicitly toggled on.</li>
+            <li>If totals look inconsistent or a PDF appears scanned, the app warns rather than silently failing.</li>
           </ul>
 
           {copyState ? <p className="quiet-status">{copyState}</p> : null}
@@ -394,6 +526,24 @@ function App() {
             <button type="button" className="ghost-button" onClick={() => scrollToStep('step-3', 3, setCurrentStep)}>
               Go to fields
             </button>
+          </div>
+
+          <div className={`document-type-banner is-${parseContext.documentType || 'notes'}`}>
+            <div>
+              <span className="kicker">Source document</span>
+              <strong>
+                {parseContext.documentType === 'notes'
+                  ? 'Pasted notes (no BisTrack PDF)'
+                  : `Epicor BisTrack — ${(parseContext.documentType || 'unknown').toUpperCase()}`}
+              </strong>
+              <p>Customer-facing label: {parseContext.outputLabel || 'Fireplace Project Proposal'}</p>
+            </div>
+            {parseContext.documentType && parseContext.documentType !== 'quote' && parseContext.documentType !== 'notes' ? (
+              <p className="document-type-banner__warning">
+                This is a {parseContext.documentType} document — quote-only language (30-day window, deposit terms)
+                will not be applied automatically. Verify before sending to a customer.
+              </p>
+            ) : null}
           </div>
 
           <div className="review-grid">
@@ -678,7 +828,20 @@ function App() {
             >
               Export JSON
             </button>
+            <button
+              type="button"
+              className="ghost-button is-disabled"
+              disabled
+              title="Customer PDF generation is not wired up yet. Next pass needs a layout/PDF rendering step (e.g., react-pdf or html-to-pdf) using the reviewed fields above."
+            >
+              Generate Customer PDF (coming soon)
+            </button>
           </div>
+
+          <p className="quiet-status">
+            Generate Customer PDF is disabled until a PDF rendering layer is added. Current preview uses the
+            "{parseContext.outputLabel || 'Fireplace Project Proposal'}" label based on the detected source document type.
+          </p>
 
           <div className="output-grid">
             <label className="field field--wide">
@@ -719,7 +882,7 @@ function App() {
               <div className="print-header">
                 <div>
                   <p>Benson Stone Co.</p>
-                  <strong>Fireplace Project Proposal</strong>
+                  <strong>{parseContext.outputLabel || 'Fireplace Project Proposal'}</strong>
                 </div>
                 <div className="preview-meta">
                   <span>{fields.QUOTE_NO || 'Quote # pending'}</span>
@@ -848,7 +1011,11 @@ function App() {
               <div className="preview-columns">
                 <div>
                   <h3>Deposit terms</h3>
-                  {renderTextBlock(fields.DEPOSIT_TERMS, 'Deposit terms pending')}
+                  {parseContext.fullyPaid ? (
+                    <p className="preview-placeholder">Order is fully paid — deposit terms hidden.</p>
+                  ) : (
+                    renderTextBlock(fields.DEPOSIT_TERMS, 'Deposit terms pending')
+                  )}
                 </div>
                 <div>
                   <h3>Legal terms</h3>
