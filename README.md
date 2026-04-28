@@ -1,36 +1,46 @@
 # Benson Stone Fireplace Quote Proposal Generator
 
-Local V1 web app for turning messy fireplace quote notes into structured proposal fields that match the approved Benson Stone Canva/PPTX template placeholders.
+Local web app for turning messy fireplace quote notes into structured proposal fields that match the approved Benson Stone Canva/PPTX template placeholders.
 
-## What it does
+## Department workflow
+
+1. paste quote notes from the working sales/process notes
+2. click **Parse / organize**
+3. review warnings, unmatched lines, and blank required fields
+4. edit the structured proposal fields until export blockers are cleared
+5. copy the grouped fields into the Canva template workflow
+6. export JSON for recordkeeping
+
+The official quote system is still the source of truth. This app organizes data for proposal assembly, but it does not replace quote approval or pricing review.
+
+## What the app does
 
 - accepts pasted quote notes
-- parses them into the template field contract from `src/data/fieldMap.json`
+- parses them into the placeholder contract in [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
 - keeps missing or unclear fields blank
 - applies only the explicit business defaults:
   - `QUOTE_GOOD_FOR = 30 days`
   - `PAYMENT_TERMS = 50% down at time of signing`
   - `DEPOSIT_TERMS = 50% down at time of signing`
-- warns when totals do not reconcile
-- warns when notes mention a delivery date that should stay out of the customer-facing proposal
-- exposes a structured review form for manual cleanup
-- outputs flat placeholder lines and exportable JSON
-- supports basic print/PDF preview
+- flags unmatched lines in a review box instead of discarding them
+- lets the user manually assign unmatched lines to fields
+- shows export blockers when required fields are blank
+- provides grouped copy buttons for customer, quote meta, page 1, page 2, and all fields
+- exports JSON for records
+- provides a simple internal preview and print/PDF option
 
-## What it does not do
+## What this app does not do yet
 
 - it does not integrate with Canva
-- it does not generate designs
-- it does not invent products, customer data, prices, tax, totals, or legal terms
-- it does not recalculate totals for the user
+- it does not auto-generate the designed customer proposal
+- it does not invent customer names, dates, products, prices, tax, totals, or legal terms
+- it does not recalculate totals unless someone explicitly changes them by hand
+- it does not replace the official quote system
+- it does not produce a polished customer-facing PDF yet
 
-## Contract source
+## Template source
 
-The parser and form are built around the placeholder contract in:
-
-- [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
-
-The approved editable template that informed the placeholder review is still the external source file in Downloads:
+The approved editable template that informed the field contract is still the external file in Downloads:
 
 - `C:\Users\beyon\Downloads\MASTER_Benson_Stone_Fireplace_Quote_Proposal_Template_EDITABLE_Canva.pptx`
 
@@ -43,9 +53,11 @@ npm run dev
 
 Then open the local Vite URL shown in the terminal.
 
-## Build
+## Checks
 
 ```bash
+npm run lint
+npm test
 npm run build
 ```
 
@@ -54,18 +66,20 @@ npm run build
 - [src/data/anna-orlinska-notes.txt](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/anna-orlinska-notes.txt)
 - [examples/anna-orlinska-output.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/examples/anna-orlinska-output.json)
 
-Use the **Load Anna sample** button in the app to load the sample notes.
+Use **Load Anna sample** only for testing the parser flow.
 
-## Notes on parsing
+## Parser checks
 
-- labeled lines like `Customer: ...` and `Quote No: ...` map directly
-- `Package 1` and `Package 2` sections pull titles, up to four visible line items, liner kit subtotal, and install line
-- `Detail Section 1` and `Detail Section 2` expect rows in `item | qty | unit | total` form
-- unmatched lines are surfaced for review instead of being silently discarded
+Current automated checks cover:
 
-## Suggested V2 later
+- Anna sample exact output
+- two-package quote parsing
+- delivery date mentioned but excluded
+- missing PO number
+- total mismatch warning
 
-- import from pasted CRM/export text formats
-- stronger pattern libraries for Benson Stone note habits
-- CSV import/export
-- Canva autofill once the field review step is trusted
+## V3 roadmap
+
+- generated customer-facing PDF
+- CSV/import support
+- Canva autofill only after field review is proven reliable

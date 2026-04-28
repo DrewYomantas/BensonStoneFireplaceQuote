@@ -1,10 +1,12 @@
 import {
   createEmptyFieldState,
   defaultFieldValues,
-  fieldGroups,
   fieldToSection,
   getFieldLabel,
+  multilineFields,
   orderedFields,
+  requiredFields,
+  sectionDefinitions,
 } from './fieldContract.js'
 
 const directFieldMatchers = [
@@ -119,7 +121,7 @@ function parsePackageLine(line) {
     return null
   }
 
-  const name = text.replace(amount, '').replace(/\s*[-–—:]\s*$/, '').trim()
+  const name = text.replace(amount, '').replace(/\s*[-:]\s*$/, '').trim()
 
   if (!name) {
     return null
@@ -247,8 +249,25 @@ function roughlyEqual(left, right) {
   return Math.abs(left - right) < 0.01
 }
 
+function getBlockingFields(fields) {
+  return requiredFields.filter((field) => fields[field] === '')
+}
+
+function buildSectionWarnings(warnings) {
+  const sectionWarnings = Object.fromEntries(sectionDefinitions.map((section) => [section.key, []]))
+
+  warnings.forEach((warning) => {
+    if (/total amount plus ir tax|quotation total minus amount paid/i.test(warning)) {
+      sectionWarnings.investment_and_acceptance.push(warning)
+    }
+  })
+
+  return sectionWarnings
+}
+
 export function buildAudit(fields, sources, context = {}) {
   const missingFields = orderedFields.filter((field) => fields[field] === '')
+  const blockingFields = getBlockingFields(fields)
   const warnings = []
   const infos = []
 
@@ -286,10 +305,13 @@ export function buildAudit(fields, sources, context = {}) {
 
   return {
     missingFields,
-    missingBySection: fieldGroups.map((group) => ({
-      key: group.key,
-      label: group.label,
-      fields: group.fields.filter((field) => fields[field] === ''),
+    readyFieldCount: orderedFields.length - missingFields.length,
+    blockingFields,
+    blockingFieldLabels: blockingFields.map(getFieldLabel),
+    missingBySection: sectionDefinitions.map((section) => ({
+      key: section.key,
+      label: section.label,
+      fields: section.fields.filter((field) => fields[field] === ''),
     })),
     warnings,
     infos,
@@ -302,6 +324,13 @@ export function buildAudit(fields, sources, context = {}) {
       amountPaid !== null &&
       balanceDue !== null,
     fieldCount: orderedFields.length,
+    needsReviewCount: blockingFields.length + (context.unmatchedLines?.length || 0),
+    exportReady: blockingFields.length === 0 && (context.unmatchedLines?.length || 0) === 0,
+    exportStatus:
+      blockingFields.length === 0 && (context.unmatchedLines?.length || 0) === 0
+        ? 'Ready to export'
+        : 'Review required before export',
+    sectionWarnings: buildSectionWarnings(warnings),
   }
 }
 
@@ -428,8 +457,8 @@ export function parseNotes(rawNotes) {
   }
 }
 
-export function fieldsToExportLines(fields) {
-  return orderedFields.map((field) => `${field}: ${fields[field] || ''}`).join('\n')
+export function fieldsToExportLines(fields, selectedFields = orderedFields) {
+  return selectedFields.map((field) => `${field}: ${fields[field] || ''}`).join('\n')
 }
 
 export function getFieldStatusClass(source) {
@@ -450,4 +479,24 @@ export function getFieldStatusClass(source) {
 
 export function getSectionForField(field) {
   return fieldToSection[field]
+}
+
+export function normalizeManualAssignmentValue(line) {
+  const cleaned = cleanLine(line)
+  const labeled = parseLabelLine(cleaned)
+  return labeled && labeled.value ? labeled.value : stripBullet(cleaned)
+}
+
+export function mergeAssignedValue(currentValue, assignedLine, field) {
+  const nextValue = normalizeManualAssignmentValue(assignedLine)
+
+  if (!currentValue) {
+    return nextValue
+  }
+
+  if (multilineFields.has(field)) {
+    return `${currentValue}\n${nextValue}`
+  }
+
+  return `${currentValue} | ${nextValue}`
 }
