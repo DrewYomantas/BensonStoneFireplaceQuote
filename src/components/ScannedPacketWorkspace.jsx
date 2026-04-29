@@ -1,20 +1,4 @@
-function getFollowUpItems(pages) {
-  return pages
-    .filter((page) => page.recommendation === 'Follow-up candidate')
-    .map((page) => ({
-      pageNumber: page.pageNumber,
-      quoteNo: page.documentNumber,
-      lastQuoteDate: page.documentDate,
-      customerName: page.customerName,
-      customerPhone: page.parsed?.fields?.CUSTOMER_PHONE || '',
-      projectAddress: page.parsed?.fields?.PROJECT_ADDRESS_LINE_1 || page.parsed?.fields?.INVOICE_ADDRESS_LINE_1 || '',
-      quoteTotal: page.parsed?.fields?.QUOTATION_TOTAL || page.total || '',
-      balanceDue: page.balanceDue || '',
-      followUpStage: 'Old quote follow-up',
-      followUpReason: 'Scanned quote found in follow-up packet',
-      followUpNotes: 'Review quote details and contact customer if still relevant.',
-    }))
-}
+import { buildFollowUpItems } from '../lib/scannedPacketParser.js'
 
 function escapeCsv(value) {
   return `"${String(value || '').replace(/"/g, '""')}"`
@@ -91,7 +75,7 @@ export default function ScannedPacketWorkspace({
         <div className="scanned-packet-list">
           {scannedPackets.map((packet) => {
             const summary = summarizePacketPages(packet.pages)
-            const followUpItems = getFollowUpItems(packet.pages)
+            const followUpItems = buildFollowUpItems(packet.pages)
             return (
               <section className="scanned-packet-card" key={packet.id}>
                 <div className="scanned-packet-card__header">

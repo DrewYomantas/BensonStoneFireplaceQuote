@@ -211,6 +211,25 @@ export function extractScannedBisTrackFields(rawText) {
   }
 }
 
+export function buildFollowUpItems(pages) {
+  return pages
+    .filter((page) => page.recommendation === 'Follow-up candidate')
+    .map((page) => ({
+      pageNumber: page.pageNumber,
+      quoteNo: page.documentNumber,
+      lastQuoteDate: page.documentDate,
+      customerName: page.customerName,
+      customerPhone: page.parsed.fields.CUSTOMER_PHONE || '',
+      projectAddress: page.parsed.fields.PROJECT_ADDRESS_LINE_1 || page.parsed.fields.INVOICE_ADDRESS_LINE_1 || '',
+      quoteTotal: page.parsed.fields.QUOTATION_TOTAL || page.total || '',
+      balanceDue: page.parsed.fields.BALANCE_DUE || page.balanceDue || '',
+      followUpNeeded: true,
+      followUpStage: 'Old quote follow-up',
+      followUpReason: 'Scanned quote found in follow-up packet',
+      followUpNotes: 'Review quote details and contact customer if still relevant.',
+    }))
+}
+
 export function buildScannedPacket(ocrPages) {
   const pages = ocrPages.map((page) => {
     const parsed = extractScannedBisTrackFields(page.text || '')
@@ -235,22 +254,5 @@ export function buildScannedPacket(ocrPages) {
     }
   })
 
-  const followUpItems = pages
-    .filter((page) => page.recommendation === 'Follow-up candidate')
-    .map((page) => ({
-      pageNumber: page.pageNumber,
-      quoteNo: page.documentNumber,
-      lastQuoteDate: page.documentDate,
-      customerName: page.customerName,
-      customerPhone: page.parsed.fields.CUSTOMER_PHONE || '',
-      projectAddress: page.parsed.fields.PROJECT_ADDRESS_LINE_1 || page.parsed.fields.INVOICE_ADDRESS_LINE_1 || '',
-      quoteTotal: page.parsed.fields.QUOTATION_TOTAL || '',
-      balanceDue: page.parsed.fields.BALANCE_DUE || '',
-      followUpNeeded: true,
-      followUpStage: 'Old quote follow-up',
-      followUpReason: 'Scanned quote found in follow-up packet',
-      followUpNotes: 'Review quote details and contact customer if still relevant.',
-    }))
-
-  return { pages, followUpItems }
+  return { pages, followUpItems: buildFollowUpItems(pages) }
 }
