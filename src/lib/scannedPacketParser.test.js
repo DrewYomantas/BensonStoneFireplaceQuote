@@ -48,10 +48,26 @@ Chase Height above Roof: 5'
 Fireplace Type: wood insert
 `
 
+const PAID_ORDER = `
+BENSON STONE CO
+Order
+Order No 656460
+Order Date 2/18/2026
+Customer ID 9912
+Invoice Address
+Sample Customer
+123 Main St.
+Rockford, IL 61107
+Order Total $954.81
+Amount Paid $954.81
+Balance Due $0.00
+`
+
 test('classifies OCR text page types', () => {
   assert.equal(classifyScannedPage(OCR_QUOTE).type, 'bistrack_quote')
   assert.equal(classifyScannedPage(SERVICE_ORDER).type, 'service_order')
   assert.equal(classifyScannedPage(FIELD_MEASURE).type, 'field_measure')
+  assert.equal(classifyScannedPage(PAID_ORDER).type, 'paid_closed_order')
   assert.equal(classifyScannedPage('').type, 'site_photo')
 })
 
@@ -75,8 +91,24 @@ test('builds scanned packet page table and follow-up queue items', () => {
   ])
   assert.equal(packet.pages.length, 2)
   assert.equal(packet.pages[0].classification.type, 'bistrack_quote')
-  assert.equal(packet.pages[1].status, 'Reference')
+  assert.equal(packet.pages[1].status, 'Support')
+  assert.equal(packet.pages[1].recommendation, 'Field measure / install support')
+  assert.equal(packet.pages[0].recommendation, 'Follow-up candidate')
   assert.equal(packet.followUpItems.length, 1)
   assert.equal(packet.followUpItems[0].quoteNo, '70655')
   assert.equal(packet.followUpItems[0].followUpStage, 'Old quote follow-up')
+})
+
+test('paid closed orders are not follow-up candidates', () => {
+  const packet = buildScannedPacket([
+    { pageNumber: 1, text: PAID_ORDER, confidence: 74 },
+    { pageNumber: 2, text: OCR_QUOTE, confidence: 72 },
+  ])
+
+  assert.equal(packet.pages[0].classification.type, 'paid_closed_order')
+  assert.equal(packet.pages[0].recommendation, 'Paid / closed')
+  assert.equal(packet.pages[0].status, 'Paid / Closed')
+  assert.equal(packet.pages[0].parsed.context.fullyPaid, true)
+  assert.equal(packet.followUpItems.length, 1)
+  assert.equal(packet.followUpItems[0].quoteNo, '70655')
 })

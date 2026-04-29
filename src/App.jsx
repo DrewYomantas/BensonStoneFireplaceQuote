@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import './App.css'
 import annaSampleNotes from './data/anna-orlinska-notes.txt?raw'
 import {
@@ -74,6 +74,52 @@ function getStatusClass(status) {
   return status.toLowerCase().replace(/\s+/g, '-')
 }
 
+const scannedTriageGroups = [
+  { key: 'follow-up', label: 'Likely Follow-Up Quotes', matches: (page) => page.recommendation === 'Follow-up candidate', open: true },
+  { key: 'manual-review', label: 'Needs Manual Review', matches: (page) => page.recommendation === 'Needs manual review', open: true },
+  { key: 'paid-closed', label: 'Paid / Closed Orders', matches: (page) => page.recommendation === 'Paid / closed', open: false },
+  { key: 'support', label: 'Field Measure / Install Support', matches: (page) => page.recommendation === 'Field measure / install support', open: false },
+  { key: 'photos', label: 'Site Photos / Reference Pages', matches: (page) => page.recommendation === 'Site photo', open: false },
+  { key: 'unknown', label: 'Unknown / Reference', matches: (page) => page.recommendation === 'Reference only' || page.status === 'Reference', open: false },
+]
+
+function makeRunId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function summarizePacketPages(pages) {
+  return {
+    followUp: pages.filter((page) => page.recommendation === 'Follow-up candidate').length,
+    paidClosed: pages.filter((page) => page.recommendation === 'Paid / closed').length,
+    needsReview: pages.filter((page) => page.recommendation === 'Needs manual review').length,
+    support: pages.filter((page) => page.recommendation === 'Field measure / install support').length,
+    reference: pages.filter((page) => page.recommendation === 'Site photo' || page.recommendation === 'Reference only' || page.status === 'Reference').length,
+    unknown: pages.filter((page) => page.classification.type === 'unknown').length,
+  }
+}
+
+function getPacketOcrStatus(packet) {
+  if (packet.status === 'OCR complete') {
+    const summary = summarizePacketPages(packet.pages)
+    return `${packet.status} - ${summary.followUp} follow-up, ${summary.needsReview} need review`
+  }
+  return packet.status
+}
+
+function getStatusFromRecommendation(recommendation) {
+  if (recommendation === 'Follow-up candidate' || recommendation === 'Needs manual review') return 'Needs Review'
+  if (recommendation === 'Paid / closed') return 'Paid / Closed'
+  if (recommendation === 'Field measure / install support') return 'Support'
+  return 'Reference'
+}
+
+function getOcrWarnings(page) {
+  const warnings = [...(page.parsed?.warnings || [])]
+  if ((page.ocrConfidence || 0) < 60) warnings.unshift('Low OCR confidence. Compare this page carefully against the scan.')
+  if (!page.customerName && page.recommendation !== 'Site photo') warnings.unshift('No customer name was extracted.')
+  if (page.recommendation === 'Paid / closed') warnings.unshift('Paid or closed order. Do not treat this as a follow-up quote by default.')
+  return [...new Set(warnings)]
+}
 
 function packageRows(packageNumber) {
   return Array.from({ length: 4 }, (_, index) => index + 1).map((number) => ({
@@ -174,13 +220,19 @@ function App() {
   const [currentStep, setCurrentStep] = useState(1)
   const [sectionOverrides, setSectionOverrides] = useState({})
   const [assignmentTargets, setAssignmentTargets] = useState({})
-  const [scannedPages, setScannedPages] = useState([])
+  const [scannedPackets, setScannedPackets] = useState([])
   const [scannedStatus, setScannedStatus] = useState('')
   const [scannedFile, setScannedFile] = useState(null)
+  const [scannedFileMeta, setScannedFileMeta] = useState(null)
   const [scannedReady, setScannedReady] = useState(false)
   const [ocrProgress, setOcrProgress] = useState(null)
   const [ocrDetailsPage, setOcrDetailsPage] = useState(null)
   const [ocrReviewConfirmed, setOcrReviewConfirmed] = useState(false)
+  const [loadedOcrItem, setLoadedOcrItem] = useState(null)
+  const scannedInputRef = useRef(null)
+  const activeOcrRunRef = useRef(null)
+  const activeOcrAbortRef = useRef(null)
+  const ocrIsRunning = Boolean(ocrProgress)
 
   const exportJson = JSON.stringify(fields, null, 2)
   const exportLines = fieldsToExportLines(fields)
@@ -235,7 +287,6 @@ function App() {
       embeddedTextLikelyMissing: extracted.embeddedTextLikelyMissing,
       pageCount: extracted.pageCount,
       ...summary,
-      fileName: file.name,
     }
   }
 
@@ -281,7 +332,22 @@ function App() {
     syncState(nextFields, nextSources, parseContext, 3)
   }
 
+  function invalidateActiveOcr(message = '') {
+    activeOcrRunRef.current = null
+    activeOcrAbortRef.current?.abort()
+    activeOcrAbortRef.current = null
+    setOcrProgress(null)
+    if (message) setScannedStatus(message)
+  }
+
+  function clearScannedFileInput() {
+    if (scannedInputRef.current) {
+      scannedInputRef.current.value = ''
+    }
+  }
+
   function handleClearAll() {
+    invalidateActiveOcr()
     const nextContext = {
       unmatchedLines: [],
       deliveryDateMentioned: false,
@@ -300,12 +366,15 @@ function App() {
     setPdfExtractionConfidence('')
     setBatchFiles([])
     setBulkStatus('')
-    setScannedPages([])
+    setScannedPackets([])
     setScannedStatus('')
     setScannedFile(null)
+    setScannedFileMeta(null)
     setScannedReady(false)
-    setOcrProgress(null)
     setOcrReviewConfirmed(false)
+    setLoadedOcrItem(null)
+    setOcrDetailsPage(null)
+    clearScannedFileInput()
     setCustomerPdfSnapshot(null)
     setCopyState('Cleared')
   }
@@ -406,64 +475,160 @@ function App() {
   async function handleScannedPacketUpload(event) {
     const file = event.target.files?.[0]
     if (!file) return
+    if (activeOcrRunRef.current) {
+      setScannedStatus('Cancel the active OCR run before choosing another scanned packet.')
+      clearScannedFileInput()
+      return
+    }
+    const runId = makeRunId()
+    activeOcrRunRef.current = runId
     setInputMode('scanned')
-    setScannedPages([])
     setScannedReady(false)
     setOcrProgress(null)
+    setLoadedOcrItem(null)
     setOcrReviewConfirmed(false)
     setScannedStatus('Checking for embedded text…')
     setScannedFile(file)
-    const extracted = await extractTextFromPdf(file)
+    setScannedFileMeta({
+      id: `${file.name}-${file.lastModified}-${file.size}`,
+      fileName: file.name,
+      pageCount: 0,
+    })
+    let extracted
+    try {
+      extracted = await extractTextFromPdf(file)
+    } catch (err) {
+      if (activeOcrRunRef.current !== runId) return
+      activeOcrRunRef.current = null
+      setScannedStatus(`Could not inspect scanned packet: ${err.message || String(err)}`)
+      setScannedFile(null)
+      setScannedFileMeta(null)
+      clearScannedFileInput()
+      return
+    }
+    if (activeOcrRunRef.current !== runId) return
+    activeOcrRunRef.current = null
     if (!extracted.embeddedTextLikelyMissing) {
       setScannedStatus('This PDF has selectable embedded text — use the BisTrack PDF upload tab instead.')
       setScannedFile(null)
+      setScannedFileMeta(null)
+      clearScannedFileInput()
       return
     }
+    setScannedFileMeta({
+      id: `${file.name}-${file.lastModified}-${file.size}`,
+      fileName: file.name,
+      pageCount: extracted.pageCount,
+    })
     setScannedReady(true)
     setScannedStatus(`Scanned PDF detected (${extracted.pageCount} page${extracted.pageCount === 1 ? '' : 's'}, no embedded text). Click Run OCR to classify pages.`)
   }
 
   async function handleRunOcr() {
     if (!scannedFile) return
+    const packetMeta = scannedFileMeta || {
+      id: `${scannedFile.name}-${scannedFile.lastModified}-${scannedFile.size}`,
+      fileName: scannedFile.name,
+      pageCount: 0,
+    }
+    const runId = makeRunId()
+    const controller = new AbortController()
+    activeOcrRunRef.current = runId
+    activeOcrAbortRef.current = controller
     setScannedReady(false)
     setOcrProgress({ stage: 'rendering', pageNumber: 0, pageCount: 0 })
     setScannedStatus('Starting OCR…')
     try {
       const ocrResult = await extractOcrFromPdf(scannedFile, {
+        signal: controller.signal,
         onProgress: (p) => {
+          if (activeOcrRunRef.current !== runId) return
           setOcrProgress(p)
           const action = p.stage === 'rendering' ? 'Rendering' : 'OCR'
           setScannedStatus(`${action} page ${p.pageNumber} of ${p.pageCount}…`)
         },
       })
+      if (activeOcrRunRef.current !== runId) return
       const packet = buildScannedPacket(ocrResult.pages)
-      setScannedPages(packet.pages.map((page) => ({ ...page, reviewed: false })))
+      const pages = packet.pages.map((page) => ({
+        ...page,
+        reviewed: false,
+        packetId: packetMeta.id,
+        packetFileName: packetMeta.fileName,
+      }))
+      setScannedPackets((current) => [
+        ...current.filter((item) => item.id !== packetMeta.id),
+        {
+          id: packetMeta.id,
+          fileName: packetMeta.fileName,
+          pageCount: packetMeta.pageCount || ocrResult.pageCount || pages.length,
+          status: 'OCR complete',
+          pages,
+        },
+      ])
       setOcrProgress(null)
-      const reviewCount = packet.pages.filter((p) => p.status === 'Needs Review').length
-      setScannedStatus(`OCR complete — ${packet.pages.length} pages classified, ${reviewCount} need review.`)
+      activeOcrRunRef.current = null
+      activeOcrAbortRef.current = null
+      const reviewCount = pages.filter((p) => p.status === 'Needs Review').length
+      setScannedStatus(`OCR complete - ${pages.length} pages classified, ${reviewCount} need review.`)
+      setScannedFile(null)
+      setScannedFileMeta(null)
+      clearScannedFileInput()
     } catch (err) {
+      if (activeOcrRunRef.current !== runId) return
       setOcrProgress(null)
-      setScannedStatus(`OCR failed: ${err.message || String(err)}`)
+      activeOcrRunRef.current = null
+      activeOcrAbortRef.current = null
+      if (err.name === 'AbortError') {
+        setScannedStatus('OCR canceled. Old results will be ignored.')
+      } else {
+        setScannedStatus(`OCR failed: ${err.message || String(err)}`)
+      }
     }
   }
 
-  function handleMarkScannedReviewed(pageNumber) {
-    setScannedPages((current) =>
-      current.map((page) => page.pageNumber === pageNumber ? { ...page, reviewed: true, status: 'Reviewed' } : page)
+  function handleCancelOcr() {
+    invalidateActiveOcr('OCR canceled. Old results will be ignored.')
+    setScannedReady(Boolean(scannedFile))
+  }
+
+  function updateScannedPage(packetId, pageNumber, updater) {
+    setScannedPackets((current) =>
+      current.map((packet) => packet.id === packetId
+        ? {
+            ...packet,
+            pages: packet.pages.map((page) => page.pageNumber === pageNumber ? updater(page) : page),
+          }
+        : packet)
     )
   }
 
-  function handleMarkScannedReference(pageNumber) {
-    setScannedPages((current) =>
-      current.map((page) => page.pageNumber === pageNumber ? { ...page, status: 'Reference' } : page)
-    )
+  function handleMarkScannedReviewed(packetId, pageNumber) {
+    updateScannedPage(packetId, pageNumber, (page) => ({ ...page, reviewed: true, status: 'Reviewed' }))
+    if (loadedOcrItem?.packetId === packetId && loadedOcrItem?.pageNumber === pageNumber) {
+      setOcrReviewConfirmed(true)
+      setLoadedOcrItem({ packetId, pageNumber, reviewed: true })
+    }
+  }
+
+  function handleMarkScannedReference(packetId, pageNumber) {
+    updateScannedPage(packetId, pageNumber, (page) => ({ ...page, status: 'Reference', recommendation: 'Reference only' }))
+  }
+
+  function handleUndoScannedReference(packetId, pageNumber) {
+    updateScannedPage(packetId, pageNumber, (page) => ({
+      ...page,
+      status: page.reviewed ? 'Reviewed' : getStatusFromRecommendation(page.originalRecommendation),
+      recommendation: page.originalRecommendation,
+    }))
   }
 
   function handleLoadScannedItem(page) {
     const parsed = page.parsed
     if (!parsed) return
-    setOcrReviewConfirmed(false)
-    setPdfFileName(scannedFile?.name || 'scanned-packet.pdf')
+    setOcrReviewConfirmed(Boolean(page.reviewed))
+    setLoadedOcrItem({ packetId: page.packetId, pageNumber: page.pageNumber, reviewed: Boolean(page.reviewed) })
+    setPdfFileName(page.packetFileName || scannedFileMeta?.fileName || scannedFile?.name || 'scanned-packet.pdf')
     setPdfRawText(page.text || '')
     setPdfLineItems(parsed.lineItems || [])
     setPdfExtractionConfidence(parsed.extractionConfidence || 'low')
@@ -474,9 +639,25 @@ function App() {
     syncState(parsed.fields, parsed.sources, parsed.context, 2)
     setCopyState(`OCR page ${page.pageNumber} loaded — review fields carefully before generating a customer PDF`)
   }
+    document.getElementById('step-2')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
-  function handleRemoveScannedPage(pageNumber) {
-    setScannedPages((current) => current.filter((page) => page.pageNumber !== pageNumber))
+  function handleRemoveScannedPage(packetId, pageNumber) {
+    setScannedPackets((current) =>
+      current
+        .map((packet) => packet.id === packetId
+          ? { ...packet, pages: packet.pages.filter((page) => page.pageNumber !== pageNumber) }
+          : packet)
+        .filter((packet) => packet.pages.length)
+    )
+  }
+
+  function handleClearScannedPacket(packetId) {
+    setScannedPackets((current) => current.filter((packet) => packet.id !== packetId))
+    if (loadedOcrItem?.packetId === packetId) {
+      setLoadedOcrItem(null)
+      setOcrReviewConfirmed(false)
+    }
+    setCopyState('Removed scanned packet')
   }
 
   function handleLoadSample() {
@@ -857,19 +1038,26 @@ function App() {
           {inputMode === 'scanned' ? (
             <div className="pdf-upload scanned-upload">
               <p className="pdf-upload__intro">
-                Upload a scanned follow-up packet PDF. The app detects missing embedded text, then lets you run OCR
-                page by page. Customer-facing PDFs are blocked until you confirm each page has been reviewed.
+                Upload one scanned packet at a time, run OCR, then triage pages by sales action. Epicor BisTrack remains the source of truth.
               </p>
-              <label className="pdf-upload__input">
-                <span>Choose scanned packet PDF</span>
-                <input type="file" accept="application/pdf,.pdf" onChange={handleScannedPacketUpload} />
+              <label className={`pdf-upload__input ${ocrIsRunning ? 'is-disabled' : ''}`}>
+                <span>{ocrIsRunning ? 'OCR running - cancel before uploading' : 'Choose scanned packet PDF'}</span>
+                <input ref={scannedInputRef} type="file" accept="application/pdf,.pdf" disabled={ocrIsRunning} onChange={handleScannedPacketUpload} />
               </label>
+              {scannedFileMeta?.fileName ? <p className="pdf-upload__file">Ready: {scannedFileMeta.fileName}</p> : null}
               {scannedStatus ? <p className="pdf-upload__status">{scannedStatus}</p> : null}
-              {scannedReady && !ocrProgress ? (
-                <button type="button" className="primary-button" onClick={handleRunOcr}>
-                  Run OCR
-                </button>
-              ) : null}
+              <div className="action-row">
+                {scannedReady && !ocrProgress ? (
+                  <button type="button" className="primary-button" onClick={handleRunOcr}>
+                    Run OCR
+                  </button>
+                ) : null}
+                {ocrProgress ? (
+                  <button type="button" className="ghost-button" onClick={handleCancelOcr}>
+                    Cancel OCR
+                  </button>
+                ) : null}
+              </div>
               {ocrProgress ? (
                 <div className="ocr-progress">
                   <div className="ocr-progress__bar">
@@ -881,92 +1069,80 @@ function App() {
                   <span>{ocrProgress.stage === 'rendering' ? 'Rendering' : 'OCR'} page {ocrProgress.pageNumber} of {ocrProgress.pageCount}</span>
                 </div>
               ) : null}
-              {scannedPages.length ? (
-                <>
-                  {scannedPages.some((p) => p.status !== 'Reference' && !p.reviewed) ? (
-                    <div className="ocr-banner">
-                      OCR Review Required — customer-facing PDFs are blocked until all active pages are marked Reviewed.
-                    </div>
-                  ) : null}
-                  <div className="batch-table scanned-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Page</th>
-                          <th>Type</th>
-                          <th>Confidence</th>
-                          <th>Customer</th>
-                          <th>Doc #</th>
-                          <th>Date</th>
-                          <th>Total</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {scannedPages.map((page) => (
-                          <tr key={page.pageNumber} className={`batch-row is-${getStatusClass(page.status)}`}>
-                            <td>{page.pageNumber}</td>
-                            <td>{page.classification.label}</td>
-                            <td>
-                              <span className={`confidence-badge is-${page.ocrConfidence >= 60 ? 'ok' : 'low'}`}>
-                                {page.ocrConfidence >= 60 ? `${page.ocrConfidence}%` : `⚠ ${page.ocrConfidence}%`}
-                              </span>
-                            </td>
-                            <td>{page.customerName || '—'}</td>
-                            <td>{page.documentNumber || '—'}</td>
-                            <td>{page.documentDate || '—'}</td>
-                            <td>{page.total || '—'}</td>
-                            <td><span className={`batch-status is-${getStatusClass(page.status)}`}>{page.status}</span></td>
-                            <td>
-                              <div className="batch-actions">
-                                <button
-                                  type="button"
-                                  className="ghost-button ghost-button--subtle"
-                                  onClick={() => setOcrDetailsPage(page)}
-                                >
-                                  OCR Details
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ghost-button ghost-button--subtle"
-                                  onClick={() => handleLoadScannedItem(page)}
-                                >
-                                  Load
-                                </button>
-                                {page.status !== 'Reviewed' && page.status !== 'Reference' ? (
-                                  <button
-                                    type="button"
-                                    className="ghost-button ghost-button--subtle"
-                                    onClick={() => handleMarkScannedReviewed(page.pageNumber)}
-                                  >
-                                    Mark Reviewed
-                                  </button>
-                                ) : null}
-                                {page.status !== 'Reference' ? (
-                                  <button
-                                    type="button"
-                                    className="ghost-button ghost-button--subtle"
-                                    onClick={() => handleMarkScannedReference(page.pageNumber)}
-                                  >
-                                    Reference
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  className="ghost-button ghost-button--subtle"
-                                  onClick={() => handleRemoveScannedPage(page.pageNumber)}
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+              {scannedPackets.some((packet) => packet.pages.some((p) => p.status !== 'Reference' && !p.reviewed)) ? (
+                <div className="ocr-banner">
+                  OCR Review Required - customer-facing PDFs stay blocked until the loaded OCR page is marked checked.
+                </div>
+              ) : null}
+              {scannedPackets.length ? (
+                <div className="scanned-packet-list">
+                  {scannedPackets.map((packet) => {
+                    const summary = summarizePacketPages(packet.pages)
+                    return (
+                      <section className="scanned-packet-card" key={packet.id}>
+                        <div className="scanned-packet-card__header">
+                          <div>
+                            <p className="kicker">Scanned packet</p>
+                            <h3>{packet.fileName}</h3>
+                            <p>{getPacketOcrStatus(packet)} · {packet.pageCount} page{packet.pageCount === 1 ? '' : 's'}</p>
+                          </div>
+                          <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleClearScannedPacket(packet.id)}>
+                            Clear packet
+                          </button>
+                        </div>
+                        <div className="scanned-summary-grid">
+                          <span><strong>{summary.followUp}</strong> likely follow-up</span>
+                          <span><strong>{summary.paidClosed}</strong> paid/closed</span>
+                          <span><strong>{summary.needsReview}</strong> need review</span>
+                          <span><strong>{summary.support}</strong> support</span>
+                          <span><strong>{summary.reference}</strong> reference/photo</span>
+                          <span><strong>{summary.unknown}</strong> unknown</span>
+                        </div>
+                        <p className="scanned-packet-card__summary">
+                          I found {summary.followUp} likely follow-up quote{summary.followUp === 1 ? '' : 's'}, {summary.paidClosed} paid/closed order{summary.paidClosed === 1 ? '' : 's'}, {summary.support} field measure/install support page{summary.support === 1 ? '' : 's'}, {summary.reference} site photo/reference page{summary.reference === 1 ? '' : 's'}, and {summary.unknown} unknown/reference page{summary.unknown === 1 ? '' : 's'}. Start with likely follow-up quotes.
+                        </p>
+                        <div className="scanned-triage-groups">
+                          {scannedTriageGroups.map((group) => {
+                            const pages = packet.pages.filter(group.matches)
+                            if (!pages.length) return null
+                            return (
+                              <details className="scanned-triage-group" key={group.key} open={group.open}>
+                                <summary>{group.label} <span>{pages.length}</span></summary>
+                                <div className="scanned-page-list">
+                                  {pages.map((page) => (
+                                    <article className={`scanned-page-row is-${getStatusClass(page.status)}`} key={`${packet.id}-${page.pageNumber}`}>
+                                      <div>
+                                        <strong>Page {page.pageNumber}</strong>
+                                        <span>{page.classification.label} · {page.recommendation}</span>
+                                      </div>
+                                      <div>
+                                        <span>{page.customerName || 'No customer extracted'}</span>
+                                        <span>{page.documentNumber || 'No doc #'} · {page.total || page.balanceDue || 'No total'}</span>
+                                      </div>
+                                      <span className={`confidence-badge is-${page.ocrConfidence >= 60 ? 'ok' : 'low'}`}>{page.ocrConfidence >= 60 ? `${page.ocrConfidence}%` : `low ${page.ocrConfidence}%`}</span>
+                                      <span className={`batch-status is-${getStatusClass(page.status)}`}>{page.status}</span>
+                                      <div className="batch-actions">
+                                        <button type="button" className="ghost-button ghost-button--subtle" onClick={() => setOcrDetailsPage(page)}>View scan/OCR</button>
+                                        <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleLoadScannedItem(page)}>Send to Review</button>
+                                        {!page.reviewed ? <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleMarkScannedReviewed(packet.id, page.pageNumber)}>Mark checked</button> : null}
+                                        {page.status === 'Reference' ? (
+                                          <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleUndoScannedReference(packet.id, page.pageNumber)}>Undo reference</button>
+                                        ) : (
+                                          <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleMarkScannedReference(packet.id, page.pageNumber)}>Mark as reference</button>
+                                        )}
+                                        <button type="button" className="ghost-button ghost-button--subtle" onClick={() => handleRemoveScannedPage(packet.id, page.pageNumber)}>Remove from packet</button>
+                                      </div>
+                                    </article>
+                                  ))}
+                                </div>
+                              </details>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    )
+                  })}
+                </div>
               ) : null}
               <div className="action-row">
                 <button type="button" className="ghost-button" onClick={handleClearAll}>
@@ -1022,9 +1198,15 @@ function App() {
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => setOcrReviewConfirmed(true)}
+                onClick={() => {
+                  if (loadedOcrItem) {
+                    handleMarkScannedReviewed(loadedOcrItem.packetId, loadedOcrItem.pageNumber)
+                  } else {
+                    setOcrReviewConfirmed(true)
+                  }
+                }}
               >
-                I have reviewed the OCR output against the scan
+                Mark checked against the scan
               </button>
             </div>
           ) : null}
@@ -1558,8 +1740,8 @@ function App() {
         >
           <div className="customer-pdf-modal__controls">
             <div>
-              <strong>OCR Details — Page {ocrDetailsPage.pageNumber}</strong>
-              <p>{ocrDetailsPage.classification.label} · Confidence {ocrDetailsPage.ocrConfidence}%</p>
+              <strong>View scan/OCR - Page {ocrDetailsPage.pageNumber}</strong>
+              <p>{ocrDetailsPage.classification.label} · {ocrDetailsPage.recommendation} · Confidence {ocrDetailsPage.ocrConfidence}%</p>
             </div>
             <div className="customer-pdf-modal__actions">
               <button type="button" className="ghost-button" onClick={() => setOcrDetailsPage(null)}>
@@ -1568,6 +1750,12 @@ function App() {
             </div>
           </div>
           <div className="customer-pdf-modal__stage ocr-details-stage">
+            {ocrDetailsPage.imageDataUrl ? (
+              <div className="ocr-details-section ocr-preview-section">
+                <h4>Page Preview</h4>
+                <img src={ocrDetailsPage.imageDataUrl} alt={`Scanned page ${ocrDetailsPage.pageNumber}`} />
+              </div>
+            ) : null}
             <div className="ocr-details-section">
               <h4>Extracted Fields</h4>
               <dl className="ocr-fields-list">
@@ -1582,8 +1770,20 @@ function App() {
               </dl>
             </div>
             <div className="ocr-details-section">
-              <h4>Raw OCR Text</h4>
-              <pre className="ocr-raw-text">{ocrDetailsPage.text || '(no text)'}</pre>
+              <h4>Warnings</h4>
+              {getOcrWarnings(ocrDetailsPage).length ? (
+                <ul className="notice-list notice-list--warning">
+                  {getOcrWarnings(ocrDetailsPage).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty-copy">No extra OCR warnings.</p>
+              )}
+              <details className="ocr-raw-details">
+                <summary>Advanced / Raw OCR</summary>
+                <pre className="ocr-raw-text">{ocrDetailsPage.text || '(no text)'}</pre>
+              </details>
             </div>
           </div>
         </div>

@@ -26,6 +26,10 @@ dist-ssr
 .claude/
 
 # Real customer/vendor PDFs and internal reference docs — never commit
+*.pdf
+*.PDF
+*.csv
+*.CSV
 Scanned_*.pdf
 **/Scanned_*.pdf
 follow up quotes.pdf

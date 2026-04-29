@@ -36,6 +36,12 @@ async function loadPdf(file) {
   return pdfjs.getDocument({ data: arrayBuffer }).promise
 }
 
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw new DOMException('OCR canceled', 'AbortError')
+  }
+}
+
 export async function extractTextFromPdf(file) {
   const pdf = await loadPdf(file)
   const pages = []
@@ -50,12 +56,14 @@ export async function extractTextFromPdf(file) {
 }
 
 export async function renderPdfPagesToImages(file, options = {}) {
-  const { scale = 2.25, maxPages = Infinity, imageType = 'image/png', onProgress } = options
+  const { scale = 2.25, maxPages = Infinity, imageType = 'image/png', onProgress, signal } = options
+  throwIfAborted(signal)
   const pdf = await loadPdf(file)
   const pageLimit = Math.min(pdf.numPages, maxPages)
   const images = []
 
   for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+    throwIfAborted(signal)
     onProgress?.({ stage: 'rendering', pageNumber, pageCount: pageLimit })
     const page = await pdf.getPage(pageNumber)
     const viewport = page.getViewport({ scale })
@@ -64,6 +72,7 @@ export async function renderPdfPagesToImages(file, options = {}) {
     canvas.width = Math.floor(viewport.width)
     canvas.height = Math.floor(viewport.height)
     await page.render({ canvasContext: context, viewport }).promise
+    throwIfAborted(signal)
     images.push({
       pageNumber,
       pageCount: pageLimit,
@@ -77,16 +86,20 @@ export async function renderPdfPagesToImages(file, options = {}) {
 }
 
 export async function extractOcrFromPdf(file, options = {}) {
-  const { maxPages = Infinity, onProgress } = options
-  const images = await renderPdfPagesToImages(file, { maxPages, onProgress })
+  const { maxPages = Infinity, onProgress, signal } = options
+  throwIfAborted(signal)
+  const images = await renderPdfPagesToImages(file, { maxPages, onProgress, signal })
+  throwIfAborted(signal)
   const { createWorker } = await import('tesseract.js')
   const worker = await createWorker('eng')
   const pages = []
 
   try {
     for (const image of images) {
+      throwIfAborted(signal)
       onProgress?.({ stage: 'ocr', pageNumber: image.pageNumber, pageCount: image.pageCount })
       const result = await worker.recognize(image.dataUrl)
+      throwIfAborted(signal)
       pages.push({
         pageNumber: image.pageNumber,
         text: result.data?.text || '',
