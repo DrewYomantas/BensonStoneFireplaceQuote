@@ -60,6 +60,7 @@ Output rules:
 - matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
 - recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
 - saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
+- drafts safe follow-up copy and logs local opportunity activity without sending anything externally
 - provides a simple internal preview and print/PDF option
 
 ## What this app does not do yet
@@ -91,6 +92,12 @@ The Opportunity Queue is a local-first follow-up board for reviewed quote summar
 Statuses include new intake, needs review, ready for proposal, follow-up needed, proposal sent, waiting on customer, closed won/lost, reference only, and archived. Saving a quote is allowed even when fields are incomplete, but the opportunity is classified conservatively as needs review or reference only when warnings are present.
 
 Bulk Opportunity Intake appears in Packet Triage when scanned follow-up candidates are available. It creates reviewable opportunity drafts with duplicate signals, source file/page metadata, safe add/update/skip actions, and an import summary. Add-all-safe excludes uncertain duplicates, reference-only packets, and drafts missing identity/contact blockers.
+
+## Follow-up composer and activity timeline
+
+Opportunity cards include a local Follow-Up Composer for safe email/text/phone-script/Nextdoor draft copy. Drafts are deterministic and conservative: they can mention quote refresh, missing details, or showroom availability only when safe, and they never send messages externally.
+
+The Activity Timeline stores local notes, drafts, sent follow-ups, calls, voicemails, showroom visits, and proposal activity summaries. Logging a follow-up as sent updates the opportunity's last-contacted date and moves active quotes to waiting on customer, but does not reopen closed/reference records.
 
 ## Template source
 
@@ -168,6 +175,15 @@ Current automated checks cover:
 - safe source metadata without raw OCR text
 - sensitive metric exclusion from stored opportunities
 - localStorage save/list/update/remove helpers
+
+**Follow-up composer and activity (`src/lib/followUpComposer.test.js`, `src/lib/opportunityActivity.test.js`)**
+- reactivation and quote-refresh wording
+- unsafe draft warnings for missing contact and reference records
+- display model wording guardrails
+- sensitive term exclusion from customer-facing draft copy
+- local activity save/list/update/remove
+- sent follow-up status patching
+- raw OCR/private metric exclusion from activity storage
 
 ## Document-type behavior
 

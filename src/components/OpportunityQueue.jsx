@@ -1,3 +1,13 @@
+import { useMemo, useState } from 'react'
+import ActivityTimeline from './ActivityTimeline.jsx'
+import FollowUpComposer from './FollowUpComposer.jsx'
+import { composeFollowUpDraft } from '../lib/followUpComposer.js'
+import {
+  addOpportunityActivity,
+  buildSentOpportunityPatch,
+  listOpportunityActivities,
+  removeOpportunityActivity,
+} from '../lib/opportunityActivity.js'
 import {
   filterOpportunities,
   opportunityStatuses,
@@ -38,8 +48,49 @@ export default function OpportunityQueue({
   playbooks,
   saveState,
 }) {
+  const [activityVersion, setActivityVersion] = useState(0)
+  const [toneByOpportunity, setToneByOpportunity] = useState({})
+  const [channelByOpportunity, setChannelByOpportunity] = useState({})
+  const [noteBodyByOpportunity, setNoteBodyByOpportunity] = useState({})
+  const [noteTypeByOpportunity, setNoteTypeByOpportunity] = useState({})
+  const [noteChannelByOpportunity, setNoteChannelByOpportunity] = useState({})
   const summary = summarizeOpportunities(opportunities)
   const visible = filterOpportunities(opportunities, filter)
+  const activityCache = useMemo(() => {
+    void activityVersion
+    return Object.fromEntries(opportunities.map((opportunity) => [opportunity.id, listOpportunityActivities(opportunity.id)]))
+  }, [activityVersion, opportunities])
+
+  function refreshActivities() {
+    setActivityVersion((current) => current + 1)
+  }
+
+  function getPlaybook(opportunity) {
+    return playbooks.find((p) => p.id === opportunity.selectedPlaybookId) || playbooks.find((p) => p.id === opportunity.recommendedPlaybookId) || null
+  }
+
+  function saveDraftActivity(opportunity, draft) {
+    addOpportunityActivity(opportunity.id, {
+      type: 'follow-up-draft',
+      title: draft.subject,
+      body: draft.body,
+      channel: draft.channel === 'phone-script' ? 'phone' : draft.channel === 'nextdoor-reply' ? 'nextdoor' : draft.channel,
+      metadata: { tone: draft.tone, unsafeToSend: String(draft.unsafeToSend) },
+    })
+    refreshActivities()
+  }
+
+  function logSentActivity(opportunity, draft) {
+    addOpportunityActivity(opportunity.id, {
+      type: 'follow-up-sent',
+      title: draft.subject || 'Follow-up sent',
+      body: draft.body,
+      channel: draft.channel === 'phone-script' ? 'phone' : draft.channel === 'nextdoor-reply' ? 'nextdoor' : draft.channel,
+      metadata: { tone: draft.tone, unsafeToSend: String(draft.unsafeToSend) },
+    })
+    onUpdateOpportunity(opportunity.id, buildSentOpportunityPatch(opportunity))
+    refreshActivities()
+  }
 
   return (
     <section className="workbench-view opportunity-queue">
@@ -78,6 +129,24 @@ export default function OpportunityQueue({
       <div className="opportunity-list">
         {visible.length ? visible.map((opportunity) => (
           <article className={`opportunity-card is-${opportunity.status}`} key={opportunity.id}>
+            {(() => {
+              const activities = activityCache[opportunity.id] || []
+              const lastActivity = activities[0] || null
+              const playbook = getPlaybook(opportunity)
+              const selectedTone = toneByOpportunity[opportunity.id] || (opportunity.status === 'follow-up-needed' ? 'reactivation' : 'warm')
+              const selectedChannel = channelByOpportunity[opportunity.id] || 'email'
+              const draft = composeFollowUpDraft({
+                opportunity,
+                playbook,
+                warnings: opportunity.warnings,
+                tone: selectedTone,
+                channel: selectedChannel,
+              })
+              const noteType = noteTypeByOpportunity[opportunity.id] || 'note'
+              const noteChannel = noteChannelByOpportunity[opportunity.id] || 'manual'
+              const noteBody = noteBodyByOpportunity[opportunity.id] || ''
+              return (
+                <>
             <div className="opportunity-card__header">
               <div>
                 <span className="kicker">{opportunity.sourceType || 'Quote opportunity'}</span>
@@ -95,6 +164,8 @@ export default function OpportunityQueue({
               <div><dt>Follow-up path</dt><dd>{playbooks.find((p) => p.id === opportunity.selectedPlaybookId)?.name || playbooks.find((p) => p.id === opportunity.recommendedPlaybookId)?.name || 'Not selected'}</dd></div>
               <div><dt>Next best action</dt><dd>{opportunity.nextAction || 'Review opportunity'}</dd></div>
               <div><dt>Due date</dt><dd>{opportunity.nextActionDue || 'Not scheduled'}</dd></div>
+              <div><dt>Last activity</dt><dd>{lastActivity ? new Date(lastActivity.createdAt).toLocaleDateString() : 'No activity yet'}</dd></div>
+              <div><dt>Last contacted</dt><dd>{opportunity.lastContactedAt || 'Not logged'}</dd></div>
               <div><dt>Updated</dt><dd>{opportunity.updatedAt ? new Date(opportunity.updatedAt).toLocaleDateString() : 'Not saved'}</dd></div>
               <div><dt>Source trail</dt><dd>{opportunity.sourceLabel || opportunity.sourceType || 'Manual save'}</dd></div>
               <div><dt>Source file</dt><dd>{opportunity.sourceFileName || 'Not recorded'}</dd></div>
@@ -165,6 +236,59 @@ export default function OpportunityQueue({
                 Remove from queue
               </button>
             </div>
+
+            <div className="opportunity-follow-up-grid">
+              <FollowUpComposer
+                draft={draft}
+                opportunity={opportunity}
+                playbook={playbook}
+                selectedChannel={selectedChannel}
+                selectedTone={selectedTone}
+                onChannelChange={(value) => setChannelByOpportunity((current) => ({ ...current, [opportunity.id]: value }))}
+                onCopyDraft={() => navigator.clipboard.writeText(`${draft.subject}\n\n${draft.body}`)}
+                onLogSent={() => logSentActivity(opportunity, draft)}
+                onSaveDraft={() => saveDraftActivity(opportunity, draft)}
+                onToneChange={(value) => setToneByOpportunity((current) => ({ ...current, [opportunity.id]: value }))}
+              />
+              <ActivityTimeline
+                activities={activities}
+                noteBody={noteBody}
+                noteChannel={noteChannel}
+                noteType={noteType}
+                onAddNote={() => {
+                  if (!noteBody.trim()) return
+                  addOpportunityActivity(opportunity.id, {
+                    type: noteType,
+                    title: titleLabel(noteType),
+                    body: noteBody,
+                    channel: noteChannel,
+                  })
+                  setNoteBodyByOpportunity((current) => ({ ...current, [opportunity.id]: '' }))
+                  refreshActivities()
+                }}
+                onDeleteActivity={(activityId) => {
+                  removeOpportunityActivity(activityId)
+                  refreshActivities()
+                }}
+                onMarkDraftSent={(activity) => {
+                  addOpportunityActivity(opportunity.id, {
+                    type: 'follow-up-sent',
+                    title: activity.title || 'Follow-up sent',
+                    body: activity.body,
+                    channel: activity.channel,
+                    metadata: { fromDraftId: activity.id },
+                  })
+                  onUpdateOpportunity(opportunity.id, buildSentOpportunityPatch(opportunity))
+                  refreshActivities()
+                }}
+                onNoteBodyChange={(value) => setNoteBodyByOpportunity((current) => ({ ...current, [opportunity.id]: value }))}
+                onNoteChannelChange={(value) => setNoteChannelByOpportunity((current) => ({ ...current, [opportunity.id]: value }))}
+                onNoteTypeChange={(value) => setNoteTypeByOpportunity((current) => ({ ...current, [opportunity.id]: value }))}
+              />
+            </div>
+                </>
+              )
+            })()}
           </article>
         )) : (
           <section className="workbench-panel empty-state">
