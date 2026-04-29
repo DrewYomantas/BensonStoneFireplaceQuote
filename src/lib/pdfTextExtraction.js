@@ -31,9 +31,13 @@ function joinTextItems(items) {
   return lines.map((l) => l.text.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n')
 }
 
-export async function extractTextFromPdf(file) {
+async function loadPdf(file) {
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
+  return pdfjs.getDocument({ data: arrayBuffer }).promise
+}
+
+export async function extractTextFromPdf(file) {
+  const pdf = await loadPdf(file)
   const pages = []
   for (let p = 1; p <= pdf.numPages; p += 1) {
     const page = await pdf.getPage(p)
@@ -43,4 +47,61 @@ export async function extractTextFromPdf(file) {
   const rawText = pages.join('\n\n')
   const embeddedTextLikelyMissing = rawText.replace(/\s+/g, '').length < 50 * pdf.numPages
   return { pages, rawText, embeddedTextLikelyMissing, pageCount: pdf.numPages }
+}
+
+export async function renderPdfPagesToImages(file, options = {}) {
+  const { scale = 2.25, maxPages = Infinity, imageType = 'image/png', onProgress } = options
+  const pdf = await loadPdf(file)
+  const pageLimit = Math.min(pdf.numPages, maxPages)
+  const images = []
+
+  for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+    onProgress?.({ stage: 'rendering', pageNumber, pageCount: pageLimit })
+    const page = await pdf.getPage(pageNumber)
+    const viewport = page.getViewport({ scale })
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    await page.render({ canvasContext: context, viewport }).promise
+    images.push({
+      pageNumber,
+      pageCount: pageLimit,
+      dataUrl: canvas.toDataURL(imageType),
+      width: canvas.width,
+      height: canvas.height,
+    })
+  }
+
+  return images
+}
+
+export async function extractOcrFromPdf(file, options = {}) {
+  const { maxPages = Infinity, onProgress } = options
+  const images = await renderPdfPagesToImages(file, { maxPages, onProgress })
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('eng')
+  const pages = []
+
+  try {
+    for (const image of images) {
+      onProgress?.({ stage: 'ocr', pageNumber: image.pageNumber, pageCount: image.pageCount })
+      const result = await worker.recognize(image.dataUrl)
+      pages.push({
+        pageNumber: image.pageNumber,
+        text: result.data?.text || '',
+        confidence: Math.round(result.data?.confidence || 0),
+        imageDataUrl: image.dataUrl,
+      })
+    }
+  } finally {
+    await worker.terminate()
+  }
+
+  return {
+    pages,
+    rawText: pages.map((page) => page.text).join('\n\n'),
+    pageCount: pages.length,
+    extractionSource: 'ocr',
+  }
 }

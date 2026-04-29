@@ -18,13 +18,16 @@ This app never invents customer info, products, prices, tax, totals, or terms. I
 
 ## Department workflow
 
-1. on Step 1, choose **Paste Notes** or **Upload BisTrack PDF**
-2. for PDF: select the file — text is extracted, document type is detected, and line items are parsed
-3. review warnings, the document-type badge, unmatched lines, and blank required fields
-4. edit the structured proposal fields until export blockers are cleared
-5. copy the grouped fields or export JSON for recordkeeping
-6. click **Generate Customer PDF** to open the customer-facing preview
-7. in the preview modal, click **Print / Save as PDF** to email or print the polished proposal/order summary
+1. On Step 1, choose **Paste Notes**, **Upload BisTrack PDF**, or **Bulk Upload PDFs**.
+2. For a single PDF, select the file — text is extracted, document type is detected, and line items are parsed.
+3. For bulk PDF work, select multiple BisTrack PDFs — each file is parsed into a batch queue with status, confidence, warnings, and review/generate actions.
+4. Review warnings, the document-type badge, unmatched lines, and blank required fields.
+5. Edit the structured proposal fields until export blockers are cleared.
+6. Copy grouped fields or export JSON for recordkeeping.
+7. Click **Generate Customer PDF** to open the customer-facing preview.
+8. In the preview modal, click **Print / Save as PDF** to email or print the polished proposal/order summary.
+
+Bulk upload is meant for the realistic department flow where several official BisTrack quotes/orders are created first, then processed together afterward. Bulk generation still keeps review in the loop: files marked **Needs Review** should be opened and checked before sending anything to a customer.
 
 ## Customer-facing PDF
 
@@ -53,16 +56,16 @@ Output rules:
 - shows export blockers when required fields are blank
 - provides grouped copy buttons for customer, quote meta, page 1, page 2, and all fields
 - exports JSON for records
+- supports a bulk BisTrack PDF queue for processing several quote/order PDFs together
 - provides a simple internal preview and print/PDF option
 
 ## What this app does not do yet
 
 - it does not integrate with Canva
-- it does not auto-generate the designed customer proposal
 - it does not invent customer names, dates, products, prices, tax, totals, or legal terms
 - it does not recalculate totals unless someone explicitly changes them by hand
 - it does not replace the official quote system
-- it does not produce a polished customer-facing PDF yet
+- it does not bulk-download a ZIP of generated customer PDFs yet
 
 ## Template source
 
@@ -146,7 +149,7 @@ The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, 
 
 ## V3+ roadmap
 
-- generated customer-facing PDF (rendering layer for the reviewed fields)
 - OCR fallback for scanned BisTrack PDFs
+- bulk ZIP export for generated customer PDFs
 - CSV/import support
 - Canva autofill only after field review is proven reliable

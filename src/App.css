@@ -1134,3 +1134,242 @@
 }
 
 
+
+
+.batch-table {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.batch-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 1040px;
+}
+
+.batch-table th,
+.batch-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.1);
+  text-align: left;
+  vertical-align: top;
+}
+
+.batch-table th {
+  background: rgba(94, 73, 51, 0.06);
+  color: #4d3b2a;
+  font-weight: 700;
+}
+
+.batch-row.is-needs-review {
+  background: rgba(255, 241, 220, 0.55);
+}
+
+.batch-row.is-failed {
+  background: rgba(255, 229, 222, 0.55);
+}
+
+.batch-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(94, 73, 51, 0.1);
+  color: #5c4837;
+}
+
+.batch-status.is-ready {
+  background: rgba(70, 122, 78, 0.14);
+  color: #2f6f3a;
+}
+
+.batch-status.is-needs-review {
+  background: rgba(176, 122, 48, 0.18);
+  color: #7a4f10;
+}
+
+.batch-status.is-failed {
+  background: rgba(161, 58, 24, 0.14);
+  color: #a13a18;
+}
+
+.batch-status.is-parsing {
+  background: rgba(88, 104, 130, 0.14);
+  color: #4e5d73;
+}
+
+.batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.batch-actions .ghost-button {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.bulk-upload .empty-copy {
+  margin-top: 12px;
+}
+
+/* ── Scanned Packet / OCR ─────────────────────────────────────── */
+
+.ocr-progress {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #4e5d73;
+}
+
+.ocr-progress__bar {
+  height: 6px;
+  background: #e4e8ef;
+  border-radius: 3px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 360px;
+}
+
+.ocr-progress__fill {
+  height: 100%;
+  background: #4e7ab5;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.ocr-banner {
+  margin: 14px 0 10px;
+  padding: 10px 14px;
+  background: rgba(176, 122, 48, 0.14);
+  border-left: 3px solid #b07a30;
+  color: #7a4f10;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.ocr-source-callout {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: rgba(176, 122, 48, 0.1);
+  border-left: 3px solid #b07a30;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ocr-source-callout strong {
+  font-size: 13px;
+  color: #7a4f10;
+}
+
+.ocr-source-callout p {
+  font-size: 13px;
+  color: #5c4020;
+  margin: 0;
+}
+
+.ocr-source-callout--confirmed {
+  background: rgba(48, 140, 88, 0.1);
+  border-left-color: #308c58;
+  color: #1f5c38;
+  font-size: 13px;
+}
+
+.confidence-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.confidence-badge.is-ok {
+  background: rgba(48, 140, 88, 0.12);
+  color: #1f5c38;
+}
+
+.confidence-badge.is-low {
+  background: rgba(176, 122, 48, 0.18);
+  color: #7a4f10;
+}
+
+.batch-status.is-reviewed {
+  background: rgba(48, 140, 88, 0.12);
+  color: #1f5c38;
+}
+
+.batch-row.is-reviewed {
+  background: rgba(48, 140, 88, 0.04);
+}
+
+.batch-row.is-reference {
+  opacity: 0.65;
+}
+
+.ocr-details-modal .customer-pdf-modal__stage {
+  padding: 24px;
+}
+
+.ocr-details-stage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  height: 100%;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .ocr-details-stage {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ocr-details-section h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+
+.ocr-fields-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.ocr-fields-list dt {
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.ocr-fields-list dd {
+  color: #4b5563;
+  margin: 0;
+  word-break: break-word;
+}
+
+.ocr-raw-text {
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f8f9fa;
+  border: 1px solid #e4e8ef;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  color: #374151;
+}

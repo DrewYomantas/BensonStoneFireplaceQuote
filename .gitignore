@@ -24,3 +24,11 @@ dist-ssr
 *.sw?
 
 .claude/
+
+# Real customer/vendor PDFs and internal reference docs — never commit
+Scanned_*.pdf
+**/Scanned_*.pdf
+follow up quotes.pdf
+**/follow up quotes.pdf
+AnnaOrlinska.pdf
+**/AnnaOrlinska.pdf

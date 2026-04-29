@@ -16,7 +16,8 @@ import {
   parseNotes,
 } from './lib/parser.js'
 import { parseBisTrackText } from './lib/biztrackPdfParser.js'
-import { extractTextFromPdf } from './lib/pdfTextExtraction.js'
+import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
+import { buildScannedPacket } from './lib/scannedPacketParser.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 
 const workflowSteps = [
@@ -40,6 +41,39 @@ function downloadJson(fields) {
   link.click()
   URL.revokeObjectURL(url)
 }
+
+function getWarningCount(parseResult) {
+  return (parseResult.warnings?.length || 0) + (parseResult.context?.unmatchedLines?.length || 0)
+}
+
+function getBatchStatus(parseResult, auditResult, embeddedTextLikelyMissing) {
+  if (!parseResult) return 'Failed'
+  if (embeddedTextLikelyMissing || parseResult.extractionConfidence === 'low') return 'Needs Review'
+  if (parseResult.documentType === 'unknown') return 'Needs Review'
+  if (getWarningCount(parseResult) > 0) return 'Needs Review'
+  if (auditResult?.blockingFields?.length) return 'Needs Review'
+  return 'Ready'
+}
+
+function buildBatchSummary(parseResult, auditResult, embeddedTextLikelyMissing) {
+  return {
+    fileName: '',
+    status: getBatchStatus(parseResult, auditResult, embeddedTextLikelyMissing),
+    documentType: parseResult.documentType || 'unknown',
+    customerName: parseResult.fields.CUSTOMER_NAME || '',
+    documentNumber: parseResult.fields.QUOTE_NO || '',
+    documentDate: parseResult.fields.QUOTE_DATE || '',
+    total: parseResult.fields.QUOTATION_TOTAL || parseResult.fields.TOTAL_AMOUNT || '',
+    balanceDue: parseResult.fields.BALANCE_DUE || '',
+    confidence: parseResult.extractionConfidence || 'low',
+    warningCount: getWarningCount(parseResult) + (auditResult?.blockingFields?.length || 0),
+  }
+}
+
+function getStatusClass(status) {
+  return status.toLowerCase().replace(/\s+/g, '-')
+}
+
 
 function packageRows(packageNumber) {
   return Array.from({ length: 4 }, (_, index) => index + 1).map((number) => ({
@@ -129,6 +163,9 @@ function App() {
   const [pdfRawText, setPdfRawText] = useState('')
   const [pdfLineItems, setPdfLineItems] = useState([])
   const [pdfExtractionConfidence, setPdfExtractionConfidence] = useState('')
+  const [batchFiles, setBatchFiles] = useState([])
+  const [bulkStatus, setBulkStatus] = useState('')
+  const [customerPdfSnapshot, setCustomerPdfSnapshot] = useState(null)
   const [showCustomerPdf, setShowCustomerPdf] = useState(false)
   const [includeDeliveryDate, setIncludeDeliveryDate] = useState(false)
   const [audit, setAudit] = useState(buildAudit(emptyFields, emptySources, parseContext))
@@ -137,6 +174,13 @@ function App() {
   const [currentStep, setCurrentStep] = useState(1)
   const [sectionOverrides, setSectionOverrides] = useState({})
   const [assignmentTargets, setAssignmentTargets] = useState({})
+  const [scannedPages, setScannedPages] = useState([])
+  const [scannedStatus, setScannedStatus] = useState('')
+  const [scannedFile, setScannedFile] = useState(null)
+  const [scannedReady, setScannedReady] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(null)
+  const [ocrDetailsPage, setOcrDetailsPage] = useState(null)
+  const [ocrReviewConfirmed, setOcrReviewConfirmed] = useState(false)
 
   const exportJson = JSON.stringify(fields, null, 2)
   const exportLines = fieldsToExportLines(fields)
@@ -171,6 +215,52 @@ function App() {
     setParseContext(nextContext)
     setAudit(nextAudit)
     setCurrentStep(nextStep)
+  }
+
+  async function parsePdfFile(file) {
+    const extracted = await extractTextFromPdf(file)
+    const parsed = parseBisTrackText(extracted.rawText)
+    if (extracted.embeddedTextLikelyMissing && !parsed.warnings.some((w) => /scanned/i.test(w))) {
+      parsed.warnings.unshift('This Epicor BisTrack PDF looks scanned or image-based. Embedded text is missing or very sparse — review extracted fields carefully.')
+    }
+    const parsedAudit = buildAudit(parsed.fields, parsed.sources, parsed.context)
+    const summary = buildBatchSummary(parsed, parsedAudit, extracted.embeddedTextLikelyMissing)
+    return {
+      id: `${file.name}-${file.lastModified}-${file.size}`,
+      fileName: file.name,
+      parsed,
+      audit: parsedAudit,
+      rawText: extracted.rawText,
+      lineItems: parsed.lineItems,
+      embeddedTextLikelyMissing: extracted.embeddedTextLikelyMissing,
+      pageCount: extracted.pageCount,
+      ...summary,
+      fileName: file.name,
+    }
+  }
+
+  function loadParsedPdfResult(item, message = 'BisTrack PDF loaded into review fields') {
+    setPdfFileName(item.fileName)
+    setPdfRawText(item.rawText || item.parsed?.context?.rawText || '')
+    setPdfLineItems(item.lineItems || item.parsed?.lineItems || [])
+    setPdfExtractionConfidence(item.confidence || item.parsed?.extractionConfidence || '')
+    setParsedOnce(true)
+    setSectionOverrides({})
+    setAssignmentTargets({})
+    setPdfStatus(`Loaded — ${item.documentType === 'unknown' ? 'unknown type' : item.documentType.toUpperCase()}${item.documentNumber ? ` ${item.documentNumber}` : ''} (${(item.lineItems || []).length} line item${(item.lineItems || []).length === 1 ? '' : 's'})`)
+    syncState(item.parsed.fields, item.parsed.sources, item.parsed.context, 2)
+    setCopyState(message)
+  }
+
+  function openCustomerPdf(snapshotFields = fields, snapshotContext = parseContext) {
+    if (snapshotContext.extractionSource === 'ocr' && !ocrReviewConfirmed) {
+      setCopyState('OCR source — confirm review in Step 2 before generating a customer-facing PDF')
+      return
+    }
+    setCustomerPdfSnapshot({ fields: snapshotFields, parseContext: snapshotContext })
+    setShowCustomerPdf(true)
+    setCopyState('Opened customer-facing preview')
+    setCurrentStep(4)
   }
 
   function handleParse() {
@@ -208,6 +298,15 @@ function App() {
     setPdfRawText('')
     setPdfLineItems([])
     setPdfExtractionConfidence('')
+    setBatchFiles([])
+    setBulkStatus('')
+    setScannedPages([])
+    setScannedStatus('')
+    setScannedFile(null)
+    setScannedReady(false)
+    setOcrProgress(null)
+    setOcrReviewConfirmed(false)
+    setCustomerPdfSnapshot(null)
     setCopyState('Cleared')
   }
 
@@ -218,24 +317,166 @@ function App() {
     setPdfStatus('Extracting text from Epicor BisTrack PDF…')
     setCopyState('')
     try {
-      const extracted = await extractTextFromPdf(file)
-      setPdfRawText(extracted.rawText)
-      const parsed = parseBisTrackText(extracted.rawText)
-      if (extracted.embeddedTextLikelyMissing && !parsed.warnings.some((w) => /scanned/i.test(w))) {
-        parsed.warnings.unshift('This Epicor BisTrack PDF looks scanned or image-based. Embedded text is missing or very sparse — review extracted fields carefully.')
-      }
-      setPdfLineItems(parsed.lineItems)
-      setPdfExtractionConfidence(parsed.extractionConfidence)
+      const item = await parsePdfFile(file)
+      setPdfLineItems(item.lineItems)
+      setPdfRawText(item.rawText)
+      setPdfExtractionConfidence(item.confidence)
+      const docLabel = item.documentType === 'unknown' ? 'unknown type' : item.documentType.toUpperCase()
+      setPdfStatus(`Parsed — ${docLabel}${item.documentNumber ? ` ${item.documentNumber}` : ''} (${item.lineItems.length} line item${item.lineItems.length === 1 ? '' : 's'})`)
       setParsedOnce(true)
       setSectionOverrides({})
       setAssignmentTargets({})
-      const docLabel = parsed.documentType === 'unknown' ? 'unknown type' : parsed.documentType.toUpperCase()
-      setPdfStatus(`Parsed — ${docLabel}${parsed.fields.QUOTE_NO ? ` ${parsed.fields.QUOTE_NO}` : ''} (${parsed.lineItems.length} line item${parsed.lineItems.length === 1 ? '' : 's'})`)
-      syncState(parsed.fields, parsed.sources, parsed.context, 2)
+      syncState(item.parsed.fields, item.parsed.sources, item.parsed.context, 2)
       setCopyState('BisTrack PDF parsed into review fields')
     } catch (err) {
       setPdfStatus(`Could not extract PDF text: ${err.message || err}`)
     }
+  }
+
+  async function handleBulkUpload(event) {
+    const files = Array.from(event.target.files || []).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
+    if (!files.length) return
+
+    setInputMode('bulk')
+    setBulkStatus(`Parsing ${files.length} BisTrack PDF${files.length === 1 ? '' : 's'}…`)
+    setCopyState('')
+    const placeholders = files.map((file) => ({
+      id: `${file.name}-${file.lastModified}-${file.size}`,
+      fileName: file.name,
+      status: 'Parsing',
+      documentType: 'pending',
+      customerName: '',
+      documentNumber: '',
+      documentDate: '',
+      total: '',
+      balanceDue: '',
+      confidence: '',
+      warningCount: 0,
+    }))
+    setBatchFiles(placeholders)
+
+    const parsedItems = []
+    for (const file of files) {
+      try {
+        const item = await parsePdfFile(file)
+        parsedItems.push(item)
+      } catch (err) {
+        parsedItems.push({
+          id: `${file.name}-${file.lastModified}-${file.size}`,
+          fileName: file.name,
+          status: 'Failed',
+          documentType: 'unknown',
+          customerName: '',
+          documentNumber: '',
+          documentDate: '',
+          total: '',
+          balanceDue: '',
+          confidence: 'low',
+          warningCount: 1,
+          error: err.message || String(err),
+        })
+      }
+      setBatchFiles([...parsedItems, ...placeholders.slice(parsedItems.length)])
+    }
+
+    const readyCount = parsedItems.filter((item) => item.status === 'Ready').length
+    const reviewCount = parsedItems.filter((item) => item.status === 'Needs Review').length
+    const failedCount = parsedItems.filter((item) => item.status === 'Failed').length
+    setBatchFiles(parsedItems)
+    setBulkStatus(`Batch parsed — ${readyCount} ready, ${reviewCount} need review, ${failedCount} failed`)
+  }
+
+  function handleReviewBatchItem(item) {
+    if (!item.parsed) return
+    loadParsedPdfResult(item, `Loaded ${item.fileName} into review fields`)
+  }
+
+  function handleGenerateBatchItem(item) {
+    if (!item.parsed) return
+    setPdfFileName(item.fileName)
+    setPdfStatus(`Generating customer preview from ${item.fileName}`)
+    openCustomerPdf(item.parsed.fields, item.parsed.context)
+  }
+
+  function handleRemoveBatchItem(itemId) {
+    setBatchFiles((current) => current.filter((item) => item.id !== itemId))
+    setCopyState('Removed file from batch')
+  }
+
+  async function handleScannedPacketUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setInputMode('scanned')
+    setScannedPages([])
+    setScannedReady(false)
+    setOcrProgress(null)
+    setOcrReviewConfirmed(false)
+    setScannedStatus('Checking for embedded text…')
+    setScannedFile(file)
+    const extracted = await extractTextFromPdf(file)
+    if (!extracted.embeddedTextLikelyMissing) {
+      setScannedStatus('This PDF has selectable embedded text — use the BisTrack PDF upload tab instead.')
+      setScannedFile(null)
+      return
+    }
+    setScannedReady(true)
+    setScannedStatus(`Scanned PDF detected (${extracted.pageCount} page${extracted.pageCount === 1 ? '' : 's'}, no embedded text). Click Run OCR to classify pages.`)
+  }
+
+  async function handleRunOcr() {
+    if (!scannedFile) return
+    setScannedReady(false)
+    setOcrProgress({ stage: 'rendering', pageNumber: 0, pageCount: 0 })
+    setScannedStatus('Starting OCR…')
+    try {
+      const ocrResult = await extractOcrFromPdf(scannedFile, {
+        onProgress: (p) => {
+          setOcrProgress(p)
+          const action = p.stage === 'rendering' ? 'Rendering' : 'OCR'
+          setScannedStatus(`${action} page ${p.pageNumber} of ${p.pageCount}…`)
+        },
+      })
+      const packet = buildScannedPacket(ocrResult.pages)
+      setScannedPages(packet.pages.map((page) => ({ ...page, reviewed: false })))
+      setOcrProgress(null)
+      const reviewCount = packet.pages.filter((p) => p.status === 'Needs Review').length
+      setScannedStatus(`OCR complete — ${packet.pages.length} pages classified, ${reviewCount} need review.`)
+    } catch (err) {
+      setOcrProgress(null)
+      setScannedStatus(`OCR failed: ${err.message || String(err)}`)
+    }
+  }
+
+  function handleMarkScannedReviewed(pageNumber) {
+    setScannedPages((current) =>
+      current.map((page) => page.pageNumber === pageNumber ? { ...page, reviewed: true, status: 'Reviewed' } : page)
+    )
+  }
+
+  function handleMarkScannedReference(pageNumber) {
+    setScannedPages((current) =>
+      current.map((page) => page.pageNumber === pageNumber ? { ...page, status: 'Reference' } : page)
+    )
+  }
+
+  function handleLoadScannedItem(page) {
+    const parsed = page.parsed
+    if (!parsed) return
+    setOcrReviewConfirmed(false)
+    setPdfFileName(scannedFile?.name || 'scanned-packet.pdf')
+    setPdfRawText(page.text || '')
+    setPdfLineItems(parsed.lineItems || [])
+    setPdfExtractionConfidence(parsed.extractionConfidence || 'low')
+    setParsedOnce(true)
+    setSectionOverrides({})
+    setAssignmentTargets({})
+    setPdfStatus(`Loaded OCR page ${page.pageNumber} — ${page.classification.label}${page.documentNumber ? ` ${page.documentNumber}` : ''}`)
+    syncState(parsed.fields, parsed.sources, parsed.context, 2)
+    setCopyState(`OCR page ${page.pageNumber} loaded — review fields carefully before generating a customer PDF`)
+  }
+
+  function handleRemoveScannedPage(pageNumber) {
+    setScannedPages((current) => current.filter((page) => page.pageNumber !== pageNumber))
   }
 
   function handleLoadSample() {
@@ -393,7 +634,7 @@ function App() {
           <div className="panel-heading">
             <div>
               <p className="kicker">Step 1</p>
-              <h2>Paste Notes</h2>
+              <h2>Start from BisTrack</h2>
             </div>
             <button type="button" className="ghost-button" onClick={() => scrollToStep('step-2', 2, setCurrentStep)}>
               Go to review
@@ -430,6 +671,20 @@ function App() {
             >
               Upload BisTrack PDF
             </button>
+            <button
+              type="button"
+              className={`input-tab ${inputMode === 'bulk' ? 'is-active' : ''}`}
+              onClick={() => setInputMode('bulk')}
+            >
+              Bulk Upload PDFs
+            </button>
+            <button
+              type="button"
+              className={`input-tab ${inputMode === 'scanned' ? 'is-active' : ''}`}
+              onClick={() => setInputMode('scanned')}
+            >
+              Scanned Packet
+            </button>
           </div>
 
           {inputMode === 'notes' ? (
@@ -450,10 +705,12 @@ function App() {
                 </button>
               </div>
             </>
-          ) : (
+          ) : null}
+
+          {inputMode === 'pdf' ? (
             <div className="pdf-upload">
               <p className="pdf-upload__intro">
-                Upload an Epicor BisTrack PDF (Quote, Order, Bill, Invoice, or Receipt). The official BisTrack
+                Upload one Epicor BisTrack PDF (Quote, Order, Bill, Invoice, or Receipt). The official BisTrack
                 document remains the source of truth — values are extracted as-is, never invented.
               </p>
               <label className="pdf-upload__input">
@@ -508,7 +765,216 @@ function App() {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
+
+          {inputMode === 'bulk' ? (
+            <div className="pdf-upload bulk-upload">
+              <p className="pdf-upload__intro">
+                Upload a batch of Epicor BisTrack PDFs after you finish several quotes/orders. The app parses each file,
+                shows a queue, and lets you review or generate customer previews one at a time.
+              </p>
+              <label className="pdf-upload__input">
+                <span>Choose multiple BisTrack PDFs</span>
+                <input type="file" accept="application/pdf,.pdf" multiple onChange={handleBulkUpload} />
+              </label>
+              {bulkStatus ? <p className="pdf-upload__status">{bulkStatus}</p> : null}
+
+              {batchFiles.length ? (
+                <div className="batch-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th>File</th>
+                        <th>Type</th>
+                        <th>Customer</th>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Total</th>
+                        <th>Balance</th>
+                        <th>Confidence</th>
+                        <th>Warnings</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchFiles.map((item) => (
+                        <tr key={item.id} className={`batch-row is-${getStatusClass(item.status)}`}>
+                          <td><span className={`batch-status is-${getStatusClass(item.status)}`}>{item.status}</span></td>
+                          <td>{item.fileName}</td>
+                          <td>{item.documentType}</td>
+                          <td>{item.customerName || '—'}</td>
+                          <td>{item.documentNumber || '—'}</td>
+                          <td>{item.documentDate || '—'}</td>
+                          <td>{item.total || '—'}</td>
+                          <td>{item.balanceDue || '—'}</td>
+                          <td>{item.confidence || '—'}</td>
+                          <td>{item.warningCount || 0}</td>
+                          <td>
+                            <div className="batch-actions">
+                              <button
+                                type="button"
+                                className="ghost-button ghost-button--subtle"
+                                disabled={!item.parsed}
+                                onClick={() => handleReviewBatchItem(item)}
+                              >
+                                Review
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-button ghost-button--subtle"
+                                disabled={!item.parsed || item.status === 'Failed'}
+                                onClick={() => handleGenerateBatchItem(item)}
+                              >
+                                Generate
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-button ghost-button--subtle"
+                                onClick={() => handleRemoveBatchItem(item.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="empty-copy">No batch files uploaded yet.</p>
+              )}
+
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={handleClearAll}>
+                  Clear all
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {inputMode === 'scanned' ? (
+            <div className="pdf-upload scanned-upload">
+              <p className="pdf-upload__intro">
+                Upload a scanned follow-up packet PDF. The app detects missing embedded text, then lets you run OCR
+                page by page. Customer-facing PDFs are blocked until you confirm each page has been reviewed.
+              </p>
+              <label className="pdf-upload__input">
+                <span>Choose scanned packet PDF</span>
+                <input type="file" accept="application/pdf,.pdf" onChange={handleScannedPacketUpload} />
+              </label>
+              {scannedStatus ? <p className="pdf-upload__status">{scannedStatus}</p> : null}
+              {scannedReady && !ocrProgress ? (
+                <button type="button" className="primary-button" onClick={handleRunOcr}>
+                  Run OCR
+                </button>
+              ) : null}
+              {ocrProgress ? (
+                <div className="ocr-progress">
+                  <div className="ocr-progress__bar">
+                    <div
+                      className="ocr-progress__fill"
+                      style={{ width: ocrProgress.pageCount > 0 ? `${Math.round((ocrProgress.pageNumber / ocrProgress.pageCount) * 100)}%` : '5%' }}
+                    />
+                  </div>
+                  <span>{ocrProgress.stage === 'rendering' ? 'Rendering' : 'OCR'} page {ocrProgress.pageNumber} of {ocrProgress.pageCount}</span>
+                </div>
+              ) : null}
+              {scannedPages.length ? (
+                <>
+                  {scannedPages.some((p) => p.status !== 'Reference' && !p.reviewed) ? (
+                    <div className="ocr-banner">
+                      OCR Review Required — customer-facing PDFs are blocked until all active pages are marked Reviewed.
+                    </div>
+                  ) : null}
+                  <div className="batch-table scanned-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Page</th>
+                          <th>Type</th>
+                          <th>Confidence</th>
+                          <th>Customer</th>
+                          <th>Doc #</th>
+                          <th>Date</th>
+                          <th>Total</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scannedPages.map((page) => (
+                          <tr key={page.pageNumber} className={`batch-row is-${getStatusClass(page.status)}`}>
+                            <td>{page.pageNumber}</td>
+                            <td>{page.classification.label}</td>
+                            <td>
+                              <span className={`confidence-badge is-${page.ocrConfidence >= 60 ? 'ok' : 'low'}`}>
+                                {page.ocrConfidence >= 60 ? `${page.ocrConfidence}%` : `⚠ ${page.ocrConfidence}%`}
+                              </span>
+                            </td>
+                            <td>{page.customerName || '—'}</td>
+                            <td>{page.documentNumber || '—'}</td>
+                            <td>{page.documentDate || '—'}</td>
+                            <td>{page.total || '—'}</td>
+                            <td><span className={`batch-status is-${getStatusClass(page.status)}`}>{page.status}</span></td>
+                            <td>
+                              <div className="batch-actions">
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--subtle"
+                                  onClick={() => setOcrDetailsPage(page)}
+                                >
+                                  OCR Details
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--subtle"
+                                  onClick={() => handleLoadScannedItem(page)}
+                                >
+                                  Load
+                                </button>
+                                {page.status !== 'Reviewed' && page.status !== 'Reference' ? (
+                                  <button
+                                    type="button"
+                                    className="ghost-button ghost-button--subtle"
+                                    onClick={() => handleMarkScannedReviewed(page.pageNumber)}
+                                  >
+                                    Mark Reviewed
+                                  </button>
+                                ) : null}
+                                {page.status !== 'Reference' ? (
+                                  <button
+                                    type="button"
+                                    className="ghost-button ghost-button--subtle"
+                                    onClick={() => handleMarkScannedReference(page.pageNumber)}
+                                  >
+                                    Reference
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--subtle"
+                                  onClick={() => handleRemoveScannedPage(page.pageNumber)}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={handleClearAll}>
+                  Clear all
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <ul className="rule-list">
             <li>Epicor BisTrack is the source of truth. This app never invents customers, prices, tax, totals, or terms.</li>
@@ -548,6 +1014,25 @@ function App() {
               </p>
             ) : null}
           </div>
+
+          {parseContext.extractionSource === 'ocr' && !ocrReviewConfirmed ? (
+            <div className="ocr-source-callout">
+              <strong>OCR source — fields extracted from a scanned image.</strong>
+              <p>Compare every field against the original scanned page before using this data. Customer-facing PDF generation is blocked until you confirm review.</p>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setOcrReviewConfirmed(true)}
+              >
+                I have reviewed the OCR output against the scan
+              </button>
+            </div>
+          ) : null}
+          {parseContext.extractionSource === 'ocr' && ocrReviewConfirmed ? (
+            <div className="ocr-source-callout ocr-source-callout--confirmed">
+              OCR review confirmed — customer-facing PDF generation unlocked.
+            </div>
+          ) : null}
 
           <div className="review-grid">
             <div className="review-card">
@@ -831,15 +1316,7 @@ function App() {
             >
               Export JSON
             </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                setShowCustomerPdf(true)
-                setCopyState('Opened customer-facing preview')
-                setCurrentStep(4)
-              }}
-            >
+            <button type="button" className="primary-button" onClick={() => openCustomerPdf()}>
               Generate Customer PDF
             </button>
           </div>
@@ -1064,10 +1541,50 @@ function App() {
           </div>
           <div className="customer-pdf-modal__stage">
             <CustomerProposal
-              fields={fields}
-              parseContext={parseContext}
+              fields={customerPdfSnapshot?.fields || fields}
+              parseContext={customerPdfSnapshot?.parseContext || parseContext}
               includeDeliveryDate={includeDeliveryDate}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {ocrDetailsPage ? (
+        <div
+          className="customer-pdf-modal ocr-details-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="OCR Details"
+        >
+          <div className="customer-pdf-modal__controls">
+            <div>
+              <strong>OCR Details — Page {ocrDetailsPage.pageNumber}</strong>
+              <p>{ocrDetailsPage.classification.label} · Confidence {ocrDetailsPage.ocrConfidence}%</p>
+            </div>
+            <div className="customer-pdf-modal__actions">
+              <button type="button" className="ghost-button" onClick={() => setOcrDetailsPage(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="customer-pdf-modal__stage ocr-details-stage">
+            <div className="ocr-details-section">
+              <h4>Extracted Fields</h4>
+              <dl className="ocr-fields-list">
+                {Object.entries(ocrDetailsPage.parsed?.fields || {})
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k}</dt>
+                      <dd>{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+            <div className="ocr-details-section">
+              <h4>Raw OCR Text</h4>
+              <pre className="ocr-raw-text">{ocrDetailsPage.text || '(no text)'}</pre>
+            </div>
           </div>
         </div>
       ) : null}
