@@ -24,11 +24,19 @@ import {
 } from './lib/productCatalog.js'
 import { buildScannedPacket } from './lib/scannedPacketParser.js'
 import { proposalPlaybooks, recommendProposalPlaybook } from './lib/proposalPlaybooks.js'
+import {
+  createOpportunityFromCurrentQuote,
+  listOpportunities,
+  removeOpportunity,
+  saveOpportunity,
+  updateOpportunity,
+} from './lib/opportunities.js'
 import AppShell from './components/AppShell.jsx'
 import CommandCenter from './components/CommandCenter.jsx'
 import CustomerProposal from './components/CustomerProposal.jsx'
 import ExportPrep from './components/ExportPrep.jsx'
 import IntakePanel from './components/IntakePanel.jsx'
+import OpportunityQueue from './components/OpportunityQueue.jsx'
 import ProposalBuilder from './components/ProposalBuilder.jsx'
 import ProposalPlaybooks from './components/ProposalPlaybooks.jsx'
 import ReviewStation from './components/ReviewStation.jsx'
@@ -249,6 +257,9 @@ function App() {
   const [parsedOnce, setParsedOnce] = useState(false)
   const [activeView, setActiveView] = useState('command')
   const [selectedPlaybookId, setSelectedPlaybookId] = useState('')
+  const [opportunities, setOpportunities] = useState(() => listOpportunities())
+  const [opportunityFilter, setOpportunityFilter] = useState('needs-review')
+  const [opportunitySaveState, setOpportunitySaveState] = useState('')
   const [sectionOverrides, setSectionOverrides] = useState({})
   const [assignmentTargets, setAssignmentTargets] = useState({})
   const [scannedPackets, setScannedPackets] = useState([])
@@ -739,6 +750,33 @@ function App() {
     setCopyState(`${section.label} cleared`)
   }
 
+  function handleSaveOpportunity() {
+    const nextOpportunity = createOpportunityFromCurrentQuote({
+      fields,
+      parseContext,
+      productIntelligence,
+      playbookRecommendation,
+    })
+    const saved = saveOpportunity({
+      ...nextOpportunity,
+      selectedPlaybookId: selectedPlaybookId || nextOpportunity.selectedPlaybookId,
+    })
+    setOpportunities(listOpportunities())
+    setOpportunitySaveState(`${saved.customerName || 'Quote'} saved to Opportunity Queue as ${saved.status.replace(/-/g, ' ')}`)
+    setCopyState('Saved to Opportunity Queue')
+  }
+
+  function handleUpdateOpportunity(id, patch) {
+    updateOpportunity(id, patch)
+    setOpportunities(listOpportunities())
+  }
+
+  function handleRemoveOpportunity(id) {
+    removeOpportunity(id)
+    setOpportunities(listOpportunities())
+    setOpportunitySaveState('Removed opportunity from queue')
+  }
+
   function handleAssignLine(line, index) {
     const targetField = assignmentTargets[index]
     if (!targetField) {
@@ -795,6 +833,7 @@ function App() {
     paidClosed: scannedPages.filter((page) => page.recommendation === 'Paid / closed').length + (isPaidClosedContext(parseContext, fields) ? 1 : 0),
     readyFields: audit.readyFieldCount,
     safetyBlockers: audit.blockingFieldLabels.length + (parseContext.extractionSource === 'ocr' && !ocrReviewConfirmed ? 1 : 0) + (isPaidClosedContext(parseContext, fields) && selectedPlaybookId !== 'paid-order-summary' ? 1 : 0),
+    opportunities: opportunities.length,
   }
 
   const fieldEditor = (
@@ -1034,7 +1073,28 @@ function App() {
       />
     )
   } else if (activeView === 'proposal') {
-    activeContent = <ProposalBuilder editor={fieldEditor} preview={proposalPreview} productIntelligence={productIntelligence} recommendation={playbookRecommendation} />
+    activeContent = (
+      <ProposalBuilder
+        editor={fieldEditor}
+        onSaveOpportunity={handleSaveOpportunity}
+        preview={proposalPreview}
+        productIntelligence={productIntelligence}
+        recommendation={playbookRecommendation}
+      />
+    )
+  } else if (activeView === 'opportunities') {
+    activeContent = (
+      <OpportunityQueue
+        filter={opportunityFilter}
+        onFilterChange={setOpportunityFilter}
+        onRemoveOpportunity={handleRemoveOpportunity}
+        onSaveCurrent={handleSaveOpportunity}
+        onUpdateOpportunity={handleUpdateOpportunity}
+        opportunities={opportunities}
+        playbooks={proposalPlaybooks}
+        saveState={opportunitySaveState}
+      />
+    )
   } else if (activeView === 'export') {
     activeContent = (
       <ExportPrep
@@ -1056,6 +1116,7 @@ function App() {
           setCopyState('JSON exported')
         }}
         onGenerateCustomerPdf={() => openCustomerPdf()}
+        onSaveOpportunity={handleSaveOpportunity}
         parseContext={parseContext}
         recommendation={playbookRecommendation}
         selectedPlaybook={selectedPlaybook}

@@ -26,6 +26,7 @@ export default function CommandCenter({ currentSourceLabel, onNavigate, selected
         <StatCard label="Needs review" value={stats.needsReview} note="Pages or fields waiting on a human check." tone="is-warning" />
         <StatCard label="Likely follow-up" value={stats.followUp} note="Quote candidates, excluding paid/closed orders." />
         <StatCard label="Paid / closed" value={stats.paidClosed} note="Route toward paid order summary or archive." />
+        <StatCard label="Opportunities" value={stats.opportunities} note="Saved quote follow-up queue." />
         <StatCard label="Ready fields" value={stats.readyFields} note="Proposal fields currently populated." />
         <StatCard label="Safety blockers" value={stats.safetyBlockers} note="Export must stay blocked until resolved." tone="is-alert" />
       </div>
@@ -51,6 +52,7 @@ export default function CommandCenter({ currentSourceLabel, onNavigate, selected
             <button type="button" className="ghost-button" onClick={() => onNavigate('triage')}>Triage packets</button>
             <button type="button" className="ghost-button" onClick={() => onNavigate('review')}>Review current source</button>
             <button type="button" className="ghost-button" onClick={() => onNavigate('playbooks')}>Pick playbook</button>
+            <button type="button" className="ghost-button" onClick={() => onNavigate('opportunities')}>Open opportunity queue</button>
           </div>
         </section>
       </div>

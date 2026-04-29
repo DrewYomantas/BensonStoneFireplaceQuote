@@ -11,6 +11,7 @@ export default function ExportPrep({
   onCopyJson,
   onExportJson,
   onGenerateCustomerPdf,
+  onSaveOpportunity,
   parseContext,
   recommendation,
   selectedPlaybook,
@@ -22,7 +23,10 @@ export default function ExportPrep({
           <p className="kicker">Export / Send Prep</p>
           <h2>Final safety check before anything customer-facing.</h2>
         </div>
-        <button type="button" className="primary-button" onClick={onGenerateCustomerPdf}>Generate Customer PDF</button>
+        <div className="button-stack">
+          <button type="button" className="ghost-button" onClick={onSaveOpportunity}>Save to Opportunity Queue</button>
+          <button type="button" className="primary-button" onClick={onGenerateCustomerPdf}>Generate Customer PDF</button>
+        </div>
       </div>
 
       <div className="workbench-two-column">

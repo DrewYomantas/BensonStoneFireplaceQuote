@@ -59,6 +59,7 @@ Output rules:
 - supports a bulk BisTrack PDF queue for processing several quote/order PDFs together
 - matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
 - recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
+- saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
 - provides a simple internal preview and print/PDF option
 
 ## What this app does not do yet
@@ -82,6 +83,12 @@ The real snapshot files are local/private and ignored by git. The app loads them
 Proposal Playbooks recommends a customer-facing lane such as Warm Showroom Recap, Old Quote Re-Engagement, Value-Focused Option Comparison, Premium Design Proposal, Missing-Info Clarification, or Display Model Follow-Up. Recommendations are deterministic and explain why the lane fits, what to review before sending, and which conservative copy scaffold is safe to use.
 
 Sales staff can always override the recommendation. Internal cautions are also surfaced in Proposal Builder and Export / Send Prep when product matches need review, contact or install details are missing, a source appears paid/closed/reference, an old quote may need refresh, or display-model wording needs salesperson confirmation.
+
+## Opportunity Queue
+
+The Opportunity Queue is a local-first follow-up board for reviewed quote summaries. It stores opportunity metadata only: customer name/contact when reviewed, quote number/date, source type, selected playbook, status, temperature, next action, due date, readiness, and internal warnings. It does not store raw OCR files, private catalog snapshots, product-cost data, margin data, supplier history, or internal sales metrics.
+
+Statuses include new intake, needs review, ready for proposal, follow-up needed, proposal sent, waiting on customer, closed won/lost, reference only, and archived. Saving a quote is allowed even when fields are incomplete, but the opportunity is classified conservatively as needs review or reference only when warnings are present.
 
 ## Template source
 
@@ -148,6 +155,15 @@ Current automated checks cover:
 - display model follow-up wording guardrail
 - paid/closed warning
 - sensitive-term exclusion from customer-facing playbook copy
+
+**Opportunity queue (`src/lib/opportunities.test.js`)**
+- active quote readiness classification
+- old quote follow-up classification
+- missing contact review classification
+- paid/closed reference-only classification
+- product-match review safety
+- sensitive metric exclusion from stored opportunities
+- localStorage save/list/update/remove helpers
 
 ## Document-type behavior
 

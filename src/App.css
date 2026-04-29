@@ -491,6 +491,7 @@
 .notes-input,
 .field input,
 .field textarea,
+.field select,
 .review-line__controls select {
   width: 100%;
   border: 1px solid rgba(96, 75, 56, 0.18);
@@ -763,6 +764,108 @@
   border: 1px solid rgba(94, 73, 51, 0.1);
 }
 
+.opportunity-summary .mission-card strong {
+  font-size: 24px;
+}
+
+.queue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.queue-filters .is-selected {
+  border-color: #b48650;
+  background: #fff8ea;
+}
+
+.opportunity-list {
+  display: grid;
+  gap: 14px;
+}
+
+.opportunity-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(94, 73, 51, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.94);
+  box-shadow: 0 18px 40px rgba(74, 53, 37, 0.06);
+}
+
+.opportunity-card.is-needs-review,
+.opportunity-card.is-follow-up-needed {
+  border-color: rgba(176, 122, 48, 0.26);
+}
+
+.opportunity-card.is-ready-for-proposal {
+  border-color: rgba(70, 122, 78, 0.26);
+}
+
+.opportunity-card.is-reference-only,
+.opportunity-card.is-archived,
+.opportunity-card.is-closed-won,
+.opportunity-card.is-closed-lost {
+  border-color: rgba(88, 104, 130, 0.2);
+  background: rgba(248, 249, 247, 0.94);
+}
+
+.opportunity-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.opportunity-card__header h3 {
+  margin: 0;
+  color: #203126;
+}
+
+.opportunity-card__header p {
+  margin: 5px 0 0;
+  color: #6d5643;
+}
+
+.opportunity-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.opportunity-badges span {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(47, 70, 50, 0.1);
+  color: #2f4632;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opportunity-ledger {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.opportunity-warning-box {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(176, 122, 48, 0.1);
+  border: 1px solid rgba(176, 122, 48, 0.18);
+}
+
+.opportunity-warning-box h4 {
+  margin: 0;
+  color: #7a4f10;
+}
+
+.opportunity-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .section-stack {
   display: grid;
   gap: 14px;
@@ -834,7 +937,8 @@
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   padding: 10px 12px;
 }
 
@@ -1000,6 +1104,7 @@
   .hero-band,
   .step-intro,
   .recommendation-grid,
+  .opportunity-edit-grid,
   .review-grid,
   .output-grid,
   .preview-columns,
@@ -1049,6 +1154,7 @@
   .field-grid--two,
   .line-item-row,
   .product-group__row,
+  .opportunity-card__header,
   .detail-table__header,
   .detail-table__row,
   .hero-stats,

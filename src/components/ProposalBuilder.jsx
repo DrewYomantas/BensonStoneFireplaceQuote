@@ -2,7 +2,7 @@ const defaultProductIntelligence = {
   groupedRows: [],
 }
 
-export default function ProposalBuilder({ editor, preview, productIntelligence = defaultProductIntelligence, recommendation }) {
+export default function ProposalBuilder({ editor, onSaveOpportunity, preview, productIntelligence = defaultProductIntelligence, recommendation }) {
   const productIntel = { ...defaultProductIntelligence, ...productIntelligence }
   const groupedRows = Array.isArray(productIntel.groupedRows) ? productIntel.groupedRows : []
 
@@ -14,6 +14,7 @@ export default function ProposalBuilder({ editor, preview, productIntelligence =
           <h2>Shape the reviewed fields into customer-ready structure.</h2>
           <p className="section-caption">This stays human-reviewed. The full field contract is available below.</p>
         </div>
+        <button type="button" className="primary-button" onClick={onSaveOpportunity}>Save to Opportunity Queue</button>
       </div>
       {recommendation ? (
         <section className="recommendation-panel recommendation-panel--compact">

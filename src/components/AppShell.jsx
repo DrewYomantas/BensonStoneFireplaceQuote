@@ -5,6 +5,7 @@ const navItems = [
   { id: 'review', label: 'Review' },
   { id: 'playbooks', label: 'Playbooks' },
   { id: 'proposal', label: 'Proposal' },
+  { id: 'opportunities', label: 'Opportunities' },
   { id: 'export', label: 'Export' },
 ]
 
