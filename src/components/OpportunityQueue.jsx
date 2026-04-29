@@ -9,6 +9,7 @@ import {
   removeOpportunityActivity,
 } from '../lib/opportunityActivity.js'
 import { getChannelHints, recommendFollowUpCadence, summarizeCadence } from '../lib/followUpCadence.js'
+import { recommendProposalPackage } from '../lib/proposalPackages.js'
 import {
   filterOpportunities,
   opportunityStatuses,
@@ -160,6 +161,11 @@ export default function OpportunityQueue({
               const cadence = recommendFollowUpCadence({ opportunity, activities })
               const channelHints = getChannelHints(opportunity)
               const playbook = getPlaybook(opportunity)
+              const packageRecommendation = recommendProposalPackage({
+                opportunity,
+                playbookRecommendation: { id: opportunity.selectedPlaybookId || opportunity.recommendedPlaybookId, warnings: opportunity.warnings },
+                cadenceRecommendation: cadence,
+              })
               const selectedTone = toneByOpportunity[opportunity.id] || (opportunity.status === 'follow-up-needed' ? 'reactivation' : 'warm')
               const selectedChannel = channelByOpportunity[opportunity.id] || 'email'
               const draft = composeFollowUpDraft({
@@ -204,6 +210,7 @@ export default function OpportunityQueue({
             <div className="channel-hints" aria-label="Channel fit">
               {channelHints.map((hint) => <span key={hint}>{hint}</span>)}
               <span>Suggested: {titleLabel(cadence.suggestedChannel)}</span>
+              <span>{packageRecommendation.exportSafety.status === 'blocked' ? `Package blocked: ${packageRecommendation.label}` : `Package: ${packageRecommendation.label}`}</span>
             </div>
 
             <dl className="source-ledger opportunity-ledger">

@@ -1,3 +1,5 @@
+import ProposalPackagePanel from './ProposalPackagePanel.jsx'
+
 export default function ExportPrep({
   audit,
   copyGroups,
@@ -13,6 +15,7 @@ export default function ExportPrep({
   onGenerateCustomerPdf,
   onSaveOpportunity,
   parseContext,
+  packageRecommendation,
   recommendation,
   selectedPlaybook,
 }) {
@@ -36,6 +39,8 @@ export default function ExportPrep({
             <div><dt>Source</dt><dd>{currentSourceLabel}</dd></div>
             <div><dt>Playbook</dt><dd>{selectedPlaybook?.name || 'Not selected'}</dd></div>
             <div><dt>Recommended path</dt><dd>{recommendation?.label || 'Not evaluated'}</dd></div>
+            <div><dt>Package</dt><dd>{packageRecommendation?.label || 'Not evaluated'}</dd></div>
+            <div><dt>Package status</dt><dd>{packageRecommendation?.exportSafety?.label || 'Not evaluated'}</dd></div>
             <div><dt>Customer-facing label</dt><dd>{parseContext.outputLabel || 'Fireplace Project Proposal'}</dd></div>
             <div><dt>Export status</dt><dd>{audit.exportStatus}</dd></div>
           </dl>
@@ -65,6 +70,8 @@ export default function ExportPrep({
           {copyState ? <p className="quiet-status">{copyState}</p> : null}
         </section>
       </div>
+
+      <ProposalPackagePanel compact packageRecommendation={packageRecommendation} />
 
       <div className="output-grid">
         <label className="field field--wide">

@@ -1,4 +1,6 @@
-export default function ProposalPlaybooks({ onSelectPlaybook, playbooks, recommendation, selectedPlaybookId }) {
+import ProposalPackagePanel from './ProposalPackagePanel.jsx'
+
+export default function ProposalPlaybooks({ onSelectPlaybook, packageRecommendation, playbooks, recommendation, selectedPlaybookId }) {
   const selectedOrRecommended = selectedPlaybookId || recommendation?.id || ''
 
   return (
@@ -45,6 +47,8 @@ export default function ProposalPlaybooks({ onSelectPlaybook, playbooks, recomme
           </div>
         </section>
       ) : null}
+
+      <ProposalPackagePanel compact packageRecommendation={packageRecommendation} />
 
       <div className="playbook-grid">
         {playbooks.map((playbook) => (

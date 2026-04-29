@@ -24,6 +24,7 @@ import {
 } from './lib/productCatalog.js'
 import { buildScannedPacket } from './lib/scannedPacketParser.js'
 import { proposalPlaybooks, recommendProposalPlaybook } from './lib/proposalPlaybooks.js'
+import { recommendProposalPackage } from './lib/proposalPackages.js'
 import {
   createOpportunityFromCurrentQuote,
   createOpportunityDraftsFromPackets,
@@ -295,6 +296,15 @@ function App() {
       ocrReviewConfirmed,
     },
   }), [fields, inputMode, loadedOcrItem, ocrReviewConfirmed, parseContext, pdfFileName, productIntelligence, selectedPlaybookId])
+  const packageRecommendation = useMemo(() => recommendProposalPackage({
+    fields,
+    parseContext,
+    productIntelligence,
+    playbookRecommendation: {
+      ...playbookRecommendation,
+      id: selectedPlaybookId || playbookRecommendation.id,
+    },
+  }), [fields, parseContext, playbookRecommendation, productIntelligence, selectedPlaybookId])
   const bulkOpportunityDraftState = useMemo(() => createOpportunityDraftsFromPackets({
     packets: scannedPackets,
     existingOpportunities: opportunities,
@@ -1133,6 +1143,7 @@ function App() {
   } else if (activeView === 'playbooks') {
     activeContent = (
       <ProposalPlaybooks
+        packageRecommendation={packageRecommendation}
         playbooks={proposalPlaybooks}
         recommendation={playbookRecommendation}
         selectedPlaybookId={selectedPlaybookId}
@@ -1146,6 +1157,7 @@ function App() {
         onSaveOpportunity={handleSaveOpportunity}
         preview={proposalPreview}
         productIntelligence={productIntelligence}
+        packageRecommendation={packageRecommendation}
         recommendation={playbookRecommendation}
       />
     )
@@ -1185,6 +1197,7 @@ function App() {
         onGenerateCustomerPdf={() => openCustomerPdf()}
         onSaveOpportunity={handleSaveOpportunity}
         parseContext={parseContext}
+        packageRecommendation={packageRecommendation}
         recommendation={playbookRecommendation}
         selectedPlaybook={selectedPlaybook}
       />

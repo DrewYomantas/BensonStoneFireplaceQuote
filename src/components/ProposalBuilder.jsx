@@ -1,8 +1,10 @@
+import ProposalPackagePanel from './ProposalPackagePanel.jsx'
+
 const defaultProductIntelligence = {
   groupedRows: [],
 }
 
-export default function ProposalBuilder({ editor, onSaveOpportunity, preview, productIntelligence = defaultProductIntelligence, recommendation }) {
+export default function ProposalBuilder({ editor, onSaveOpportunity, packageRecommendation, preview, productIntelligence = defaultProductIntelligence, recommendation }) {
   const productIntel = { ...defaultProductIntelligence, ...productIntelligence }
   const groupedRows = Array.isArray(productIntel.groupedRows) ? productIntel.groupedRows : []
 
@@ -32,6 +34,7 @@ export default function ProposalBuilder({ editor, onSaveOpportunity, preview, pr
           ) : <p className="empty-copy">No playbook-specific cautions.</p>}
         </section>
       ) : null}
+      <ProposalPackagePanel compact packageRecommendation={packageRecommendation} />
       <section className="product-group-panel">
         <div className="panel-heading">
           <div>

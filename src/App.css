@@ -471,6 +471,7 @@
 .needs-review-box,
 .product-intel-panel,
 .product-group-panel,
+.proposal-package-panel,
 .recommendation-panel,
 .preview-warning {
   padding: 14px;
@@ -620,20 +621,31 @@
 }
 
 .recommendation-panel h3,
-.recommendation-panel h4 {
+.recommendation-panel h4,
+.proposal-package-panel h3,
+.proposal-package-panel h4 {
   margin: 0;
   color: #203126;
 }
 
+.package-recommendation-grid,
 .recommendation-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
+.package-recommendation-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .recommendation-copy {
   display: grid;
   gap: 8px;
+}
+
+.package-copy-preview {
+  margin-top: 12px;
 }
 
 .recommendation-copy p {
@@ -646,6 +658,10 @@
 
 .recommendation-panel--compact .notice-list {
   margin-top: 10px;
+}
+
+.proposal-package-panel--compact .package-recommendation-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .export-warning-block {
@@ -1336,6 +1352,7 @@
 
   .hero-band,
   .step-intro,
+  .package-recommendation-grid,
   .recommendation-grid,
   .opportunity-edit-grid,
   .opportunity-action-panel,

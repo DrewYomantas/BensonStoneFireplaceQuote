@@ -59,6 +59,7 @@ Output rules:
 - supports a bulk BisTrack PDF queue for processing several quote/order PDFs together
 - matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
 - recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
+- recommends a proposal package variant that defines the safest customer-facing proposal structure or pre-proposal path
 - saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
 - drafts safe follow-up copy and logs local opportunity activity without sending anything externally
 - recommends deterministic follow-up cadence so the queue shows what needs attention today, this week, or review before sending
@@ -85,6 +86,12 @@ The real snapshot files are local/private and ignored by git. The app loads them
 Proposal Playbooks recommends a customer-facing lane such as Warm Showroom Recap, Old Quote Re-Engagement, Value-Focused Option Comparison, Premium Design Proposal, Missing-Info Clarification, or Display Model Follow-Up. Recommendations are deterministic and explain why the lane fits, what to review before sending, and which conservative copy scaffold is safe to use.
 
 Sales staff can always override the recommendation. Internal cautions are also surfaced in Proposal Builder and Export / Send Prep when product matches need review, contact or install details are missing, a source appears paid/closed/reference, an old quote may need refresh, or display-model wording needs salesperson confirmation.
+
+## Proposal package variants
+
+Proposal packages sit beside playbooks. A playbook explains the internal path and safety reasoning; a package recommends the customer-facing structure to prepare. Package variants include Warm Showroom Proposal, Old Quote Refresh, Value Comparison, Premium Design Proposal, Missing-Info Pre-Proposal, Display Model Follow-Up, and Reference-Only Guardrail.
+
+Package recommendations use reviewed local fields, opportunity status, cadence state, source metadata, and internal warning state. They return recommended sections, an internal checklist, conservative customer-facing scaffold copy, confidence, and export safety status. Reference-only, closed, archived, missing-info, uncertain product-match, and unsafe display wording cases are blocked or marked for review instead of being treated as final customer proposals.
 
 ## Opportunity Queue
 
@@ -167,6 +174,14 @@ Current automated checks cover:
 - display model follow-up wording guardrail
 - paid/closed warning
 - sensitive-term exclusion from customer-facing playbook copy
+
+**Proposal packages (`src/lib/proposalPackages.test.js`)**
+- each customer-facing package variant
+- old-quote refresh and soft reactivation behavior
+- missing-info pre-proposal blockers
+- reference-only and closed guardrail behavior
+- display-model wording guardrail
+- sensitive-term exclusion from package scaffold copy
 
 **Opportunity queue (`src/lib/opportunities.test.js`)**
 - active quote readiness classification
