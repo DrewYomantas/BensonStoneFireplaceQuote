@@ -54,7 +54,7 @@ export default function ActivityTimeline({
           <article className="activity-item" key={activity.id}>
             <div>
               <strong>{activity.title || titleLabel(activity.type)}</strong>
-              <span>{new Date(activity.createdAt).toLocaleString()} · {titleLabel(activity.channel)}</span>
+              <span>{new Date(activity.createdAt).toLocaleString()} - {titleLabel(activity.channel)}</span>
             </div>
             {activity.body ? <p>{activity.body.length > 260 ? `${activity.body.slice(0, 260)}...` : activity.body}</p> : null}
             <div className="activity-actions">

@@ -61,6 +61,7 @@ Output rules:
 - recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
 - saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
 - drafts safe follow-up copy and logs local opportunity activity without sending anything externally
+- recommends deterministic follow-up cadence so the queue shows what needs attention today, this week, or review before sending
 - provides a simple internal preview and print/PDF option
 
 ## What this app does not do yet
@@ -98,6 +99,8 @@ Bulk Opportunity Intake appears in Packet Triage when scanned follow-up candidat
 Opportunity cards include a local Follow-Up Composer for safe email/text/phone-script/Nextdoor draft copy. Drafts are deterministic and conservative: they can mention quote refresh, missing details, or showroom availability only when safe, and they never send messages externally.
 
 The Activity Timeline stores local notes, drafts, sent follow-ups, calls, voicemails, showroom visits, and proposal activity summaries. Logging a follow-up as sent updates the opportunity's last-contacted date and moves active quotes to waiting on customer, but does not reopen closed/reference records.
+
+The queue also evaluates a deterministic follow-up cadence from saved opportunity fields and local activity history. It surfaces practical signals such as needs follow-up, stale opportunity, missing contact info, ready for proposal, waiting on customer, and review before sending. Cadence recommendations never send messages, never reopen closed/reference records, and never use private catalog rows or sensitive BisTrack metrics.
 
 ## Template source
 
@@ -184,6 +187,13 @@ Current automated checks cover:
 - local activity save/list/update/remove
 - sent follow-up status patching
 - raw OCR/private metric exclusion from activity storage
+
+**Follow-up cadence (`src/lib/followUpCadence.test.js`)**
+- today/soon/waiting/archive-review cadence recommendations
+- old-quote soft reactivation
+- missing-contact and review-before-sending blockers
+- channel-fit hints from safe local contact fields
+- queue-level cadence summary counts
 
 ## Document-type behavior
 

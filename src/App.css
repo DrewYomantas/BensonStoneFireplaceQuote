@@ -768,6 +768,33 @@
   font-size: 24px;
 }
 
+.queue-attention-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(47, 70, 50, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.78);
+}
+
+.queue-attention-strip span,
+.channel-hints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(47, 70, 50, 0.08);
+  color: #2f4632;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.queue-attention-strip strong {
+  color: #203126;
+}
+
 .queue-filters {
   display: flex;
   flex-wrap: wrap;
@@ -842,6 +869,75 @@
   color: #2f4632;
   font-size: 12px;
   font-weight: 700;
+}
+
+.cadence-badge.is-today {
+  background: rgba(161, 58, 24, 0.14);
+  color: #a13a18;
+}
+
+.cadence-badge.is-soon {
+  background: rgba(176, 122, 48, 0.18);
+  color: #7a4f10;
+}
+
+.cadence-badge.is-waiting {
+  background: rgba(88, 104, 130, 0.14);
+  color: #4e5d73;
+}
+
+.cadence-badge.is-needs-review {
+  background: rgba(176, 122, 48, 0.18);
+  color: #7a4f10;
+}
+
+.cadence-badge.is-archive-review,
+.cadence-badge.is-monitor {
+  background: rgba(88, 104, 130, 0.1);
+  color: #586882;
+}
+
+.opportunity-action-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opportunity-action-panel div {
+  padding: 12px;
+  border: 1px solid rgba(94, 73, 51, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.72);
+}
+
+.opportunity-action-panel span {
+  display: block;
+  color: #7a634d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.opportunity-action-panel strong {
+  display: block;
+  margin-top: 3px;
+  color: #203126;
+}
+
+.opportunity-action-panel p {
+  margin: 5px 0 0;
+  color: #5c4837;
+  font-size: 13px;
+}
+
+.channel-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-hints span {
+  background: rgba(88, 104, 130, 0.09);
+  color: #4e5d73;
 }
 
 .opportunity-ledger {
@@ -1242,6 +1338,7 @@
   .step-intro,
   .recommendation-grid,
   .opportunity-edit-grid,
+  .opportunity-action-panel,
   .opportunity-follow-up-grid,
   .review-grid,
   .output-grid,

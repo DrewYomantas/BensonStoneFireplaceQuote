@@ -8,6 +8,7 @@ import {
   listOpportunityActivities,
   removeOpportunityActivity,
 } from '../lib/opportunityActivity.js'
+import { getChannelHints, recommendFollowUpCadence, summarizeCadence } from '../lib/followUpCadence.js'
 import {
   filterOpportunities,
   opportunityStatuses,
@@ -38,6 +39,20 @@ function SummaryCard({ label, value }) {
   )
 }
 
+function priorityClass(priority) {
+  if (priority === 'blocked') return 'needs-review'
+  if (priority === 'today') return 'today'
+  if (priority === 'soon') return 'soon'
+  if (priority === 'waiting') return 'waiting'
+  if (priority === 'archive-review') return 'archive-review'
+  return 'monitor'
+}
+
+function activitySummary(activity) {
+  if (!activity) return 'No activity yet'
+  return `${activity.title || titleLabel(activity.type)} - ${new Date(activity.createdAt).toLocaleDateString()}`
+}
+
 export default function OpportunityQueue({
   filter,
   onFilterChange,
@@ -60,6 +75,7 @@ export default function OpportunityQueue({
     void activityVersion
     return Object.fromEntries(opportunities.map((opportunity) => [opportunity.id, listOpportunityActivities(opportunity.id)]))
   }, [activityVersion, opportunities])
+  const cadenceSummary = useMemo(() => summarizeCadence(opportunities, activityCache), [activityCache, opportunities])
 
   function refreshActivities() {
     setActivityVersion((current) => current + 1)
@@ -113,6 +129,15 @@ export default function OpportunityQueue({
         <SummaryCard label="Closed / Reference" value={summary.closedReference} />
       </div>
 
+      <div className="queue-attention-strip" aria-label="Queue attention signals">
+        <span><strong>{cadenceSummary.needsFollowUp}</strong> Needs follow-up</span>
+        <span><strong>{cadenceSummary.staleOpportunities}</strong> Stale opportunities</span>
+        <span><strong>{cadenceSummary.missingContactInfo}</strong> Missing contact info</span>
+        <span><strong>{cadenceSummary.readyForProposal}</strong> Ready for proposal</span>
+        <span><strong>{cadenceSummary.waitingOnCustomer}</strong> Waiting on customer</span>
+        <span><strong>{cadenceSummary.reviewBeforeSending}</strong> Review before sending</span>
+      </div>
+
       <div className="queue-filters" aria-label="Opportunity filters">
         {filters.map((item) => (
           <button
@@ -132,6 +157,8 @@ export default function OpportunityQueue({
             {(() => {
               const activities = activityCache[opportunity.id] || []
               const lastActivity = activities[0] || null
+              const cadence = recommendFollowUpCadence({ opportunity, activities })
+              const channelHints = getChannelHints(opportunity)
               const playbook = getPlaybook(opportunity)
               const selectedTone = toneByOpportunity[opportunity.id] || (opportunity.status === 'follow-up-needed' ? 'reactivation' : 'warm')
               const selectedChannel = channelByOpportunity[opportunity.id] || 'email'
@@ -151,20 +178,39 @@ export default function OpportunityQueue({
               <div>
                 <span className="kicker">{opportunity.sourceType || 'Quote opportunity'}</span>
                 <h3>{opportunity.customerName || 'Customer name missing'}</h3>
-                <p>{opportunity.quoteNumber ? `Quote ${opportunity.quoteNumber}` : 'Quote number missing'} · {opportunity.quoteDate || 'Date missing'}</p>
+                <p>{opportunity.quoteNumber ? `Quote ${opportunity.quoteNumber}` : 'Quote number missing'} - {opportunity.quoteDate || 'Date missing'}</p>
               </div>
               <div className="opportunity-badges">
+                <span className={`cadence-badge is-${priorityClass(cadence.priority)}`}>{cadence.label}</span>
                 <span>{titleLabel(opportunity.status)}</span>
                 <span>{titleLabel(opportunity.temperature)}</span>
                 <span>{titleLabel(opportunity.proposalReadiness)}</span>
               </div>
             </div>
 
+            <div className="opportunity-action-panel">
+              <div>
+                <span>Next recommended action</span>
+                <strong>{cadence.nextActionCopy}</strong>
+                <p>{cadence.reason}</p>
+              </div>
+              <div>
+                <span>Latest activity</span>
+                <strong>{activitySummary(lastActivity)}</strong>
+                <p>{lastActivity?.body ? `${lastActivity.body.slice(0, 110)}${lastActivity.body.length > 110 ? '...' : ''}` : 'No local context logged yet.'}</p>
+              </div>
+            </div>
+
+            <div className="channel-hints" aria-label="Channel fit">
+              {channelHints.map((hint) => <span key={hint}>{hint}</span>)}
+              <span>Suggested: {titleLabel(cadence.suggestedChannel)}</span>
+            </div>
+
             <dl className="source-ledger opportunity-ledger">
               <div><dt>Follow-up path</dt><dd>{playbooks.find((p) => p.id === opportunity.selectedPlaybookId)?.name || playbooks.find((p) => p.id === opportunity.recommendedPlaybookId)?.name || 'Not selected'}</dd></div>
               <div><dt>Next best action</dt><dd>{opportunity.nextAction || 'Review opportunity'}</dd></div>
               <div><dt>Due date</dt><dd>{opportunity.nextActionDue || 'Not scheduled'}</dd></div>
-              <div><dt>Last activity</dt><dd>{lastActivity ? new Date(lastActivity.createdAt).toLocaleDateString() : 'No activity yet'}</dd></div>
+              <div><dt>Last activity</dt><dd>{activitySummary(lastActivity)}</dd></div>
               <div><dt>Last contacted</dt><dd>{opportunity.lastContactedAt || 'Not logged'}</dd></div>
               <div><dt>Updated</dt><dd>{opportunity.updatedAt ? new Date(opportunity.updatedAt).toLocaleDateString() : 'Not saved'}</dd></div>
               <div><dt>Source trail</dt><dd>{opportunity.sourceLabel || opportunity.sourceType || 'Manual save'}</dd></div>

@@ -22,7 +22,7 @@ export default function FollowUpComposer({
         <div>
           <p className="kicker">Follow-Up Composer</p>
           <h4>Draft follow-up</h4>
-          <p className="section-caption">{opportunity.customerName || 'Customer'} · {playbook?.name || 'No playbook selected'}</p>
+          <p className="section-caption">{opportunity.customerName || 'Customer'} - {playbook?.name || 'No playbook selected'}</p>
         </div>
         <span className={`batch-status is-${draft.unsafeToSend ? 'needs-review' : 'ready'}`}>
           {draft.unsafeToSend ? 'Review before sending' : 'Ready to copy'}
