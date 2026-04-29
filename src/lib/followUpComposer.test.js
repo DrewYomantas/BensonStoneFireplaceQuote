@@ -87,3 +87,23 @@ test('product match review warnings remain internal only', () => {
   assert.ok(draft.warnings.some((warning) => /Product match warning stays internal/i.test(warning)))
   assert.equal(/Product match|needs review/i.test(draft.body), false)
 })
+
+test('clarification draft can include safe current setup questions', () => {
+  const draft = composeFollowUpDraft({
+    opportunity: opportunity(),
+    tone: 'clarification',
+    fields: {
+      currentSetupGuidance: {
+        blockers: ['Customer says insert, but the existing fireplace type is unclear.'],
+        clarificationQuestions: [
+          'Just to make sure we are looking at the right path, is the existing fireplace masonry brick/block or a metal fireplace box?',
+          'Are you mainly looking for more heat, the look and feel of a fire, or both?',
+        ],
+      },
+    },
+  })
+
+  assert.equal(draft.unsafeToSend, true)
+  assert.match(draft.body, /masonry brick\/block or a metal fireplace box/i)
+  assert.equal(/average cost|margin|supplier|ocr|fuzzy match|bistrack/i.test(draft.body), false)
+})

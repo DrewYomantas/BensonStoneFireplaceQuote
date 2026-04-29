@@ -36,11 +36,13 @@ function subjectFor(opportunity, tone) {
 function bodyLinesFor({ opportunity, tone, warnings, fields }) {
   const name = opportunity.customerName ? `${opportunity.customerName},` : ''
   const lines = []
+  const setupQuestions = fields?.currentSetupGuidance?.clarificationQuestions || []
   if (name) lines.push(`Hi ${name}`)
 
-  if (tone === 'clarification' || includesWarning(warnings, /missing|install|venting|chimney/i)) {
+  if (tone === 'clarification' || includesWarning(warnings, /missing|install|venting|chimney|current setup|fireplace type|fuel type|depth|framing|electrical/i)) {
     lines.push('Before we finalize this proposal, we would like to confirm a few project details.')
     lines.push('That helps us make sure the fireplace, venting, and installation path are quoted correctly.')
+    setupQuestions.slice(0, 2).forEach((question) => lines.push(question))
   } else if (tone === 'reactivation' || opportunity.status === 'follow-up-needed') {
     lines.push('I wanted to follow up on the fireplace quote we had started.')
     lines.push('If this project is still on your mind, we would be happy to revisit the details with you.')
@@ -94,6 +96,8 @@ export function composeFollowUpDraft({
   if (includesWarning(allWarnings, /Product match needs review/i)) draftWarnings.push('Product match warning stays internal. Confirm selections before sending.')
   if (includesWarning(allWarnings, /install details/i)) draftWarnings.push('Install details missing.')
   if (includesWarning(allWarnings, /venting|chimney/i)) draftWarnings.push('Venting/chimney details missing.')
+  if (includesWarning(allWarnings, /current setup|fireplace type|fuel type|depth|framing|electrical/i)) draftWarnings.push('Current setup or customer goal needs clarification before sending.')
+  if ((fields?.currentSetupGuidance?.blockers || []).length) draftWarnings.push('Current setup or customer goal needs clarification before sending.')
   if (includesWarning(allWarnings, /Display-model wording/i) && fields.displayModelAvailable !== true) {
     draftWarnings.push('Display-model wording needs confirmation before use.')
   }
@@ -104,14 +108,15 @@ export function composeFollowUpDraft({
 
   const subject = subjectFor(opportunity, safeTone)
   const body = channelBody(safeLines(bodyLinesFor({ opportunity, tone: safeTone, warnings: allWarnings, fields })).join('\n\n'), safeChannel)
-  const unsafeToSend = draftWarnings.length > 0
+  const safeDraftWarnings = [...new Set(draftWarnings)]
+  const unsafeToSend = safeDraftWarnings.length > 0
 
   return {
     subject: sensitivePattern.test(subject) ? 'Fireplace project follow-up' : subject,
     body,
     channel: safeChannel,
     tone: safeTone,
-    warnings: draftWarnings,
+    warnings: safeDraftWarnings,
     unsafeToSend,
     reasons,
   }

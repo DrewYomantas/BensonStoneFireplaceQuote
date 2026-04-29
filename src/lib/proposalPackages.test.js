@@ -47,6 +47,7 @@ function baseInput(overrides = {}) {
       documentType: 'quote',
       ...overrides.parseContext,
     },
+    currentSetupGuidance: overrides.currentSetupGuidance,
     now,
   }
 }
@@ -148,6 +149,26 @@ test('missing install or venting detail recommends pre-proposal and blocks expor
   assert.equal(recommendation.id, 'missing-info-preproposal')
   assert.equal(recommendation.exportSafety.status, 'blocked')
   assert.ok(recommendation.warnings.some((warning) => /install/i.test(warning)))
+})
+
+test('current setup blockers push package toward missing-info pre-proposal', () => {
+  const recommendation = recommendProposalPackage(baseInput({
+    currentSetupGuidance: {
+      blockers: ['Customer says insert, but the existing fireplace type is unclear.'],
+      reviewWarnings: ['Current setup blockers should be clarified before final proposal/export.'],
+      internalChecklist: ['Confirm what is currently in the fireplace opening.'],
+      proposalPackageImpact: {
+        recommendedPackageId: 'missing-info-preproposal',
+        exportSafety: 'blocked',
+        reason: 'Clarify current setup and goals before final package/export.',
+      },
+    },
+  }))
+
+  assert.equal(recommendation.id, 'missing-info-preproposal')
+  assert.equal(recommendation.exportSafety.status, 'blocked')
+  assert.ok(recommendation.reasons.some((reason) => /Current setup/i.test(reason)))
+  assert.ok(recommendation.internalChecklist.includes('Confirm what is currently in the fireplace opening.'))
 })
 
 test('display model package uses guarded showroom wording', () => {

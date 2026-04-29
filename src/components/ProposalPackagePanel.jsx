@@ -45,6 +45,13 @@ export default function ProposalPackagePanel({ compact = false, packageRecommend
         </div>
       </div>
 
+      {packageRecommendation.currentSetupImpact ? (
+        <div className="package-impact-note">
+          <strong>Current setup impact</strong>
+          <span>{packageRecommendation.currentSetupImpact.reason}</span>
+        </div>
+      ) : null}
+
       {packageRecommendation.copyScaffold.length ? (
         <div className="recommendation-copy package-copy-preview">
           <h4>Customer-facing scaffold</h4>

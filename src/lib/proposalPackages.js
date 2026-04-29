@@ -139,7 +139,7 @@ function safeScaffold(lines) {
   return (lines || []).filter((line) => !sensitivePatterns.some((pattern) => pattern.test(line)))
 }
 
-function buildContext({ fields = {}, opportunity = {}, productIntelligence = {}, playbookRecommendation = {}, cadenceRecommendation, parseContext = {}, now = new Date() }) {
+function buildContext({ currentSetupGuidance = {}, fields = {}, opportunity = {}, productIntelligence = {}, playbookRecommendation = {}, cadenceRecommendation, parseContext = {}, now = new Date() }) {
   const warnings = [...(opportunity.warnings || []), ...(playbookRecommendation.warnings || [])]
   const quoteDate = opportunity.quoteDate || fields.QUOTE_DATE || ''
   const quoteAgeDays = daysSince(quoteDate, now)
@@ -175,12 +175,14 @@ function buildContext({ fields = {}, opportunity = {}, productIntelligence = {},
     customerEmail,
     customerName,
     customerPhone,
+    currentSetupGuidance,
     groupCount,
     hasContact: Boolean(customerEmail || customerPhone),
     hasDisplay: hasDisplayProduct(productIntelligence, warnings),
     hasFinishingDetails: hasGroup(productIntelligence, ['Doors / Screens', 'Trim / Surround', 'Accessories']),
     hasInstallScope: Boolean(installScope) || (!hasFieldData && !installWarning && proposalReadiness === 'ready'),
     hasProductReview: hasWarning(warnings, /product match/i) || Number(productIntelligence?.needsReviewCount || 0) > 0,
+    hasSetupBlockers: (currentSetupGuidance.blockers || []).length > 0,
     hasVenting: hasVentingDetail || (!hasFieldData && !ventingWarning && proposalReadiness === 'ready'),
     paidOrClosed,
     playbookId,
@@ -196,7 +198,7 @@ function buildContext({ fields = {}, opportunity = {}, productIntelligence = {},
 
 function choosePackage(context) {
   if (closedStatuses.includes(context.status) || context.paidOrClosed || context.playbookId === 'paid-order-summary') return 'reference-only-guardrail'
-  if (!context.customerName || !context.hasContact || !context.hasInstallScope || !context.hasVenting || context.hasProductReview || context.proposalReadiness === 'blocked' || context.cadence.priority === 'blocked') return 'missing-info-preproposal'
+  if (!context.customerName || !context.hasContact || !context.hasInstallScope || !context.hasVenting || context.hasProductReview || context.hasSetupBlockers || context.proposalReadiness === 'blocked' || context.cadence.priority === 'blocked') return 'missing-info-preproposal'
   if (context.hasDisplay || context.playbookId === 'display-model-follow-up') return 'display-model-followup'
   if (context.quoteAgeDays !== null && context.quoteAgeDays > 90 || context.playbookId === 'old-quote-re-engagement' || context.cadence.label === 'Soft reactivation') return 'old-quote-refresh'
   if (context.playbookId === 'value-focused-option-comparison' || context.groupCount >= 3) return 'value-comparison'
@@ -211,6 +213,8 @@ function buildWarnings(packageId, context) {
   if (!context.hasInstallScope) warnings.push('Missing install details. Confirm installation scope before final proposal.')
   if (!context.hasVenting) warnings.push('Missing venting/chimney details. Confirm fireplace path before final proposal.')
   if (context.hasProductReview) warnings.push('Product match needs review before presenting selections as confirmed.')
+  warnings.push(...(context.currentSetupGuidance.blockers || []))
+  warnings.push(...(context.currentSetupGuidance.reviewWarnings || []))
   if (context.quoteAgeDays !== null && context.quoteAgeDays > 90) warnings.push('Customer-facing proposal may need quote refresh before sending.')
   if (context.hasDisplay) warnings.push('Display-model wording requires salesperson confirmation. Do not say the customer viewed it unless approved notes confirm that.')
   if (packageId === 'reference-only-guardrail') warnings.push('Reference-only, closed, archived, or paid/closed record. Do not create an active customer proposal from this package.')
@@ -224,6 +228,7 @@ function buildReasons(packageId, context) {
   if (packageId === 'value-comparison') reasons.push('Playbook or product groups suggest option comparison.')
   if (packageId === 'premium-design') reasons.push('Project context supports a more design-forward proposal.')
   if (packageId === 'missing-info-preproposal') reasons.push('Critical details need review before a final customer proposal.')
+  if ((context.currentSetupGuidance.blockers || []).length) reasons.push('Current setup or goal lens found assumptions to clarify.')
   if (packageId === 'display-model-followup') reasons.push('Display availability may be useful for a safe showroom follow-up.')
   if (packageId === 'reference-only-guardrail') reasons.push('Record should remain internal/reference instead of active outreach.')
   if (context.cadence?.label) reasons.push(`Cadence signal: ${context.cadence.label}`)
@@ -235,6 +240,7 @@ function exportSafety(packageId, warnings) {
     return { status: 'blocked', label: 'Blocked', blockers: warnings }
   }
   const blockers = warnings.filter((warning) => /Missing customer identity|Missing customer contact|Missing install|Missing venting|Product match|Display-model/i.test(warning))
+  if (packageId === 'missing-info-preproposal' && warnings.length) return { status: 'blocked', label: 'Blocked', blockers: warnings }
   if (blockers.length) return { status: 'blocked', label: 'Blocked', blockers }
   if (warnings.length) return { status: 'review-recommended', label: 'Review recommended', blockers: [] }
   return { status: 'ready', label: 'Ready', blockers: [] }
@@ -253,6 +259,7 @@ export function recommendProposalPackage(input = {}) {
   const packageId = choosePackage(context)
   const definition = packageDefinitions[packageId]
   const warnings = buildWarnings(packageId, context)
+  const currentSetupChecklist = context.currentSetupGuidance.internalChecklist || []
 
   return {
     id: packageId,
@@ -262,9 +269,10 @@ export function recommendProposalPackage(input = {}) {
     reasons: buildReasons(packageId, context),
     warnings,
     recommendedSections: definition.sections.slice(),
-    internalChecklist: definition.checklist.slice(),
+    internalChecklist: [...definition.checklist, ...currentSetupChecklist],
     copyScaffold: safeScaffold(definition.copy),
     exportSafety: exportSafety(packageId, warnings),
+    currentSetupImpact: context.currentSetupGuidance.proposalPackageImpact || null,
   }
 }
 

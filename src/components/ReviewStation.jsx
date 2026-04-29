@@ -1,3 +1,5 @@
+import CurrentSetupPanel from './CurrentSetupPanel.jsx'
+
 const defaultProductIntelligence = {
   snapshotDate: '',
   exactMatchCount: 0,
@@ -12,6 +14,7 @@ export default function ReviewStation({
   audit,
   children,
   currentSourceLabel,
+  currentSetupGuidance,
   handleAssignLine,
   loadedOcrItem,
   ocrReviewConfirmed,
@@ -91,6 +94,8 @@ export default function ReviewStation({
           </div>
         </div>
       </div>
+
+      <CurrentSetupPanel guidance={currentSetupGuidance} />
 
       <div className="product-intel-panel">
         <div className="panel-heading">

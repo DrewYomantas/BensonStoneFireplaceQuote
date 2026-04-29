@@ -60,6 +60,7 @@ Output rules:
 - matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
 - recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
 - recommends a proposal package variant that defines the safest customer-facing proposal structure or pre-proposal path
+- evaluates the customer's current setup and goals so unclear insert/fireplace/stove/electric language becomes review prompts instead of assumptions
 - saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
 - drafts safe follow-up copy and logs local opportunity activity without sending anything externally
 - recommends deterministic follow-up cadence so the queue shows what needs attention today, this week, or review before sending
@@ -92,6 +93,12 @@ Sales staff can always override the recommendation. Internal cautions are also s
 Proposal packages sit beside playbooks. A playbook explains the internal path and safety reasoning; a package recommends the customer-facing structure to prepare. Package variants include Warm Showroom Proposal, Old Quote Refresh, Value Comparison, Premium Design Proposal, Missing-Info Pre-Proposal, Display Model Follow-Up, and Reference-Only Guardrail.
 
 Package recommendations use reviewed local fields, opportunity status, cadence state, source metadata, and internal warning state. They return recommended sections, an internal checklist, conservative customer-facing scaffold copy, confidence, and export safety status. Reference-only, closed, archived, missing-info, uncertain product-match, and unsafe display wording cases are blocked or marked for review instead of being treated as final customer proposals.
+
+## Current setup and goal lens
+
+Review Station and Proposal Builder include a Current Setup + Goal Lens. It reads only reviewed local project fields and helps identify what the customer currently has, what they want, and what needs clarification before proposal/export. It recognizes common fireplace paths such as masonry fireplaces, zero-clearance metal fireplaces, inserts, stoves, pellet units, electric fireplaces, framed chases, and new-construction situations.
+
+The lens produces sales-floor prompts rather than installer claims: setup confidence, customer goal tags, suggested path fit, blockers, customer-friendly questions, internal checklist items, and proposal package impact. Setup blockers can push package guidance toward Missing-Info Pre-Proposal, and saved opportunities can carry those internal warnings into follow-up review.
 
 ## Opportunity Queue
 
@@ -182,6 +189,12 @@ Current automated checks cover:
 - reference-only and closed guardrail behavior
 - display-model wording guardrail
 - sensitive-term exclusion from package scaffold copy
+
+**Current setup and goal lens (`src/lib/currentSetup.test.js`)**
+- unknown, masonry, zero-clearance, electric, exterior chase, wood insert, gas log, and special conversion review cases
+- heat/ambiance goal detection and clarification questions
+- setup blockers influencing missing-info package guidance
+- sensitive-term exclusion from customer-friendly questions
 
 **Opportunity queue (`src/lib/opportunities.test.js`)**
 - active quote readiness classification

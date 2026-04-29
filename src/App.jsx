@@ -25,6 +25,7 @@ import {
 import { buildScannedPacket } from './lib/scannedPacketParser.js'
 import { proposalPlaybooks, recommendProposalPlaybook } from './lib/proposalPlaybooks.js'
 import { recommendProposalPackage } from './lib/proposalPackages.js'
+import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import {
   createOpportunityFromCurrentQuote,
   createOpportunityDraftsFromPackets,
@@ -296,7 +297,12 @@ function App() {
       ocrReviewConfirmed,
     },
   }), [fields, inputMode, loadedOcrItem, ocrReviewConfirmed, parseContext, pdfFileName, productIntelligence, selectedPlaybookId])
+  const currentSetupGuidance = useMemo(() => evaluateCurrentSetup({
+    fields,
+    parseContext,
+  }), [fields, parseContext])
   const packageRecommendation = useMemo(() => recommendProposalPackage({
+    currentSetupGuidance,
     fields,
     parseContext,
     productIntelligence,
@@ -304,7 +310,7 @@ function App() {
       ...playbookRecommendation,
       id: selectedPlaybookId || playbookRecommendation.id,
     },
-  }), [fields, parseContext, playbookRecommendation, productIntelligence, selectedPlaybookId])
+  }), [currentSetupGuidance, fields, parseContext, playbookRecommendation, productIntelligence, selectedPlaybookId])
   const bulkOpportunityDraftState = useMemo(() => createOpportunityDraftsFromPackets({
     packets: scannedPackets,
     existingOpportunities: opportunities,
@@ -773,7 +779,14 @@ function App() {
       fields,
       parseContext,
       productIntelligence,
-      playbookRecommendation,
+      playbookRecommendation: {
+        ...playbookRecommendation,
+        warnings: [
+          ...(playbookRecommendation.warnings || []),
+          ...currentSetupGuidance.blockers,
+          ...currentSetupGuidance.reviewWarnings,
+        ],
+      },
     })
     const saved = saveOpportunity({
       ...nextOpportunity,
@@ -1128,6 +1141,7 @@ function App() {
         assignmentTargets={assignmentTargets}
         audit={audit}
         currentSourceLabel={currentSourceLabel}
+        currentSetupGuidance={currentSetupGuidance}
         handleAssignLine={handleAssignLine}
         loadedOcrItem={loadedOcrItem}
         ocrReviewConfirmed={ocrReviewConfirmed}
@@ -1155,6 +1169,7 @@ function App() {
       <ProposalBuilder
         editor={fieldEditor}
         onSaveOpportunity={handleSaveOpportunity}
+        currentSetupGuidance={currentSetupGuidance}
         preview={proposalPreview}
         productIntelligence={productIntelligence}
         packageRecommendation={packageRecommendation}

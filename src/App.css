@@ -467,6 +467,7 @@
 }
 
 .sample-box,
+.current-setup-panel,
 .review-card,
 .needs-review-box,
 .product-intel-panel,
@@ -622,17 +623,65 @@
 
 .recommendation-panel h3,
 .recommendation-panel h4,
+.current-setup-panel h3,
+.current-setup-panel h4,
 .proposal-package-panel h3,
 .proposal-package-panel h4 {
   margin: 0;
   color: #203126;
 }
 
+.current-setup-summary,
+.current-setup-grid,
 .package-recommendation-grid,
 .recommendation-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.current-setup-summary {
+  margin-bottom: 12px;
+}
+
+.current-setup-summary > div {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.72);
+  border: 1px solid rgba(94, 73, 51, 0.1);
+}
+
+.current-setup-summary span,
+.current-setup-summary small {
+  display: block;
+  color: #7a634d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.current-setup-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: #203126;
+}
+
+.current-setup-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.setup-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.setup-chip-row span {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(47, 70, 50, 0.08);
+  color: #2f4632;
 }
 
 .package-recommendation-grid {
@@ -646,6 +695,21 @@
 
 .package-copy-preview {
   margin-top: 12px;
+}
+
+.package-impact-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(88, 104, 130, 0.08);
+  color: #4e5d73;
+}
+
+.package-impact-note strong {
+  color: #203126;
 }
 
 .recommendation-copy p {
@@ -662,6 +726,10 @@
 
 .proposal-package-panel--compact .package-recommendation-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.current-setup-panel--compact .current-setup-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .export-warning-block {
@@ -1352,6 +1420,8 @@
 
   .hero-band,
   .step-intro,
+  .current-setup-summary,
+  .current-setup-grid,
   .package-recommendation-grid,
   .recommendation-grid,
   .opportunity-edit-grid,
