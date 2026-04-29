@@ -26,6 +26,8 @@ import { buildScannedPacket } from './lib/scannedPacketParser.js'
 import { proposalPlaybooks, recommendProposalPlaybook } from './lib/proposalPlaybooks.js'
 import {
   createOpportunityFromCurrentQuote,
+  createOpportunityDraftsFromPackets,
+  getSafeBulkAddDrafts,
   listOpportunities,
   removeOpportunity,
   saveOpportunity,
@@ -260,6 +262,7 @@ function App() {
   const [opportunities, setOpportunities] = useState(() => listOpportunities())
   const [opportunityFilter, setOpportunityFilter] = useState('needs-review')
   const [opportunitySaveState, setOpportunitySaveState] = useState('')
+  const [skippedOpportunityDraftIds, setSkippedOpportunityDraftIds] = useState([])
   const [sectionOverrides, setSectionOverrides] = useState({})
   const [assignmentTargets, setAssignmentTargets] = useState({})
   const [scannedPackets, setScannedPackets] = useState([])
@@ -292,6 +295,10 @@ function App() {
       ocrReviewConfirmed,
     },
   }), [fields, inputMode, loadedOcrItem, ocrReviewConfirmed, parseContext, pdfFileName, productIntelligence, selectedPlaybookId])
+  const bulkOpportunityDraftState = useMemo(() => createOpportunityDraftsFromPackets({
+    packets: scannedPackets,
+    existingOpportunities: opportunities,
+  }), [opportunities, scannedPackets])
 
   const sectionStatus = useMemo(() => {
     return Object.fromEntries(
@@ -429,6 +436,7 @@ function App() {
     setBatchFiles([])
     setBulkStatus('')
     setScannedPackets([])
+    setSkippedOpportunityDraftIds([])
     setScannedStatus('')
     setScannedFile(null)
     setScannedFileMeta(null)
@@ -766,6 +774,58 @@ function App() {
     setCopyState('Saved to Opportunity Queue')
   }
 
+  function saveDraftOpportunity(draft, patch = {}) {
+    const saved = saveOpportunity({ ...draft.opportunity, ...patch })
+    setOpportunities(listOpportunities())
+    setOpportunitySaveState(`${saved.customerName || 'Draft'} saved from bulk intake`)
+    return saved
+  }
+
+  function handleAddOpportunityDraft(draft) {
+    saveDraftOpportunity(draft)
+  }
+
+  function handleAddAllSafeOpportunityDrafts() {
+    const safeDrafts = getSafeBulkAddDrafts(bulkOpportunityDraftState.drafts).filter((draft) => !skippedOpportunityDraftIds.includes(draft.id))
+    safeDrafts.forEach((draft) => saveOpportunity(draft.opportunity))
+    setOpportunities(listOpportunities())
+    setOpportunitySaveState(`${safeDrafts.length} safe draft opportunit${safeDrafts.length === 1 ? 'y' : 'ies'} added to queue`)
+  }
+
+  function handleUpdateExistingOpportunityDraft(draft) {
+    const existing = opportunities.find((item) => item.id === draft.duplicate.duplicateId)
+    if (!existing) return
+    updateOpportunity(existing.id, {
+      warnings: [...new Set([...(existing.warnings || []), ...(draft.opportunity.warnings || []), 'Updated from high-confidence bulk duplicate.'])],
+      sourceType: draft.opportunity.sourceType,
+      sourceLabel: draft.opportunity.sourceLabel,
+      sourceFileName: draft.opportunity.sourceFileName,
+      sourceImportedAt: draft.opportunity.sourceImportedAt,
+      sourceConfidence: draft.opportunity.sourceConfidence,
+      sourceWarnings: draft.opportunity.sourceWarnings,
+      recommendedPlaybookId: draft.opportunity.recommendedPlaybookId || existing.recommendedPlaybookId,
+      nextAction: existing.nextAction || draft.opportunity.nextAction,
+      nextActionDue: existing.nextActionDue || draft.opportunity.nextActionDue,
+    })
+    setOpportunities(listOpportunities())
+    setOpportunitySaveState(`${existing.customerName || 'Existing opportunity'} updated from bulk intake`)
+  }
+
+  function handleReviewOpportunityDraft(draft) {
+    saveDraftOpportunity(draft, {
+      status: 'needs-review',
+      proposalReadiness: 'blocked',
+      warnings: [...new Set([...(draft.opportunity.warnings || []), 'Bulk draft marked for review before follow-up.'])],
+    })
+    setOpportunityFilter('needs-review')
+    setActiveView('opportunities')
+  }
+
+  function handleSkipOpportunityDraft(draftId) {
+    setSkippedOpportunityDraftIds((current) => current.includes(draftId) ? current : [...current, draftId])
+    setOpportunitySaveState('Skipped bulk draft')
+  }
+
   function handleUpdateOpportunity(id, patch) {
     updateOpportunity(id, patch)
     setOpportunities(listOpportunities())
@@ -1030,16 +1090,23 @@ function App() {
   } else if (activeView === 'triage') {
     activeContent = (
       <ScannedPacketWorkspace
+        bulkOpportunityDraftState={bulkOpportunityDraftState}
         getPacketOcrStatus={getPacketOcrStatus}
         getStatusClass={getStatusClass}
+        onAddAllSafeOpportunityDrafts={handleAddAllSafeOpportunityDrafts}
+        onAddOpportunityDraft={handleAddOpportunityDraft}
         onClearPacket={handleClearScannedPacket}
         onLoadPage={handleLoadScannedItem}
         onMarkChecked={handleMarkScannedReviewed}
         onMarkReference={handleMarkScannedReference}
         onRemovePage={handleRemoveScannedPage}
+        onReviewOpportunityDraft={handleReviewOpportunityDraft}
+        onSkipOpportunityDraft={handleSkipOpportunityDraft}
+        onUpdateExistingOpportunityDraft={handleUpdateExistingOpportunityDraft}
         onUndoReference={handleUndoScannedReference}
         onViewOcr={setOcrDetailsPage}
         scannedPackets={scannedPackets}
+        skippedOpportunityDraftIds={skippedOpportunityDraftIds}
         scannedTriageGroups={scannedTriageGroups}
         summarizePacketPages={summarizePacketPages}
       />

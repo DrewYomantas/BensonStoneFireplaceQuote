@@ -1,4 +1,5 @@
 import { buildFollowUpItems } from '../lib/scannedPacketParser.js'
+import BulkOpportunityIntake from './BulkOpportunityIntake.jsx'
 
 function escapeCsv(value) {
   return `"${String(value || '').replace(/"/g, '""')}"`
@@ -48,13 +49,20 @@ export default function ScannedPacketWorkspace({
   getPacketOcrStatus,
   getStatusClass,
   onClearPacket,
+  onAddAllSafeOpportunityDrafts,
+  onAddOpportunityDraft,
+  onReviewOpportunityDraft,
   onLoadPage,
   onMarkChecked,
   onMarkReference,
   onRemovePage,
+  onSkipOpportunityDraft,
+  onUpdateExistingOpportunityDraft,
   onUndoReference,
   onViewOcr,
+  bulkOpportunityDraftState,
   scannedPackets,
+  skippedOpportunityDraftIds,
   scannedTriageGroups,
   summarizePacketPages,
 }) {
@@ -73,6 +81,15 @@ export default function ScannedPacketWorkspace({
         </div>
       ) : (
         <div className="scanned-packet-list">
+          <BulkOpportunityIntake
+            bulkDraftState={bulkOpportunityDraftState}
+            onAddAllSafe={onAddAllSafeOpportunityDrafts}
+            onAddDraft={onAddOpportunityDraft}
+            onReviewDraft={onReviewOpportunityDraft}
+            onSkipDraft={onSkipOpportunityDraft}
+            onUpdateExisting={onUpdateExistingOpportunityDraft}
+            skippedDraftIds={skippedOpportunityDraftIds}
+          />
           {scannedPackets.map((packet) => {
             const summary = summarizePacketPages(packet.pages)
             const followUpItems = buildFollowUpItems(packet.pages)

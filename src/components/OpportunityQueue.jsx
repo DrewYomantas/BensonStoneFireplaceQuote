@@ -96,7 +96,20 @@ export default function OpportunityQueue({
               <div><dt>Next best action</dt><dd>{opportunity.nextAction || 'Review opportunity'}</dd></div>
               <div><dt>Due date</dt><dd>{opportunity.nextActionDue || 'Not scheduled'}</dd></div>
               <div><dt>Updated</dt><dd>{opportunity.updatedAt ? new Date(opportunity.updatedAt).toLocaleDateString() : 'Not saved'}</dd></div>
+              <div><dt>Source trail</dt><dd>{opportunity.sourceLabel || opportunity.sourceType || 'Manual save'}</dd></div>
+              <div><dt>Source file</dt><dd>{opportunity.sourceFileName || 'Not recorded'}</dd></div>
+              <div><dt>Imported</dt><dd>{opportunity.sourceImportedAt ? new Date(opportunity.sourceImportedAt).toLocaleDateString() : 'Manual/current quote'}</dd></div>
+              <div><dt>Confidence</dt><dd>{opportunity.sourceConfidence || 'Reviewed summary'}</dd></div>
             </dl>
+
+            {opportunity.sourceWarnings.length ? (
+              <div className="opportunity-source-note">
+                <strong>Source notes</strong>
+                <ul className="notice-list">
+                  {opportunity.sourceWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+                </ul>
+              </div>
+            ) : null}
 
             {opportunity.warnings.length ? (
               <div className="opportunity-warning-box">

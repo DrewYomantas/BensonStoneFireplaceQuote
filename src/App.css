@@ -855,6 +855,19 @@
   border: 1px solid rgba(176, 122, 48, 0.18);
 }
 
+.opportunity-source-note,
+.bulk-opportunity-panel {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(88, 104, 130, 0.06);
+  border: 1px solid rgba(88, 104, 130, 0.14);
+}
+
+.opportunity-source-note strong,
+.bulk-opportunity-panel h3 {
+  color: #203126;
+}
+
 .opportunity-warning-box h4 {
   margin: 0;
   color: #7a4f10;
@@ -864,6 +877,61 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.bulk-intake-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.bulk-intake-summary span {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #5c4837;
+  font-size: 12px;
+}
+
+.bulk-intake-summary strong {
+  color: #203126;
+}
+
+.bulk-draft-list {
+  display: grid;
+  gap: 10px;
+}
+
+.bulk-draft-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.6fr) minmax(220px, 1.2fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(94, 73, 51, 0.12);
+}
+
+.bulk-draft-row.is-skipped {
+  opacity: 0.58;
+}
+
+.bulk-draft-row strong,
+.bulk-draft-row span {
+  display: block;
+}
+
+.bulk-draft-row span,
+.bulk-duplicate-note {
+  margin: 3px 0 0;
+  color: #6d5643;
+  font-size: 12px;
+}
+
+.bulk-draft-row .notice-list {
+  margin-top: 8px;
 }
 
 .section-stack {
@@ -1155,6 +1223,7 @@
   .line-item-row,
   .product-group__row,
   .opportunity-card__header,
+  .bulk-draft-row,
   .detail-table__header,
   .detail-table__row,
   .hero-stats,

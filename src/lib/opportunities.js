@@ -27,6 +27,11 @@ const storedKeys = [
   'status',
   'temperature',
   'sourceType',
+  'sourceLabel',
+  'sourceFileName',
+  'sourceImportedAt',
+  'sourceConfidence',
+  'sourceWarnings',
   'recommendedPlaybookId',
   'selectedPlaybookId',
   'warnings',
@@ -95,6 +100,21 @@ function uniqueWarnings(warnings) {
   return [...new Set(warnings.filter(Boolean))]
 }
 
+function normalizeComparable(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+function datesWithinDays(left, right, days = 45) {
+  const leftDate = new Date(left)
+  const rightDate = new Date(right)
+  if (Number.isNaN(leftDate.getTime()) || Number.isNaN(rightDate.getTime())) return false
+  return Math.abs(leftDate.getTime() - rightDate.getTime()) <= days * 86400000
+}
+
 function getMajorWarnings(warnings) {
   return warnings.filter((warning) => !/Sensitive BisTrack fields excluded/i.test(warning))
 }
@@ -148,6 +168,7 @@ function makeOpportunityId(fields, now) {
 export function sanitizeOpportunity(opportunity) {
   const clean = Object.fromEntries(storedKeys.map((key) => [key, opportunity[key] ?? '']))
   clean.warnings = Array.isArray(opportunity.warnings) ? opportunity.warnings.slice() : []
+  clean.sourceWarnings = Array.isArray(opportunity.sourceWarnings) ? opportunity.sourceWarnings.slice() : []
   return clean
 }
 
@@ -181,7 +202,12 @@ export function createOpportunityFromCurrentQuote({
     projectType: projectTypeFromContext(parseContext, productIntelligence),
     status,
     temperature,
-    sourceType: sourceTypeFromContext(parseContext),
+    sourceType: parseContext.sourceType || sourceTypeFromContext(parseContext),
+    sourceLabel: parseContext.sourceLabel || '',
+    sourceFileName: parseContext.sourceFileName || '',
+    sourceImportedAt: parseContext.sourceImportedAt || '',
+    sourceConfidence: parseContext.sourceConfidence || '',
+    sourceWarnings: parseContext.sourceWarnings || [],
     recommendedPlaybookId: playbookRecommendation.id || '',
     selectedPlaybookId: playbookRecommendation.id || '',
     warnings,
@@ -192,6 +218,186 @@ export function createOpportunityFromCurrentQuote({
     createdAt: timestamp,
     updatedAt: timestamp,
   })
+}
+
+function fieldsFromCandidate(candidate = {}) {
+  return {
+    CUSTOMER_NAME: candidate.customerName || '',
+    CUSTOMER_EMAIL: candidate.customerEmail || '',
+    CUSTOMER_PHONE: candidate.customerPhone || '',
+    QUOTE_NO: candidate.quoteNo || candidate.quoteNumber || '',
+    QUOTE_DATE: candidate.lastQuoteDate || candidate.quoteDate || '',
+    PROJECT_ADDRESS_LINE_1: candidate.projectAddress || '',
+    QUOTATION_TOTAL: candidate.quoteTotal || candidate.total || '',
+    BALANCE_DUE: candidate.balanceDue || '',
+    INSTALLATION_SCOPE: candidate.installationScope || '',
+  }
+}
+
+function candidateFromPage(packet, page) {
+  return {
+    pageNumber: page.pageNumber,
+    quoteNo: page.documentNumber,
+    lastQuoteDate: page.documentDate,
+    customerName: page.customerName,
+    customerPhone: page.parsed?.fields?.CUSTOMER_PHONE || '',
+    projectAddress: page.parsed?.fields?.PROJECT_ADDRESS_LINE_1 || page.parsed?.fields?.INVOICE_ADDRESS_LINE_1 || '',
+    quoteTotal: page.parsed?.fields?.QUOTATION_TOTAL || page.total || '',
+    balanceDue: page.parsed?.fields?.BALANCE_DUE || page.balanceDue || '',
+    sourceType: 'ocr-packet',
+    sourceLabel: `Page ${page.pageNumber} - ${page.classification?.label || page.recommendation || 'OCR packet'}`,
+    sourceFileName: packet.fileName || '',
+    sourceConfidence: page.ocrConfidence ? `${page.ocrConfidence}% OCR` : '',
+    sourceWarnings: page.parsed?.warnings || [],
+    recommendation: page.recommendation,
+    status: page.status,
+  }
+}
+
+function candidatesFromPacket(packet) {
+  if (Array.isArray(packet.followUpItems) && packet.followUpItems.length) {
+    return packet.followUpItems.map((item) => ({
+      ...item,
+      sourceType: 'ocr-packet',
+      sourceLabel: `Page ${item.pageNumber} - follow-up quote candidate`,
+      sourceFileName: packet.fileName || '',
+      sourceImportedAt: packet.importedAt || packet.createdAt || '',
+      sourceConfidence: packet.confidence || '',
+      sourceWarnings: [],
+    }))
+  }
+
+  return (packet.pages || [])
+    .filter((page) => page.recommendation === 'Follow-up candidate' || page.recommendation === 'Paid / closed' || page.recommendation === 'Needs manual review')
+    .map((page) => candidateFromPage(packet, page))
+}
+
+export function findOpportunityDuplicate(candidate, existingOpportunities = []) {
+  const quoteNumber = normalizeComparable(candidate.quoteNumber || candidate.quoteNo)
+  const customerName = normalizeComparable(candidate.customerName)
+  const customerPhone = normalizePhone(candidate.customerPhone)
+  const customerEmail = normalizeComparable(candidate.customerEmail)
+  const quoteDate = candidate.quoteDate || candidate.lastQuoteDate || ''
+
+  for (const existing of existingOpportunities) {
+    const existingQuote = normalizeComparable(existing.quoteNumber)
+    const existingName = normalizeComparable(existing.customerName)
+    const existingPhone = normalizePhone(existing.customerPhone)
+    const existingEmail = normalizeComparable(existing.customerEmail)
+    const reasons = []
+
+    if (quoteNumber && existingQuote && quoteNumber === existingQuote) {
+      reasons.push('Same quote number')
+      if (!customerName || !existingName || existingName.includes(customerName) || customerName.includes(existingName)) {
+        if (customerName && existingName) reasons.push('Customer name partially matches')
+        return { isDuplicate: true, duplicateId: existing.id, confidence: 'high', reasons }
+      }
+      return { isDuplicate: true, duplicateId: existing.id, confidence: 'medium', reasons: [...reasons, 'Customer name differs'] }
+    }
+
+    if (customerEmail && existingEmail && customerEmail === existingEmail) {
+      return { isDuplicate: true, duplicateId: existing.id, confidence: 'high', reasons: ['Same customer email'] }
+    }
+
+    if (customerPhone && existingPhone && customerPhone === existingPhone) {
+      return { isDuplicate: true, duplicateId: existing.id, confidence: 'high', reasons: ['Same customer phone'] }
+    }
+
+    if (customerName && existingName && customerName === existingName && quoteDate && existing.quoteDate && datesWithinDays(quoteDate, existing.quoteDate)) {
+      return { isDuplicate: true, duplicateId: existing.id, confidence: 'medium', reasons: ['Same customer name', 'Similar quote date'] }
+    }
+  }
+
+  return { isDuplicate: false, duplicateId: '', confidence: 'low', reasons: [] }
+}
+
+export function createOpportunityDraftsFromPackets({
+  packets = [],
+  existingOpportunities = [],
+  now = new Date(),
+} = {}) {
+  const importedAt = new Date(now).toISOString()
+  const drafts = packets.flatMap((packet, packetIndex) =>
+    candidatesFromPacket(packet).map((candidate, candidateIndex) => {
+      const fields = fieldsFromCandidate(candidate)
+      const parseContext = {
+        documentType: candidate.recommendation === 'Paid / closed' || candidate.status === 'Paid / Closed' ? 'bill' : 'quote',
+        outputLabel: 'Fireplace Project Proposal',
+        sourceType: candidate.sourceType || 'bulk-pdf',
+        sourceLabel: candidate.sourceLabel || packet.fileName || 'Bulk opportunity intake',
+        sourceFileName: candidate.sourceFileName || packet.fileName || '',
+        sourceImportedAt: candidate.sourceImportedAt || importedAt,
+        sourceConfidence: candidate.sourceConfidence || '',
+        sourceWarnings: candidate.sourceWarnings || [],
+      }
+      const playbookRecommendation = {
+        id: candidate.recommendation === 'Paid / closed' ? 'paid-order-summary' : 'old-quote-re-engagement',
+        warnings: [
+          ...(candidate.sourceWarnings || []),
+          candidate.recommendation === 'Needs manual review' ? 'Packet candidate needs review before adding to active follow-up.' : '',
+          candidate.recommendation === 'Paid / closed' ? 'Quote appears paid/closed/reference. Do not treat it as an active proposal without confirmation.' : '',
+          'Customer-facing proposal may need quote refresh before sending.',
+          'Sensitive BisTrack fields excluded from customer export.',
+        ].filter(Boolean),
+      }
+      const opportunity = createOpportunityFromCurrentQuote({
+        fields,
+        parseContext,
+        productIntelligence: { needsReviewCount: 0, groupedRows: [] },
+        playbookRecommendation,
+        now,
+      })
+      const duplicate = findOpportunityDuplicate(opportunity, existingOpportunities)
+      const needsReviewDuplicate = duplicate.isDuplicate && duplicate.confidence !== 'high'
+      const draftOpportunity = needsReviewDuplicate
+        ? sanitizeOpportunity({
+          ...opportunity,
+          status: 'needs-review',
+          proposalReadiness: 'blocked',
+          warnings: uniqueWarnings([...opportunity.warnings, 'Possible duplicate requires review before adding to queue.']),
+        })
+        : opportunity
+
+      return {
+        id: `${draftOpportunity.id}-${packetIndex}-${candidate.pageNumber || candidateIndex}`,
+        opportunity: draftOpportunity,
+        duplicate,
+        sourceLabel: draftOpportunity.sourceLabel,
+        action: duplicate.isDuplicate && duplicate.confidence === 'high' ? 'update-existing' : draftOpportunity.status === 'needs-review' ? 'review-first' : 'add',
+      }
+    })
+  )
+
+  return {
+    importedPacketCount: packets.length,
+    drafts,
+    summary: { ...summarizeDrafts(drafts), importedPackets: packets.length },
+  }
+}
+
+export function summarizeDrafts(drafts) {
+  return {
+    importedPackets: 0,
+    draftCount: drafts.length,
+    readyToAdd: drafts.filter((draft) => isSafeBulkAddDraft(draft)).length,
+    needsReview: drafts.filter((draft) => draft.opportunity.status === 'needs-review').length,
+    duplicates: drafts.filter((draft) => draft.duplicate.isDuplicate).length,
+    referenceOnly: drafts.filter((draft) => draft.opportunity.status === 'reference-only').length,
+    readyForProposal: drafts.filter((draft) => draft.opportunity.status === 'ready-for-proposal').length,
+    customerExportsCreated: 0,
+  }
+}
+
+export function isSafeBulkAddDraft(draft) {
+  if (!draft || draft.duplicate.isDuplicate) return false
+  if (draft.opportunity.status === 'reference-only') return false
+  if (draft.opportunity.status === 'needs-review') return false
+  if (!draft.opportunity.customerName || (!draft.opportunity.customerPhone && !draft.opportunity.customerEmail)) return false
+  return true
+}
+
+export function getSafeBulkAddDrafts(drafts) {
+  return drafts.filter(isSafeBulkAddDraft)
 }
 
 function getStorage(storage = globalThis.localStorage) {

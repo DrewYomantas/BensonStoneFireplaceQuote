@@ -90,6 +90,8 @@ The Opportunity Queue is a local-first follow-up board for reviewed quote summar
 
 Statuses include new intake, needs review, ready for proposal, follow-up needed, proposal sent, waiting on customer, closed won/lost, reference only, and archived. Saving a quote is allowed even when fields are incomplete, but the opportunity is classified conservatively as needs review or reference only when warnings are present.
 
+Bulk Opportunity Intake appears in Packet Triage when scanned follow-up candidates are available. It creates reviewable opportunity drafts with duplicate signals, source file/page metadata, safe add/update/skip actions, and an import summary. Add-all-safe excludes uncertain duplicates, reference-only packets, and drafts missing identity/contact blockers.
+
 ## Template source
 
 The approved editable template that informed the field contract is still the external file in Downloads:
@@ -162,6 +164,8 @@ Current automated checks cover:
 - missing contact review classification
 - paid/closed reference-only classification
 - product-match review safety
+- bulk draft creation and dedupe classification
+- safe source metadata without raw OCR text
 - sensitive metric exclusion from stored opportunities
 - localStorage save/list/update/remove helpers
 
