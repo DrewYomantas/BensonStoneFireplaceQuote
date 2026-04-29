@@ -1,3 +1,65 @@
+function getFollowUpItems(pages) {
+  return pages
+    .filter((page) => page.recommendation === 'Follow-up candidate')
+    .map((page) => ({
+      pageNumber: page.pageNumber,
+      quoteNo: page.documentNumber,
+      lastQuoteDate: page.documentDate,
+      customerName: page.customerName,
+      customerPhone: page.parsed?.fields?.CUSTOMER_PHONE || '',
+      projectAddress: page.parsed?.fields?.PROJECT_ADDRESS_LINE_1 || page.parsed?.fields?.INVOICE_ADDRESS_LINE_1 || '',
+      quoteTotal: page.parsed?.fields?.QUOTATION_TOTAL || page.total || '',
+      balanceDue: page.balanceDue || '',
+      followUpStage: 'Old quote follow-up',
+      followUpReason: 'Scanned quote found in follow-up packet',
+      followUpNotes: 'Review quote details and contact customer if still relevant.',
+    }))
+}
+
+function escapeCsv(value) {
+  return `"${String(value || '').replace(/"/g, '""')}"`
+}
+
+function buildFollowUpCsv(items) {
+  const headers = [
+    'page',
+    'quote_no',
+    'last_quote_date',
+    'customer_name',
+    'customer_phone',
+    'project_address',
+    'quote_total',
+    'balance_due',
+    'follow_up_stage',
+    'follow_up_reason',
+    'follow_up_notes',
+  ]
+  const rows = items.map((item) => [
+    item.pageNumber,
+    item.quoteNo,
+    item.lastQuoteDate,
+    item.customerName,
+    item.customerPhone,
+    item.projectAddress,
+    item.quoteTotal,
+    item.balanceDue,
+    item.followUpStage,
+    item.followUpReason,
+    item.followUpNotes,
+  ])
+  return [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n')
+}
+
+function downloadText(fileName, text, type) {
+  const blob = new Blob([text], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function ScannedPacketWorkspace({
   getPacketOcrStatus,
   getStatusClass,
@@ -29,6 +91,7 @@ export default function ScannedPacketWorkspace({
         <div className="scanned-packet-list">
           {scannedPackets.map((packet) => {
             const summary = summarizePacketPages(packet.pages)
+            const followUpItems = getFollowUpItems(packet.pages)
             return (
               <section className="scanned-packet-card" key={packet.id}>
                 <div className="scanned-packet-card__header">
@@ -49,6 +112,52 @@ export default function ScannedPacketWorkspace({
                   <span><strong>{summary.reference}</strong> reference/photo</span>
                   <span><strong>{summary.unknown}</strong> unknown</span>
                 </div>
+                {followUpItems.length ? (
+                  <div className="follow-up-queue">
+                    <div className="follow-up-queue__header">
+                      <div>
+                        <h4>Follow-up intake queue</h4>
+                        <p>{followUpItems.length} quote candidate{followUpItems.length === 1 ? '' : 's'} ready for human review.</p>
+                      </div>
+                      <div className="batch-actions">
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--subtle"
+                          onClick={() => downloadText(`${packet.fileName.replace(/\.pdf$/i, '')}-follow-up-intake.csv`, buildFollowUpCsv(followUpItems), 'text/csv')}
+                        >
+                          Download CSV
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--subtle"
+                          onClick={() => downloadText(`${packet.fileName.replace(/\.pdf$/i, '')}-follow-up-intake.json`, JSON.stringify(followUpItems, null, 2), 'application/json')}
+                        >
+                          Download JSON
+                        </button>
+                      </div>
+                    </div>
+                    <div className="follow-up-table">
+                      <table>
+                        <thead>
+                          <tr><th>Page</th><th>Customer</th><th>Quote #</th><th>Date</th><th>Total</th><th>Phone</th><th>Address</th></tr>
+                        </thead>
+                        <tbody>
+                          {followUpItems.map((item) => (
+                            <tr key={`${packet.id}-${item.pageNumber}-${item.quoteNo}`}>
+                              <td>{item.pageNumber}</td>
+                              <td>{item.customerName || '-'}</td>
+                              <td>{item.quoteNo || '-'}</td>
+                              <td>{item.lastQuoteDate || '-'}</td>
+                              <td>{item.quoteTotal || '-'}</td>
+                              <td>{item.customerPhone || '-'}</td>
+                              <td>{item.projectAddress || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="scanned-triage-groups">
                   {scannedTriageGroups.map((group) => {
                     const pages = packet.pages.filter(group.matches)

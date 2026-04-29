@@ -1707,6 +1707,60 @@
   color: #253247;
 }
 
+.follow-up-queue {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(48, 140, 88, 0.18);
+  border-radius: 8px;
+  background: rgba(240, 248, 240, 0.64);
+}
+
+.follow-up-queue__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.follow-up-queue__header h4 {
+  margin: 0 0 4px;
+  color: #1f5c38;
+  font-size: 14px;
+}
+
+.follow-up-queue__header p {
+  margin: 0;
+  color: #4d6a58;
+  font-size: 13px;
+}
+
+.follow-up-table {
+  overflow-x: auto;
+}
+
+.follow-up-table table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.follow-up-table th,
+.follow-up-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(48, 140, 88, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.follow-up-table th {
+  color: #1f5c38;
+  background: rgba(48, 140, 88, 0.08);
+  font-weight: 700;
+}
+
 .scanned-triage-groups {
   display: grid;
   gap: 10px;

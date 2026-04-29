@@ -132,7 +132,7 @@ Current automated checks cover:
 The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, Bill, Invoice, Receipt). What to expect:
 
 - **Embedded-text PDFs** (the normal BisTrack export) parse correctly: document type, number, date, customer ID, terms, PO#, delivery date, taken-by/sales-rep, invoice and delivery addresses, customer phone, line items, and totals (Total Amount, Tax, Order/Quotation Total, Amount Paid, Balance Due).
-- **Scanned / image-based PDFs** surface a clear warning ("This Epicor BisTrack PDF looks scanned or image-based — review extracted fields carefully") instead of failing silently. OCR fallback is not implemented in this pass.
+- **Scanned / image-based PDFs** can run OCR in the Scanned packet lane. OCR pages are classified into follow-up candidates, paid/closed orders, support docs, site photos, and manual review; follow-up candidates can be downloaded as CSV or JSON intake records.
 - **Column-reordered output**: pdfjs sometimes emits BisTrack line-item columns in a non-row-by-row order (descriptions stacked, then qty/price/total stacked). The parser handles the common case but may miss qty/price pairings on heavily reordered layouts. Codes and descriptions still extract; totals remain authoritative. The mandatory human review step catches anything off.
 - **Delivery date** is captured but intentionally excluded from customer-facing fields. An info note is surfaced.
 - **Document type** drives output wording: Quotes use proposal language and apply quote-only defaults (30 days, 50% deposit). Orders/Bills/Invoices/Receipts skip those defaults and use "Project Confirmation" or "Order Summary".
@@ -142,14 +142,14 @@ The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, 
 
 ## Limitations
 
-- PDF text extraction uses `pdfjs-dist`. OCR fallback for scanned PDFs is not implemented.
+- PDF text extraction uses `pdfjs-dist`; scanned-packet OCR uses `tesseract.js` and still requires human review before customer-facing output.
 - Customer PDF output relies on the browser's print engine (Save as PDF). Margins and page breaks may vary slightly across browsers.
 - No git remote is configured for this repo.
 - Real customer PDFs and CSVs from the Benson Stone Drive are **not committed** to this repo. Tests use sanitized fixtures based on the real layout.
 
 ## V3+ roadmap
 
-- OCR fallback for scanned BisTrack PDFs
+- hardened OCR extraction against more real scanned BisTrack packet layouts
 - bulk ZIP export for generated customer PDFs
 - CSV/import support
 - Canva autofill only after field review is proven reliable
