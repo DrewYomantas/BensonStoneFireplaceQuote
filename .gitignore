@@ -30,6 +30,7 @@ dist-ssr
 *.PDF
 *.csv
 *.CSV
+src/data/bistrack-snapshot/
 Scanned_*.pdf
 **/Scanned_*.pdf
 follow up quotes.pdf

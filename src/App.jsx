@@ -17,8 +17,13 @@ import {
 } from './lib/parser.js'
 import { parseBisTrackText } from './lib/biztrackPdfParser.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
+import {
+  buildProductIntelligence,
+  createProductCatalog,
+  extractLineItemsFromFields,
+} from './lib/productCatalog.js'
 import { buildScannedPacket } from './lib/scannedPacketParser.js'
-import { proposalPlaybooks } from './lib/proposalPlaybooks.js'
+import { proposalPlaybooks, recommendProposalPlaybook } from './lib/proposalPlaybooks.js'
 import AppShell from './components/AppShell.jsx'
 import CommandCenter from './components/CommandCenter.jsx'
 import CustomerProposal from './components/CustomerProposal.jsx'
@@ -28,6 +33,16 @@ import ProposalBuilder from './components/ProposalBuilder.jsx'
 import ProposalPlaybooks from './components/ProposalPlaybooks.jsx'
 import ReviewStation from './components/ReviewStation.jsx'
 import ScannedPacketWorkspace from './components/ScannedPacketWorkspace.jsx'
+
+const localBistrackSeeds = import.meta.glob('./data/bistrack-snapshot/*', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+})
+
+function getLocalBistrackSeed(fileName) {
+  return localBistrackSeeds[`./data/bistrack-snapshot/${fileName}`] || ''
+}
 
 function copyText(text) {
   return navigator.clipboard.writeText(text)
@@ -199,6 +214,11 @@ function MultiLineField({ field, fields, sources, onChange, rows = 4 }) {
 
 function App() {
   const emptyFields = useMemo(() => createEmptyFieldState(), [])
+  const productCatalog = useMemo(() => createProductCatalog({
+    fireplaceCatalogCsv: getLocalBistrackSeed('fireplace_catalog_internal_seed.csv'),
+    manualLineTypesCsv: getLocalBistrackSeed('fireplace_manual_order_line_types_seed.csv'),
+    manifestJson: getLocalBistrackSeed('bistrack_import_manifest.json'),
+  }), [])
   const emptySources = useMemo(
     () => Object.fromEntries(orderedFields.map((field) => [field, 'blank'])),
     [],
@@ -247,6 +267,20 @@ function App() {
 
   const exportJson = JSON.stringify(fields, null, 2)
   const exportLines = fieldsToExportLines(fields)
+  const productIntelligence = useMemo(() => {
+    const sourceLineItems = pdfLineItems.length ? pdfLineItems : extractLineItemsFromFields(fields)
+    return buildProductIntelligence(sourceLineItems, productCatalog)
+  }, [fields, pdfLineItems, productCatalog])
+  const playbookRecommendation = useMemo(() => recommendProposalPlaybook({
+    fields,
+    parseContext,
+    productIntelligence,
+    quoteMeta: {
+      selectedPlaybookId,
+      currentSourceLabel: getCurrentSourceLabel(parseContext, pdfFileName, loadedOcrItem, inputMode),
+      ocrReviewConfirmed,
+    },
+  }), [fields, inputMode, loadedOcrItem, ocrReviewConfirmed, parseContext, pdfFileName, productIntelligence, selectedPlaybookId])
 
   const sectionStatus = useMemo(() => {
     return Object.fromEntries(
@@ -983,6 +1017,7 @@ function App() {
         ocrReviewConfirmed={ocrReviewConfirmed}
         onMarkLoadedOcrChecked={() => handleMarkScannedReviewed(loadedOcrItem.packetId, loadedOcrItem.pageNumber)}
         parseContext={parseContext}
+        productIntelligence={productIntelligence}
         setAssignmentTargets={setAssignmentTargets}
         setOcrReviewConfirmed={setOcrReviewConfirmed}
       >
@@ -990,9 +1025,16 @@ function App() {
       </ReviewStation>
     )
   } else if (activeView === 'playbooks') {
-    activeContent = <ProposalPlaybooks playbooks={proposalPlaybooks} selectedPlaybookId={selectedPlaybookId} onSelectPlaybook={setSelectedPlaybookId} />
+    activeContent = (
+      <ProposalPlaybooks
+        playbooks={proposalPlaybooks}
+        recommendation={playbookRecommendation}
+        selectedPlaybookId={selectedPlaybookId}
+        onSelectPlaybook={setSelectedPlaybookId}
+      />
+    )
   } else if (activeView === 'proposal') {
-    activeContent = <ProposalBuilder editor={fieldEditor} preview={proposalPreview} />
+    activeContent = <ProposalBuilder editor={fieldEditor} preview={proposalPreview} productIntelligence={productIntelligence} recommendation={playbookRecommendation} />
   } else if (activeView === 'export') {
     activeContent = (
       <ExportPrep
@@ -1015,6 +1057,7 @@ function App() {
         }}
         onGenerateCustomerPdf={() => openCustomerPdf()}
         parseContext={parseContext}
+        recommendation={playbookRecommendation}
         selectedPlaybook={selectedPlaybook}
       />
     )

@@ -12,6 +12,7 @@ export default function ExportPrep({
   onExportJson,
   onGenerateCustomerPdf,
   parseContext,
+  recommendation,
   selectedPlaybook,
 }) {
   return (
@@ -30,12 +31,21 @@ export default function ExportPrep({
           <dl className="source-ledger">
             <div><dt>Source</dt><dd>{currentSourceLabel}</dd></div>
             <div><dt>Playbook</dt><dd>{selectedPlaybook?.name || 'Not selected'}</dd></div>
+            <div><dt>Recommended path</dt><dd>{recommendation?.label || 'Not evaluated'}</dd></div>
             <div><dt>Customer-facing label</dt><dd>{parseContext.outputLabel || 'Fireplace Project Proposal'}</dd></div>
             <div><dt>Export status</dt><dd>{audit.exportStatus}</dd></div>
           </dl>
           {audit.blockingFieldLabels.length ? (
             <ul className="notice-list notice-list--warning">{audit.blockingFieldLabels.map((label) => <li key={label}>{label}</li>)}</ul>
           ) : <p className="empty-copy">No required fields are blocking export.</p>}
+          {recommendation?.warnings?.length ? (
+            <div className="export-warning-block">
+              <h4>Internal cautions</h4>
+              <ul className="notice-list notice-list--warning">
+                {recommendation.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </div>
+          ) : null}
         </section>
         <section className="workbench-panel">
           <h3>Copy lanes</h3>

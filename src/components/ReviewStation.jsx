@@ -1,3 +1,11 @@
+const defaultProductIntelligence = {
+  snapshotDate: '',
+  exactMatchCount: 0,
+  suggestionCount: 0,
+  needsReviewCount: 0,
+  rows: [],
+}
+
 export default function ReviewStation({
   assignmentOptions,
   assignmentTargets,
@@ -8,10 +16,13 @@ export default function ReviewStation({
   loadedOcrItem,
   ocrReviewConfirmed,
   parseContext,
+  productIntelligence = defaultProductIntelligence,
   setAssignmentTargets,
   setOcrReviewConfirmed,
   onMarkLoadedOcrChecked,
 }) {
+  const productIntel = { ...defaultProductIntelligence, ...productIntelligence }
+  const productRows = Array.isArray(productIntel.rows) ? productIntel.rows : []
   const isOcr = parseContext.extractionSource === 'ocr'
 
   return (
@@ -79,6 +90,67 @@ export default function ReviewStation({
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="product-intel-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Internal Product Match</h3>
+            <p className="section-caption">
+              BisTrack catalog snapshot {productIntel.snapshotDate || 'local'} - exact code matches only enrich the line. Suggestions require review.
+            </p>
+          </div>
+          <div className="product-intel-summary">
+            <span>{productIntel.exactMatchCount} exact</span>
+            <span>{productIntel.suggestionCount} suggested</span>
+            <span>{productIntel.needsReviewCount} need review</span>
+          </div>
+        </div>
+        {productRows.length ? (
+          <div className="product-intel-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Quote line</th>
+                  <th>Catalog match</th>
+                  <th>Group</th>
+                  <th>Internal badges</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productRows.map((row) => (
+                  <tr key={row.id} className={row.needsReview ? 'needs-review' : ''}>
+                    <td>
+                      <strong>{row.code || 'No code'}</strong>
+                      <span>{row.description || 'No description parsed'}</span>
+                    </td>
+                    <td>
+                      {row.match ? (
+                        <>
+                          <strong>{row.match.product.code}</strong>
+                          <span>
+                            {row.match.product.name || row.match.product.description || row.match.product.name}
+                            {row.match.matchType === 'suggestion' ? ` - suggested ${(row.match.score * 100).toFixed(0)}%` : ''}
+                          </span>
+                        </>
+                      ) : (
+                        <span>No catalog suggestion</span>
+                      )}
+                    </td>
+                    <td>{row.group}</td>
+                    <td>
+                      <div className="product-badge-row">
+                        {(row.badges || ['Needs Review']).map((badge) => <span className="product-badge" key={`${row.id}-${badge}`}>{badge}</span>)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="empty-copy">Line items will appear here after a BisTrack PDF or pasted detail rows are parsed.</p>
+        )}
       </div>
 
       <div className="needs-review-box">

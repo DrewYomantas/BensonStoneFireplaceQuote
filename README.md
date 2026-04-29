@@ -57,6 +57,8 @@ Output rules:
 - provides grouped copy buttons for customer, quote meta, page 1, page 2, and all fields
 - exports JSON for records
 - supports a bulk BisTrack PDF queue for processing several quote/order PDFs together
+- matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
+- recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
 - provides a simple internal preview and print/PDF option
 
 ## What this app does not do yet
@@ -66,6 +68,20 @@ Output rules:
 - it does not recalculate totals unless someone explicitly changes them by hand
 - it does not replace the official quote system
 - it does not bulk-download a ZIP of generated customer PDFs yet
+
+## Local BisTrack product snapshot
+
+The app can load the processed BisTrack seed files in [src/data/bistrack-snapshot](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/bistrack-snapshot) as an internal-only snapshot. Exact product-code matches enrich Review Station with display, stock, availability, on-order, margin-sensitive, and needs-review badges. Fuzzy description matches are suggestions only and never overwrite parsed or OCR values.
+
+Proposal Builder groups matched lines into Fireplace Unit, Venting / Chimney, Controls / Remotes, Doors / Screens, Trim / Surround, Accessories, and Delivery / Labor / Service / Adjustments. Customer-facing exports do not include average cost, standard buy, margin %, inventory turns, supplier purchase totals, or internal product rank.
+
+The real snapshot files are local/private and ignored by git. The app loads them when present, but the committed code must still build without the private seed folder.
+
+## Proposal playbook recommendations
+
+Proposal Playbooks recommends a customer-facing lane such as Warm Showroom Recap, Old Quote Re-Engagement, Value-Focused Option Comparison, Premium Design Proposal, Missing-Info Clarification, or Display Model Follow-Up. Recommendations are deterministic and explain why the lane fits, what to review before sending, and which conservative copy scaffold is safe to use.
+
+Sales staff can always override the recommendation. Internal cautions are also surfaced in Proposal Builder and Export / Send Prep when product matches need review, contact or install details are missing, a source appears paid/closed/reference, an old quote may need refresh, or display-model wording needs salesperson confirmation.
 
 ## Template source
 
@@ -117,6 +133,21 @@ Current automated checks cover:
 - empty/sparse text raises scanned-PDF warning
 - total mismatch warning
 - grill/outdoor keyword detection adjusts output label
+
+**Product catalog snapshot (`src/lib/productCatalog.test.js`)**
+- exact product-code matching
+- fuzzy suggestion behavior that stays review-required
+- manual order line grouping
+- pasted-note detail rows as a matching source
+- sensitive internal metric blocklist
+
+**Proposal playbooks (`src/lib/proposalPlaybooks.test.js`)**
+- recent complete quote recommendation
+- old quote re-engagement recommendation
+- missing-info recommendation and warnings
+- display model follow-up wording guardrail
+- paid/closed warning
+- sensitive-term exclusion from customer-facing playbook copy
 
 ## Document-type behavior
 
