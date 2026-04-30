@@ -111,7 +111,7 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
             ) : (
               <section className="cp-empty-panel">
                 <h2>Project scope</h2>
-                <p>Reviewed BisTrack scope and investment are summarized in the detailed scope section.</p>
+                <p>Your fireplace selections, project materials, and investment summary are included in this proposal.</p>
               </section>
             )}
 

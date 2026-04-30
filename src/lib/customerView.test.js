@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { buildCustomerView, collectDetailItems, collectPackages } from './customerView.js'
 
@@ -99,4 +100,10 @@ test('collectDetailItems skips empty detail sections', () => {
   assert.equal(sections.length, 1)
   assert.equal(sections[0].rows.length, 1)
   assert.equal(sections[0].rows[0].item, 'Stove')
+})
+
+test('customer proposal copy does not expose internal BisTrack wording', () => {
+  const source = readFileSync(new URL('../components/CustomerProposal.jsx', import.meta.url), 'utf8')
+
+  assert.equal(/BisTrack/i.test(source), false)
 })
