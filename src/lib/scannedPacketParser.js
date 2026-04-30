@@ -104,6 +104,40 @@ function getStatusFromRecommendation(recommendation) {
   return 'Reference'
 }
 
+const STREET_TYPE = '(?:St|Street|Dr|Drive|Rd|Road|Ave|Avenue|Ln|Lane|Way|Ct|Court|Pl|Place|Cir|Circle|Blvd|Boulevard|Hwy|Highway|Pkwy|Parkway|Ter|Terrace|Trail|Tr)'
+const STORE_ADDRESS_HINT = /1100\s+eleventh|1100\s+11th|bensonstone/i
+
+function extractStreetAddressFallback(text) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  for (const line of lines) {
+    if (STORE_ADDRESS_HINT.test(line)) continue
+    const match = line.match(new RegExp(`(\\d{1,5}\\s+[A-Za-z][A-Za-z'\\.]*(?:\\s+[A-Za-z][A-Za-z'\\.]*){0,3}\\s+${STREET_TYPE})\\b`, 'i'))
+    if (match) return match[1].replace(/\s+/g, ' ').trim()
+  }
+  return ''
+}
+
+function extractCityStateZipFallback(text) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  const stripStreet = new RegExp(`^.*\\b${STREET_TYPE}\\b\\.?\\s+`, 'i')
+  for (const line of lines) {
+    if (STORE_ADDRESS_HINT.test(line)) continue
+    const trimmed = line.replace(stripStreet, '')
+    const match = trimmed.match(/([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s*,\s*([A-Za-z]+)\.?\s*,?\s*(\d{5}(?:-\d{4})?)/)
+    if (match) return `${match[1]}, ${match[2]}, ${match[3]}`
+  }
+  return ''
+}
+
+function extractCustomerNameFallback(text, streetAddress) {
+  if (!streetAddress) return ''
+  const escaped = streetAddress.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const before = new RegExp(`([A-Z][A-Za-z'\\-]+(?:\\s+(?:&|and)\\s+[A-Z][A-Za-z'\\-]+)?(?:\\s+[A-Z][A-Za-z'\\-]+){1,2})\\s+${escaped}`, 'i')
+  const match = text.match(before)
+  if (match) return match[1].replace(/\s+/g, ' ').trim()
+  return ''
+}
+
 function extractAddressBlock(text, label) {
   const source = clean(text)
   const labelPattern = new RegExp(`${label}\\s*\\n+([\\s\\S]{0,220})`, 'i')
@@ -150,7 +184,7 @@ export function extractScannedBisTrackFields(rawText) {
 
   setIfBlank('QUOTE_NO', getFirstMatch(flat, [/quote\s*no\s*(\d{4,7})/i, /quotation\s+(\d{4,7})/i, /order\s*no\s*(\d{4,7})/i]))
   setIfBlank('QUOTE_DATE', getFirstMatch(flat, [/quote\s*date\s*(\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)/i, /date\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i]))
-  setIfBlank('CUSTOMER_ID', getFirstMatch(flat, [/customer\s*id\s*(\d{3,6})/i]))
+  setIfBlank('CUSTOMER_ID', getFirstMatch(flat, [/customer\s*id\s*([A-Za-z0-9_]{3,30})/i]))
   setIfBlank('PAYMENT_TERMS', getFirstMatch(flat, [/terms\s*(Pre\s*Paid|PrePaid|Cash|COD|Net\s*\d+)/i]))
   setIfBlank('PO_NUMBER', getFirstMatch(flat, [/PO#?\s*([^\n]{2,80}?)(?:Delivery|Taken By|Sales Rep|Line|Special Instructions|$)/i]))
   setIfBlank('TAKEN_BY', getFirstMatch(flat, [/taken\s*by\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i]))
@@ -165,6 +199,24 @@ export function extractScannedBisTrackFields(rawText) {
   setIfBlank('PROJECT_ADDRESS_LINE_1', delivery.addressLine1 || invoice.addressLine1)
   setIfBlank('PROJECT_CITY_STATE_ZIP', delivery.cityStateZip || invoice.cityStateZip)
   setIfBlank('PROJECT_PHONE', delivery.phone)
+
+  if (!fields.INVOICE_ADDRESS_LINE_1) {
+    const streetFallback = extractStreetAddressFallback(rawText)
+    setIfBlank('INVOICE_ADDRESS_LINE_1', streetFallback)
+    setIfBlank('PROJECT_ADDRESS_LINE_1', streetFallback)
+  }
+  if (!fields.INVOICE_CITY_STATE_ZIP) {
+    const cszFallback = extractCityStateZipFallback(rawText)
+    setIfBlank('INVOICE_CITY_STATE_ZIP', cszFallback)
+    setIfBlank('PROJECT_CITY_STATE_ZIP', cszFallback)
+  }
+  if (!fields.CUSTOMER_NAME) {
+    setIfBlank('CUSTOMER_NAME', extractCustomerNameFallback(rawText, fields.INVOICE_ADDRESS_LINE_1))
+  }
+  if (!fields.CUSTOMER_PHONE) {
+    const phoneMatch = rawText.match(/Tel\.?\s*1?\s*[-:]?\s*[A-Za-z]*\s*(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/i)
+    if (phoneMatch) setIfBlank('CUSTOMER_PHONE', phoneMatch[1])
+  }
 
   if (fields.PROJECT_CITY_STATE_ZIP && !fields.PROJECT_CITY_STATE) {
     fields.PROJECT_CITY_STATE = fields.PROJECT_CITY_STATE_ZIP.replace(/\s+\d{5}(?:-\d{4})?\b.*$/, '').trim()
