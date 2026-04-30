@@ -829,6 +829,39 @@ html, body, #root {
   background: rgba(253, 248, 238, 0.68);
 }
 
+.cp-scope-panel {
+  padding: 16px 18px;
+  border: 1px solid #d8b886;
+  border-radius: 9px;
+  background: #fff8ec;
+}
+
+.cp-scope-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.cp-scope-list li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.32;
+}
+
+.cp-scope-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b46a2d;
+}
+
 .cp-section h2 {
   border-bottom: 0;
   padding-bottom: 0;
@@ -955,6 +988,32 @@ html, body, #root {
 
 .cp-detail-section {
   overflow: hidden;
+}
+
+.cp-detail-section--scope {
+  padding-bottom: 14px;
+}
+
+.cp-detail-section--scope .cp-scope-list {
+  padding: 16px 18px 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 22px;
+}
+
+.cp-scope-notes {
+  margin: 12px 18px 0;
+  padding: 12px 14px;
+  border: 1px solid #e5c79c;
+  border-radius: 8px;
+  background: #fff0d9;
+}
+
+.cp-scope-notes h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #b46a2d;
 }
 
 .cp-detail-head {
@@ -1155,6 +1214,20 @@ html, body, #root {
     min-height: 1.65in;
   }
 
+  .cp-scope-panel {
+    padding: 0.11in 0.14in;
+  }
+
+  .cp-scope-panel .cp-scope-list {
+    gap: 0.045in;
+  }
+
+  .cp-scope-panel .cp-scope-list li {
+    font-size: 9.2px;
+    line-height: 1.18;
+    padding-left: 0.14in;
+  }
+
   .cp-sidebar {
     gap: 0.12in;
   }
@@ -1187,6 +1260,30 @@ html, body, #root {
   .cp-detail-head {
     min-height: 0.34in;
     padding: 0.08in 0.1in;
+  }
+
+  .cp-detail-section--scope {
+    padding-bottom: 0.1in;
+  }
+
+  .cp-detail-section--scope .cp-scope-list {
+    padding: 0.12in 0.16in 0.05in;
+    gap: 0.07in 0.16in;
+  }
+
+  .cp-detail-section--scope .cp-scope-list li {
+    font-size: 8.8px;
+    line-height: 1.18;
+    padding-left: 0.13in;
+  }
+
+  .cp-scope-notes {
+    margin: 0.08in 0.16in 0;
+    padding: 0.08in 0.1in;
+  }
+
+  .cp-scope-notes h3 {
+    font-size: 8.5px;
   }
 
   .cp-detail-head h3 {

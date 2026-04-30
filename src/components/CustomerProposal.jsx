@@ -29,6 +29,16 @@ function Divider() {
   return <div className="cp-divider" aria-hidden="true"><span /></div>
 }
 
+function ScopeList({ value }) {
+  const lines = String(value || '').split('\n').map((line) => line.trim()).filter(Boolean)
+  if (!lines.length) return null
+  return (
+    <ul className="cp-scope-list">
+      {lines.map((line) => <li key={line}>{line}</li>)}
+    </ul>
+  )
+}
+
 export default function CustomerProposal({ fields, parseContext, includeDeliveryDate = false }) {
   const view = buildCustomerView(fields, parseContext, { includeDeliveryDate })
   const packages = collectPackages(fields)
@@ -114,14 +124,6 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
                 <p>Your fireplace selections, project materials, and investment summary are included in this proposal.</p>
               </section>
             )}
-
-            {fields.INSTALLATION_SCOPE ? (
-              <section className="cp-install-band">
-                <h2>Installation scope</h2>
-                <Block value={fields.INSTALLATION_SCOPE} multiline />
-                {fields.INSTALLATION_TOTAL ? <strong>{fields.INSTALLATION_TOTAL}</strong> : null}
-              </section>
-            ) : null}
           </div>
 
           <aside className="cp-sidebar">
@@ -168,7 +170,20 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
           <Divider />
         </header>
 
-        {details.length ? (
+        {fields.INSTALLATION_SCOPE ? (
+          <section className="cp-detail-section cp-detail-section--scope">
+            <div className="cp-detail-head">
+              <h3>Included project scope</h3>
+            </div>
+            <ScopeList value={fields.INSTALLATION_SCOPE} />
+            {fields.PROJECT_NOTES ? (
+              <div className="cp-scope-notes">
+                <h3>Notes and allowances</h3>
+                <Block value={fields.PROJECT_NOTES} multiline />
+              </div>
+            ) : null}
+          </section>
+        ) : details.length ? (
           <div className="cp-detail-grid">
             {details.map((section) => (
               <section className="cp-detail-section" key={section.n}>

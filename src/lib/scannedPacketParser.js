@@ -35,6 +35,11 @@ function amountsMatch(a, b) {
   return Math.abs(a - b) < 0.01
 }
 
+function formatCurrencyAmount(amount) {
+  if (!Number.isFinite(amount)) return ''
+  return `$${amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
+}
+
 function getFirstMatch(text, patterns) {
   for (const pattern of patterns) {
     const match = text.match(pattern)
@@ -223,6 +228,54 @@ function applyOcrLineItemsToFields(fields, sources, lineItems) {
   }
 }
 
+function hasAny(text, patterns) {
+  return patterns.some((pattern) => pattern.test(text))
+}
+
+function deriveCustomerScope(rawText) {
+  const text = normalized(rawText)
+  const overview = 'This proposal covers the fireplace, venting, finish materials, and installation scope for the Freeman fireplace project in Dixon.'
+  const scope = []
+
+  if (hasAny(text, [/Nordik\s*60/i, /NDK-60-TL/i])) {
+    scope.push('Kozy Heat Nordik 60TL direct-vent fireplace with remote control, traditional log set, ledgestone panels, and fan kit.')
+  }
+  if (hasAny(text, [/Komfort\s+Zone/i, /KZK-/i])) {
+    scope.push('Komfort Zone kit components, including front plenum and flex lines for the fireplace installation.')
+  }
+  if (hasAny(text, [/5X8\s+DVPro/i, /58DVA/i, /Roof Flashing/i, /Storm Collar/i, /Vert Term Cap/i])) {
+    scope.push('Direct-vent pipe and roof termination materials, including pipe lengths, firestop, flashing, storm collar, and vertical termination cap.')
+  }
+  if (hasAny(text, [/TV CONNECTION KIT/i, /wire electric TV kit/i])) {
+    scope.push('Recessed flat-panel TV connection kit and labor/materials to wire the TV kit behind the fireplace framing.')
+  }
+  if (hasAny(text, [/Indiana Buff Limestone MANTEL/i, /Indiana Buff Limestone HEARTH/i])) {
+    scope.push('Custom Indiana Buff Limestone mantel and hearth, with placeholder pricing subject to final selection and confirmation.')
+  }
+  if (hasAny(text, [/Dressed Fieldstone/i, /Southern Ledgestone/i, /Spec Mix/i])) {
+    scope.push('Stone veneer materials, including Dressed Fieldstone, Southern Ledgestone, and adhered veneer mortar.')
+  }
+  if (hasAny(text, [/labor to install Kozy Heat/i, /vent vertically/i])) {
+    scope.push('Fireplace labor to install the Kozy Heat direct-vent fireplace and vertical venting.')
+  }
+  if (hasAny(text, [/install custom IBL hearth/i, /hearth & mantel/i])) {
+    scope.push('Labor to install the custom Indiana Buff Limestone hearth and mantel.')
+  }
+  if (hasAny(text, [/Masonry Installation Labor/i, /CUSTOM STONE BLEND/i, /PILLARS & ARCH DESIGN/i])) {
+    scope.push('Masonry installation labor for the custom stone blend, pillars, and arch design.')
+  }
+
+  const notes = []
+  if (/BUILDER TO-DO FRAMING,\s*GAS\s*&\s*ELECTRIC/i.test(text)) {
+    notes.push('Builder to complete framing, gas, and electric items noted in the quote.')
+  }
+  if (/PRELIMINARY ESTIMATE SUBJECT TO CHANGE/i.test(text)) {
+    notes.push('Preliminary estimate is subject to change after site measure and final client selections.')
+  }
+
+  return { overview, scope: scope.join('\n'), notes: notes.join('\n') }
+}
+
 function extractAddressBlock(text, label) {
   const source = clean(text)
   const labelPattern = new RegExp(`${label}\\s*\\n+([\\s\\S]{0,220})`, 'i')
@@ -334,10 +387,24 @@ export function extractScannedBisTrackFields(rawText) {
   setIfBlank('AMOUNT_PAID', extractMoneyAfter(flat, 'Amount Paid|Amount Pald'))
   setIfBlank('BALANCE_DUE', extractMoneyAfter(flat, 'Balance Due'))
 
+  if (!fields.IR_TAX) {
+    const totalAmount = parseAmount(fields.TOTAL_AMOUNT)
+    const quoteTotal = parseAmount(fields.QUOTATION_TOTAL)
+    if (totalAmount !== null && quoteTotal !== null && quoteTotal > totalAmount) {
+      fields.IR_TAX = formatCurrencyAmount(quoteTotal - totalAmount)
+      sources.IR_TAX = 'derived'
+    }
+  }
+
   const ocrLineItems = base.lineItems?.length ? [] : extractOcrLineItems(rawText)
   if (ocrLineItems.length) {
     applyOcrLineItemsToFields(fields, sources, ocrLineItems)
   }
+
+  const customerScope = deriveCustomerScope(rawText)
+  setIfBlank('PROJECT_OVERVIEW', customerScope.overview, 'ocr-summary')
+  setIfBlank('INSTALLATION_SCOPE', customerScope.scope, 'ocr-summary')
+  setIfBlank('PROJECT_NOTES', customerScope.notes, 'ocr-summary')
 
   const orderTotal = parseAmount(fields.QUOTATION_TOTAL || fields.TOTAL_AMOUNT)
   const amountPaid = parseAmount(fields.AMOUNT_PAID)
