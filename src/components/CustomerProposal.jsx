@@ -34,6 +34,24 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
           {fields.PROJECT_TITLE ? <p className="cp-subtitle">{fields.PROJECT_TITLE}</p> : null}
         </div>
 
+        <div className="cp-meta-band">
+          {[
+            ['Quote No', fields.QUOTE_NO],
+            ['Quote Date', fields.QUOTE_DATE],
+            ['Customer ID', fields.CUSTOMER_ID],
+            ['Terms', fields.PAYMENT_TERMS],
+            ['PO Number', fields.PO_NUMBER],
+            ['Good For', fields.QUOTE_GOOD_FOR],
+            ['Taken By', fields.TAKEN_BY],
+            ['Sales Rep', fields.SALES_REP],
+          ].filter(([, value]) => value).map(([label, value]) => (
+            <div className="cp-meta-cell" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </div>
+
         <div className="cp-summary-grid">
           <div className="cp-card">
             <h2>Customer</h2>
