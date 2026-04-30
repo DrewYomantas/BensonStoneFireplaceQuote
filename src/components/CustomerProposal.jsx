@@ -110,8 +110,8 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
               </section>
             ) : (
               <section className="cp-empty-panel">
-                <h2>Project packages</h2>
-                <p>Package selections will appear here once reviewed.</p>
+                <h2>Project scope</h2>
+                <p>Reviewed BisTrack scope and investment are summarized in the detailed scope section.</p>
               </section>
             )}
 

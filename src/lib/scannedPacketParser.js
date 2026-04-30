@@ -179,7 +179,7 @@ function looksLikeBadTakenBy(value) {
 }
 
 function extractOcrLineItems(text) {
-  const rowPattern = /^\s*(\d{1,3})\s*[\]|]?\s*([A-Za-z0-9_.-]+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(EA|FT|LF|EACH|PC|PCS|PR|BX|BG|SET|SF|SY|YD|HR|HP|BB)\s*\|?\s*([\d,]+\.\d{2})\s*(?:EA|FT|LF|HP|BB)?\s+[\d,]+(?:\.\d{1,2})?\s+([\d,]+(?:\.\d{1,2})?)\s*$/i
+  const rowPattern = /^\s*(\d{1,3})\s*[\]|[]?\s*([A-Za-z0-9_.-]+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(EA|FT|LF|EACH|PC|PCS|PR|BX|BG|SET|SF|SY|YD|HR|HP|BB)\s*\|?\s*([\d,]+\.\d{2})\s*(?:EA|FT|LF|HP|BB)?\s+[\d,]+(?:\.\d{1,2})?\s+([\d,]+(?:\.\d{1,2})?)\s*$/i
   return text
     .split('\n')
     .map((line) => line.trim().replace(/\s+/g, ' '))

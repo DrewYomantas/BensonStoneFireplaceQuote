@@ -1066,12 +1066,186 @@ html, body, #root {
 }
 
 @media print {
+  @page {
+    size: Letter;
+    margin: 0;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   .cp-page {
-    min-height: 100vh;
-    padding: 32px 36px 30px !important;
+    width: 8.5in;
+    height: 11in;
+    min-height: 11in;
+    max-height: 11in;
+    padding: 0.28in 0.34in 0.3in !important;
     box-shadow: none;
     background-image:
       linear-gradient(90deg, rgba(247, 240, 229, 0) 0 62%, rgba(247, 240, 229, 0.78) 78%, rgba(247, 240, 229, 0.98) 100%),
       url('/benson-template-fireplace.png');
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+  }
+
+  .cp-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .customer-proposal {
+    width: 8.5in;
+    gap: 0;
+  }
+
+  .cp-template-head {
+    margin-bottom: 0.28in;
+  }
+
+  .cp-logo-plaque {
+    min-height: 0.58in;
+    padding: 0.09in 0.16in;
+  }
+
+  .cp-brand-mark {
+    font-size: 24px;
+  }
+
+  .cp-brand-tag {
+    font-size: 8px;
+  }
+
+  .cp-title-band {
+    margin-bottom: 0.18in;
+  }
+
+  .cp-title {
+    font-size: 34px;
+  }
+
+  .cp-subtitle {
+    font-size: 14px;
+  }
+
+  .cp-divider {
+    margin-top: 0.12in;
+    height: 0.16in;
+  }
+
+  .cp-meta-band {
+    min-height: 1.1in;
+    margin-bottom: 0.18in;
+    padding: 0.16in 0.18in;
+    gap: 0.12in 0.18in;
+  }
+
+  .cp-meta-cell strong {
+    font-size: 12px;
+  }
+
+  .cp-page-one-grid {
+    grid-template-columns: minmax(0, 1fr) 2.25in;
+    gap: 0.18in;
+  }
+
+  .cp-empty-panel {
+    min-height: 1.65in;
+  }
+
+  .cp-sidebar {
+    gap: 0.12in;
+  }
+
+  .cp-sidebar section {
+    padding: 0.13in 0.16in;
+  }
+
+  .cp-line {
+    font-size: 11px;
+  }
+
+  .cp-page-header {
+    margin-bottom: 0.14in;
+  }
+
+  .cp-page-header h2 {
+    font-size: 30px;
+    margin-bottom: 0.06in;
+  }
+
+  .cp-page-header p {
+    font-size: 13px;
+  }
+
+  .cp-detail-grid {
+    gap: 0.12in;
+  }
+
+  .cp-detail-head {
+    min-height: 0.34in;
+    padding: 0.08in 0.1in;
+  }
+
+  .cp-detail-head h3 {
+    font-size: 9px;
+  }
+
+  .cp-detail-subtotal {
+    font-size: 9px;
+  }
+
+  .cp-detail-table {
+    font-size: 7.5px;
+    line-height: 1.12;
+  }
+
+  .cp-detail-table th {
+    padding: 0.035in 0.045in;
+  }
+
+  .cp-detail-table td {
+    padding: 0.035in 0.045in;
+  }
+
+  .cp-detail-table th:nth-child(2),
+  .cp-detail-table th:nth-child(3),
+  .cp-detail-table th:nth-child(4),
+  .cp-detail-table td:nth-child(2),
+  .cp-detail-table td:nth-child(3),
+  .cp-detail-table td:nth-child(4) {
+    width: 0.46in;
+  }
+
+  .cp-bottom-grid {
+    margin-top: 0.14in;
+    gap: 0.16in;
+    grid-template-columns: minmax(0, 1fr) 2.2in;
+  }
+
+  .cp-terms {
+    padding: 0.1in 0.12in;
+  }
+
+  .cp-acceptance {
+    padding: 0.12in;
+  }
+
+  .cp-acceptance p {
+    font-size: 10px;
+  }
+
+  .cp-signature {
+    margin-top: 0.12in;
+    gap: 0.14in;
+  }
+
+  .cp-footer {
+    left: 0.34in;
+    right: 0.34in;
+    bottom: 0.22in;
+    font-size: 8px;
   }
 }

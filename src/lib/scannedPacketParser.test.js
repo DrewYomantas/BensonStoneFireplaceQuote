@@ -76,6 +76,7 @@ Tel. - Carroll 832-405-9826 Tel 2 - Kathy 815-973-1404 Taken By ne
 Tel 2 - Kathy 815-973-1404 Sales Rep Liam Mila
 1 | NDK-60-TL Kozy Heat Nordik 60TL Fireplace - Includes Remote 1 EA | 7,100.00 EA 497.00 6,603.00
 2 |NK60TL-500 Kozy Heat 60 TL Traditional Log Set - NK60TL-500 1 EA 713.25 EA 49.93 663.32
+3 [BS-FP Kozy Heat Nordik 60TL Ledgestone Panels - 1 EA 791.25 EA 55.39 735.86
 1100 Eleventh Street
 Rockford, lllinois 61104
 Quote No 74600
@@ -156,6 +157,8 @@ test('repairs mashed two-column OCR customer and quote fields', () => {
   assert.equal(result.fields.SALES_REP, 'Liam Milanos')
   assert.equal(result.fields.DETAIL_1_ITEM_1, 'NDK-60-TL - Kozy Heat Nordik 60TL Fireplace - Includes Remote')
   assert.equal(result.fields.DETAIL_1_TOTAL_1, '$6,603.00')
-  assert.equal(result.fields.DETAIL_1_ITEM_3, 'zz_F-Install_0826 - Masonry Installation Labor')
-  assert.equal(result.lineItems.length, 3)
+  assert.equal(result.fields.DETAIL_1_ITEM_3, 'BS-FP - Kozy Heat Nordik 60TL Ledgestone Panels -')
+  assert.equal(result.fields.DETAIL_1_TOTAL_3, '$735.86')
+  assert.equal(result.fields.DETAIL_1_ITEM_4, 'zz_F-Install_0826 - Masonry Installation Labor')
+  assert.equal(result.lineItems.length, 4)
 })
