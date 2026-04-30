@@ -9,6 +9,7 @@ import {
 } from './lib/fieldContract.js'
 import { parseBisTrackText } from './lib/biztrackPdfParser.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
+import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 
 const emptyContext = {
@@ -97,12 +98,13 @@ export default function App() {
           },
         })
         const combinedText = ocr.pages.map((page) => page.text).join('\n\n')
-        const parsed = parseBisTrackText(combinedText)
+        const parsed = extractScannedBisTrackFields(combinedText)
         loadParsed(parsed)
         const avgConfidence = Math.round(
           ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
         )
-        setStatus(`OCR complete (avg confidence ${avgConfidence}%). Review every field carefully on the left — scanned text often needs cleanup.`)
+        const populated = Object.values(parsed.fields).filter(Boolean).length
+        setStatus(`OCR complete (avg confidence ${avgConfidence}%, ${populated} fields populated). Review every field on the left — scanned text often needs cleanup.`)
       }
     } catch (err) {
       setStatus(`Could not read PDF: ${err.message || err}`)
