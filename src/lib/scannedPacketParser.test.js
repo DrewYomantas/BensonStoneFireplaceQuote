@@ -63,6 +63,37 @@ Amount Paid $954.81
 Balance Due $0.00
 `
 
+const MASHED_TWO_COLUMN_OCR = `
+ENSON STONE
+Quote No 74600
+Quote Date 04/30/2026
+10:30 AM
+Customer ID carrolifreeman
+Invoice Address i i
+Delivery Address - Prepaid
+Carroll & Kathy Freeman 1072 Peter Dr PO# INST - Fireplace Build
+Tel. - Carroll 832-405-9826 Tel 2 - Kathy 815-973-1404 Taken By ne
+Tel 2 - Kathy 815-973-1404 Sales Rep Liam Mila
+1 | NDK-60-TL Kozy Heat Nordik 60TL Fireplace - Includes Remote 1 EA | 7,100.00 EA 497.00 6,603.00
+2 |NK60TL-500 Kozy Heat 60 TL Traditional Log Set - NK60TL-500 1 EA 713.25 EA 49.93 663.32
+1100 Eleventh Street
+Rockford, lllinois 61104
+Quote No 74600
+Quote Date 04/30/2026
+10:30 AM
+Customer ID carrolifreeman
+Invoice Addres j
+S Delivery Address Terms PrePaid
+Carroll & Kathy Freeman 1072 Peter Dr PO# INST - Fireplace Build
+1072 Peter Dr Dixon, Illinois, 61021 Delivery By 05/15/2026
+| Dixon, lllinois, 61021 Tel.1 - Carroll 832-405-9826 Liam Mi
+? am Milanos
+Tel. 1 - Carroll 832-405-9826 Tel.2 - Kathy 815-973-1404 et = ; Liam Milanos
+27|zz_F-Install_0826 Masonry Installation Labor 1 EA | 7,330.00 EA 0.00 7,330.04
+Total Amount $24,867.21
+Quotation Total $26,150.59
+`
+
 test('classifies OCR text page types', () => {
   assert.equal(classifyScannedPage(OCR_QUOTE).type, 'bistrack_quote')
   assert.equal(classifyScannedPage(SERVICE_ORDER).type, 'service_order')
@@ -111,4 +142,20 @@ test('paid closed orders are not follow-up candidates', () => {
   assert.equal(packet.pages[0].parsed.context.fullyPaid, true)
   assert.equal(packet.followUpItems.length, 1)
   assert.equal(packet.followUpItems[0].quoteNo, '70655')
+})
+
+test('repairs mashed two-column OCR customer and quote fields', () => {
+  const result = extractScannedBisTrackFields(MASHED_TWO_COLUMN_OCR)
+
+  assert.equal(result.fields.CUSTOMER_NAME, 'Carroll & Kathy Freeman')
+  assert.equal(result.fields.INVOICE_ADDRESS_LINE_1, '1072 Peter Dr')
+  assert.equal(result.fields.INVOICE_CITY_STATE_ZIP, 'Dixon, Illinois, 61021')
+  assert.equal(result.fields.PROJECT_CITY_STATE_ZIP, 'Dixon, Illinois, 61021')
+  assert.equal(result.fields.PO_NUMBER, 'INST - Fireplace Build')
+  assert.equal(result.fields.TAKEN_BY, '')
+  assert.equal(result.fields.SALES_REP, 'Liam Milanos')
+  assert.equal(result.fields.DETAIL_1_ITEM_1, 'NDK-60-TL - Kozy Heat Nordik 60TL Fireplace - Includes Remote')
+  assert.equal(result.fields.DETAIL_1_TOTAL_1, '$6,603.00')
+  assert.equal(result.fields.DETAIL_1_ITEM_3, 'zz_F-Install_0826 - Masonry Installation Labor')
+  assert.equal(result.lineItems.length, 3)
 })

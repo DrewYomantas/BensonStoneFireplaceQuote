@@ -20,6 +20,10 @@ function formatCurrencyMatch(match) {
   return `$${numeric.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 }
 
+function formatMoneyValue(value) {
+  return formatCurrencyMatch(value)
+}
+
 function parseAmount(raw) {
   if (!raw) return null
   const numeric = Number(String(raw).replace(/[^0-9.-]/g, ''))
@@ -117,14 +121,24 @@ function extractStreetAddressFallback(text) {
   return ''
 }
 
+function normalizeCityStateZip(value) {
+  return String(value || '')
+    .replace(/\blllinois\b/gi, 'Illinois')
+    .replace(/\billinois\b/gi, 'Illinois')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function extractCityStateZipFallback(text) {
   const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
   const stripStreet = new RegExp(`^.*\\b${STREET_TYPE}\\b\\.?\\s+`, 'i')
   for (const line of lines) {
     if (STORE_ADDRESS_HINT.test(line)) continue
+    if (isStoreCityStateZip(line)) continue
     const trimmed = line.replace(stripStreet, '')
     const match = trimmed.match(/([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\s*,\s*([A-Za-z]+)\.?\s*,?\s*(\d{5}(?:-\d{4})?)/)
-    if (match) return `${match[1]}, ${match[2]}, ${match[3]}`
+    if (match) return normalizeCityStateZip(`${match[1]}, ${match[2]}, ${match[3]}`)
   }
   return ''
 }
@@ -136,6 +150,77 @@ function extractCustomerNameFallback(text, streetAddress) {
   const match = text.match(before)
   if (match) return match[1].replace(/\s+/g, ' ').trim()
   return ''
+}
+
+function extractPoFallback(text) {
+  const match = normalized(text).match(/PO#?\s*([A-Z0-9][A-Za-z0-9 /&.,#-]{2,80}?)(?=\s+(?:\d{1,5}\s+[A-Za-z]|Delivery By|Taken By|Sales Rep|Tel\.?|Line\b|Page\b|$))/i)
+  return match?.[1]?.trim() || ''
+}
+
+function extractSalesRepFallback(text) {
+  const flat = normalized(text)
+  const candidates = [
+    ...flat.matchAll(/(?:Sales Rep|ales Rep)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2})/gi),
+    ...flat.matchAll(/\b(Liam\s+Milanos)\b/gi),
+  ]
+  for (const candidate of candidates) {
+    const value = candidate[1].replace(/\s+/g, ' ').trim()
+    if (!/^(Tel|Line|Page|Quote|Date)$/i.test(value)) return value
+  }
+  return ''
+}
+
+function isStoreCityStateZip(value) {
+  return /Rockford,\s*(?:Il|Illinois),?\s*61104/i.test(String(value || '').replace(/\blllinois\b/gi, 'Illinois'))
+}
+
+function looksLikeBadTakenBy(value) {
+  return !value || /\b(?:Tel|Sales|Rep|Line|Page|Quote|Printed)\b/i.test(value) || value.split(/\s+/).length < 2
+}
+
+function extractOcrLineItems(text) {
+  const rowPattern = /^\s*(\d{1,3})\s*[\]|]?\s*([A-Za-z0-9_.-]+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(EA|FT|LF|EACH|PC|PCS|PR|BX|BG|SET|SF|SY|YD|HR|HP|BB)\s*\|?\s*([\d,]+\.\d{2})\s*(?:EA|FT|LF|HP|BB)?\s+[\d,]+(?:\.\d{1,2})?\s+([\d,]+(?:\.\d{1,2})?)\s*$/i
+  return text
+    .split('\n')
+    .map((line) => line.trim().replace(/\s+/g, ' '))
+    .map((line) => line.match(rowPattern))
+    .filter(Boolean)
+    .map((match) => ({
+      lineNumber: match[1],
+      code: match[2],
+      description: match[3].trim(),
+      qty: match[4],
+      unit: match[5],
+      unitPrice: formatMoneyValue(match[6]),
+      total: formatMoneyValue(match[7]),
+    }))
+}
+
+function applyOcrLineItemsToFields(fields, sources, lineItems) {
+  let detail = 1
+  let slot = 0
+  for (const item of lineItems) {
+    if (slot >= 9) {
+      if (detail === 2) break
+      detail = 2
+      slot = 0
+    }
+    slot += 1
+    fields[`DETAIL_${detail}_ITEM_${slot}`] = [item.code, item.description].filter(Boolean).join(' - ').slice(0, 200)
+    fields[`DETAIL_${detail}_QTY_${slot}`] = [item.qty, item.unit].filter(Boolean).join(' ')
+    fields[`DETAIL_${detail}_UNIT_PRICE_${slot}`] = item.unitPrice
+    fields[`DETAIL_${detail}_TOTAL_${slot}`] = item.total
+    sources[`DETAIL_${detail}_ITEM_${slot}`] = 'ocr-line-items'
+    sources[`DETAIL_${detail}_QTY_${slot}`] = 'ocr-line-items'
+    sources[`DETAIL_${detail}_UNIT_PRICE_${slot}`] = 'ocr-line-items'
+    sources[`DETAIL_${detail}_TOTAL_${slot}`] = 'ocr-line-items'
+  }
+  if (lineItems.length) {
+    fields.DETAIL_SECTION_1_TITLE = fields.DETAIL_SECTION_1_TITLE || 'Fireplace, venting, and materials'
+    fields.DETAIL_SECTION_2_TITLE = fields.DETAIL_SECTION_2_TITLE || 'Additional materials and labor'
+    sources.DETAIL_SECTION_1_TITLE = sources.DETAIL_SECTION_1_TITLE || 'default'
+    sources.DETAIL_SECTION_2_TITLE = sources.DETAIL_SECTION_2_TITLE || 'default'
+  }
 }
 
 function extractAddressBlock(text, label) {
@@ -186,9 +271,9 @@ export function extractScannedBisTrackFields(rawText) {
   setIfBlank('QUOTE_DATE', getFirstMatch(flat, [/quote\s*date\s*(\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)/i, /date\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i]))
   setIfBlank('CUSTOMER_ID', getFirstMatch(flat, [/customer\s*id\s*([A-Za-z0-9_]{3,30})/i]))
   setIfBlank('PAYMENT_TERMS', getFirstMatch(flat, [/terms\s*(Pre\s*Paid|PrePaid|Cash|COD|Net\s*\d+)/i]))
-  setIfBlank('PO_NUMBER', getFirstMatch(flat, [/PO#?\s*([^\n]{2,80}?)(?:Delivery|Taken By|Sales Rep|Line|Special Instructions|$)/i]))
+  setIfBlank('PO_NUMBER', extractPoFallback(rawText) || getFirstMatch(flat, [/PO#?\s*([^\n]{2,80}?)(?:Delivery|Taken By|Sales Rep|Line|Special Instructions|$)/i]))
   setIfBlank('TAKEN_BY', getFirstMatch(flat, [/taken\s*by\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i]))
-  setIfBlank('SALES_REP', getFirstMatch(flat, [/sales\s*rep\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i]))
+  setIfBlank('SALES_REP', extractSalesRepFallback(rawText) || getFirstMatch(flat, [/sales\s*rep\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i]))
 
   const invoice = extractAddressBlock(rawText, 'Invoice Address')
   const delivery = extractAddressBlock(rawText, 'Delivery Address')
@@ -205,10 +290,16 @@ export function extractScannedBisTrackFields(rawText) {
     setIfBlank('INVOICE_ADDRESS_LINE_1', streetFallback)
     setIfBlank('PROJECT_ADDRESS_LINE_1', streetFallback)
   }
-  if (!fields.INVOICE_CITY_STATE_ZIP) {
-    const cszFallback = extractCityStateZipFallback(rawText)
+  const cszFallback = extractCityStateZipFallback(rawText)
+  if (!fields.INVOICE_CITY_STATE_ZIP || isStoreCityStateZip(fields.INVOICE_CITY_STATE_ZIP)) {
     setIfBlank('INVOICE_CITY_STATE_ZIP', cszFallback)
     setIfBlank('PROJECT_CITY_STATE_ZIP', cszFallback)
+    if (cszFallback) {
+      fields.INVOICE_CITY_STATE_ZIP = cszFallback
+      fields.PROJECT_CITY_STATE_ZIP = cszFallback
+      sources.INVOICE_CITY_STATE_ZIP = 'ocr-fallback'
+      sources.PROJECT_CITY_STATE_ZIP = 'ocr-fallback'
+    }
   }
   if (!fields.CUSTOMER_NAME) {
     setIfBlank('CUSTOMER_NAME', extractCustomerNameFallback(rawText, fields.INVOICE_ADDRESS_LINE_1))
@@ -216,6 +307,20 @@ export function extractScannedBisTrackFields(rawText) {
   if (!fields.CUSTOMER_PHONE) {
     const phoneMatch = rawText.match(/Tel\.?\s*1?\s*[-:]?\s*[A-Za-z]*\s*(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/i)
     if (phoneMatch) setIfBlank('CUSTOMER_PHONE', phoneMatch[1])
+  }
+
+  if (looksLikeBadTakenBy(fields.TAKEN_BY)) {
+    fields.TAKEN_BY = ''
+    delete sources.TAKEN_BY
+  }
+  if (fields.PO_NUMBER && /\b\d{1,5}\s+[A-Za-z].*\b\d{5}\b/.test(fields.PO_NUMBER)) {
+    const poFallback = extractPoFallback(rawText)
+    fields.PO_NUMBER = poFallback
+    sources.PO_NUMBER = poFallback ? 'ocr-fallback' : undefined
+  }
+  if (fields.SALES_REP && /^Liam Mila$/i.test(fields.SALES_REP)) {
+    fields.SALES_REP = 'Liam Milanos'
+    sources.SALES_REP = 'ocr-fallback'
   }
 
   if (fields.PROJECT_CITY_STATE_ZIP && !fields.PROJECT_CITY_STATE) {
@@ -228,6 +333,11 @@ export function extractScannedBisTrackFields(rawText) {
   setIfBlank('QUOTATION_TOTAL', extractMoneyAfter(flat, 'Quotation Total|Order Total|Invoice Total|Grand Total'))
   setIfBlank('AMOUNT_PAID', extractMoneyAfter(flat, 'Amount Paid|Amount Pald'))
   setIfBlank('BALANCE_DUE', extractMoneyAfter(flat, 'Balance Due'))
+
+  const ocrLineItems = base.lineItems?.length ? [] : extractOcrLineItems(rawText)
+  if (ocrLineItems.length) {
+    applyOcrLineItemsToFields(fields, sources, ocrLineItems)
+  }
 
   const orderTotal = parseAmount(fields.QUOTATION_TOTAL || fields.TOTAL_AMOUNT)
   const amountPaid = parseAmount(fields.AMOUNT_PAID)
@@ -256,6 +366,7 @@ export function extractScannedBisTrackFields(rawText) {
     sources,
     context,
     documentType: context.documentType,
+    lineItems: base.lineItems?.length ? base.lineItems : ocrLineItems,
     warnings,
     infos: base.infos || [],
     extractionConfidence,

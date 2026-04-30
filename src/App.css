@@ -588,3 +588,490 @@ html, body, #root {
   color: #6b5a47;
   letter-spacing: 0.04em;
 }
+
+/* Canva-template preview override */
+.customer-proposal {
+  width: min(820px, 100%);
+  gap: 26px;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #1e211c;
+}
+
+.cp-page {
+  position: relative;
+  overflow: hidden;
+  min-height: 1058px;
+  padding: 32px 36px 30px;
+  background: #f7f0e5;
+  background-image:
+    linear-gradient(90deg, rgba(247, 240, 229, 0) 0 62%, rgba(247, 240, 229, 0.78) 78%, rgba(247, 240, 229, 0.98) 100%),
+    url('/benson-template-fireplace.png');
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: 265px auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 18px 42px rgba(23, 51, 33, 0.2);
+}
+
+.cp-page--cover {
+  padding-top: 32px;
+}
+
+.cp-template-head {
+  display: grid;
+  grid-template-columns: minmax(310px, 1fr) 230px;
+  align-items: start;
+  gap: 24px;
+  margin-bottom: 44px;
+}
+
+.cp-logo-plaque {
+  width: 342px;
+  max-width: 100%;
+  min-height: 70px;
+  padding: 12px 18px 10px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #d3a25f;
+  border-radius: 10px;
+  background: #fdf8ee;
+}
+
+.cp-brand-mark {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #173321;
+  font-weight: 700;
+}
+
+.cp-brand-tag {
+  margin: 6px 0 0;
+  font-size: 9px;
+  letter-spacing: 0.46em;
+  text-transform: uppercase;
+  color: #1e211c;
+}
+
+.cp-store-address {
+  margin: 0;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+  font-style: normal;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #1e211c;
+  background: rgba(247, 240, 229, 0.78);
+  border-radius: 2px;
+}
+
+.cp-store-address strong {
+  margin-top: 8px;
+  color: #b46a2d;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.cp-title-band {
+  max-width: 570px;
+  margin: 0 0 22px;
+}
+
+.cp-title {
+  margin: 0 0 12px;
+  max-width: 460px;
+  font-size: 36px;
+  line-height: 0.96;
+  color: #173321;
+  font-weight: 700;
+}
+
+.cp-subtitle {
+  margin: 0;
+  min-height: 22px;
+  font-size: 17px;
+  line-height: 1.25;
+  color: #b46a2d;
+}
+
+.cp-divider {
+  margin: 22px 0 0;
+  width: 420px;
+  max-width: 100%;
+  height: 18px;
+  display: grid;
+  grid-template-columns: 1fr 34px 1fr;
+  align-items: center;
+  color: #b46a2d;
+}
+
+.cp-divider::before,
+.cp-divider::after {
+  content: '';
+  height: 1.5px;
+  background: #b46a2d;
+}
+
+.cp-divider span::before {
+  content: '*';
+  display: block;
+  text-align: center;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.cp-meta-band {
+  min-height: 136px;
+  margin: 0 0 24px;
+  padding: 20px 22px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px 24px;
+  border: 1px solid #d3a25f;
+  border-radius: 10px;
+  background: #173321;
+}
+
+.cp-meta-cell {
+  padding: 0 18px 0 0;
+  border-right: 1px solid rgba(211, 162, 95, 0.68);
+}
+
+.cp-meta-cell:nth-child(4n) {
+  border-right: 0;
+}
+
+.cp-meta-cell:nth-child(n+5) {
+  border-top: 0;
+}
+
+.cp-meta-cell span {
+  margin-bottom: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: #d3a25f;
+}
+
+.cp-meta-cell strong {
+  font-size: 14px;
+  line-height: 1.25;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cp-page-one-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 235px;
+  gap: 20px;
+}
+
+.cp-main-column {
+  display: grid;
+  gap: 18px;
+}
+
+.cp-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.cp-sidebar section,
+.cp-empty-panel,
+.cp-package,
+.cp-detail-section,
+.cp-terms,
+.cp-acceptance {
+  border: 1px solid #d8b886;
+  border-radius: 9px;
+  background: #fff8ec;
+}
+
+.cp-sidebar section {
+  padding: 16px 18px;
+}
+
+.cp-sidebar h2,
+.cp-section h2,
+.cp-empty-panel h2,
+.cp-detail-head h3,
+.cp-terms h3,
+.cp-acceptance h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #b46a2d;
+}
+
+.cp-line {
+  margin: 0 0 5px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cp-muted {
+  color: #6b5a47;
+  font-size: 12px;
+}
+
+.cp-section {
+  margin: 0;
+}
+
+.cp-overview {
+  padding: 18px 20px;
+  border-left: 4px solid #b46a2d;
+  background: rgba(253, 248, 238, 0.68);
+}
+
+.cp-section h2 {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.cp-package-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.cp-package {
+  min-height: 238px;
+  padding: 16px;
+}
+
+.cp-package h3 {
+  margin: 0 0 14px;
+  color: #173321;
+  font-size: 18px;
+}
+
+.cp-empty-panel {
+  min-height: 238px;
+  padding: 18px 20px;
+  color: #6b5a47;
+}
+
+.cp-list,
+.cp-totals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cp-list li,
+.cp-inline-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(216, 184, 134, 0.55);
+  font-size: 12px;
+}
+
+.cp-list strong,
+.cp-inline-row strong {
+  white-space: nowrap;
+}
+
+.cp-install-band {
+  min-height: 88px;
+  padding: 16px 20px 16px 70px;
+  position: relative;
+  border: 1px solid #d8b886;
+  border-radius: 9px;
+  background: #fff3df;
+}
+
+.cp-install-band::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #d3a25f;
+  background: #173321;
+}
+
+.cp-install-band h2 {
+  color: #b46a2d;
+}
+
+.cp-investment .cp-totals {
+  max-width: none;
+}
+
+.cp-totals li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 0;
+  font-size: 12px;
+}
+
+.cp-totals-major {
+  margin: 6px -8px 0;
+  padding: 8px !important;
+  border: 1px solid #e5c79c;
+  border-radius: 7px;
+  background: #fff0d9;
+  color: #b46a2d;
+}
+
+.cp-page-header {
+  margin: 0 0 26px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.cp-page-header h2 {
+  margin: 0 0 12px;
+  max-width: 540px;
+  font-size: 36px;
+  line-height: 0.98;
+  color: #173321;
+}
+
+.cp-page-header p {
+  margin: 0;
+  max-width: 520px;
+  font-size: 16px;
+  color: #b46a2d;
+}
+
+.cp-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.cp-detail-section {
+  overflow: hidden;
+}
+
+.cp-detail-head {
+  min-height: 48px;
+  margin: 0;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: #173321;
+  color: #ffffff;
+}
+
+.cp-detail-head h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.cp-detail-subtotal {
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.cp-detail-table {
+  font-size: 11px;
+}
+
+.cp-detail-table th {
+  padding: 8px 8px;
+  background: transparent;
+  color: #b46a2d;
+  border-bottom: 1px solid rgba(216, 184, 134, 0.65);
+}
+
+.cp-detail-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(216, 184, 134, 0.42);
+}
+
+.cp-detail-table th:nth-child(2),
+.cp-detail-table th:nth-child(3),
+.cp-detail-table th:nth-child(4),
+.cp-detail-table td:nth-child(2),
+.cp-detail-table td:nth-child(3),
+.cp-detail-table td:nth-child(4) {
+  width: 52px;
+}
+
+.cp-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 22px;
+  margin-top: 24px;
+}
+
+.cp-terms {
+  padding: 18px 20px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.cp-acceptance {
+  padding: 18px;
+}
+
+.cp-acceptance h3 {
+  color: #b46a2d;
+}
+
+.cp-acceptance p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-style: italic;
+}
+
+.cp-signature {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.cp-sig-rule {
+  display: block;
+  height: 1px;
+  border-bottom: 1px solid #1e211c;
+  margin-bottom: 5px;
+}
+
+.cp-sig-meta {
+  margin: 0;
+  font-size: 10px;
+}
+
+.cp-footer {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  bottom: 26px;
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid #b46a2d;
+  color: #1e211c;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+@media print {
+  .cp-page {
+    min-height: 100vh;
+    padding: 32px 36px 30px !important;
+    box-shadow: none;
+    background-image:
+      linear-gradient(90deg, rgba(247, 240, 229, 0) 0 62%, rgba(247, 240, 229, 0.78) 78%, rgba(247, 240, 229, 0.98) 100%),
+      url('/benson-template-fireplace.png');
+  }
+}
