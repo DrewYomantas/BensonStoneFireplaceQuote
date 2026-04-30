@@ -61,7 +61,7 @@ export const sectionDefinitions = [
   {
     key: 'project_copy',
     label: 'Project Copy',
-    fields: ['PROJECT_OVERVIEW', 'INSTALLATION_SCOPE', 'INSTALLATION_TOTAL'],
+    fields: ['PROJECT_OVERVIEW', 'PROJECT_SCOPE_SUMMARY', 'INSTALLATION_SCOPE', 'INSTALLATION_TOTAL'],
   },
   {
     key: 'package_1',
@@ -100,6 +100,7 @@ export const sectionMap = Object.fromEntries(sectionDefinitions.map((section) =>
 
 export const multilineFields = new Set([
   'PROJECT_OVERVIEW',
+  'PROJECT_SCOPE_SUMMARY',
   'INSTALLATION_SCOPE',
   'PROJECT_NOTES',
   'LEGAL_TERMS',
@@ -121,6 +122,7 @@ export const requiredFields = [
   'QUOTE_DATE',
   'PROJECT_TITLE',
   'PROJECT_OVERVIEW',
+  'PROJECT_SCOPE_SUMMARY',
   'PAYMENT_TERMS',
   'QUOTE_GOOD_FOR',
   'INSTALLATION_SCOPE',

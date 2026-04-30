@@ -121,7 +121,11 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
             ) : (
               <section className="cp-empty-panel">
                 <h2>Project scope</h2>
-                <p>Your fireplace selections, project materials, and investment summary are included in this proposal.</p>
+                <Block
+                  value={fields.PROJECT_SCOPE_SUMMARY}
+                  fallback={<p>A complete fireplace project proposal with selected materials, installation scope, and investment summary.</p>}
+                  multiline
+                />
               </section>
             )}
           </div>

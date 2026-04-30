@@ -158,6 +158,7 @@ test('repairs mashed two-column OCR customer and quote fields', () => {
   assert.equal(result.fields.TAKEN_BY, '')
   assert.equal(result.fields.SALES_REP, 'Liam Milanos')
   assert.match(result.fields.PROJECT_OVERVIEW, /Freeman fireplace project in Dixon/i)
+  assert.match(result.fields.PROJECT_SCOPE_SUMMARY, /complete fireplace build package/i)
   assert.match(result.fields.INSTALLATION_SCOPE, /Nordik 60TL/i)
   assert.match(result.fields.PROJECT_NOTES, /Builder to complete framing/i)
   assert.equal(result.fields.DETAIL_1_ITEM_1, 'NDK-60-TL - Kozy Heat Nordik 60TL Fireplace - Includes Remote')

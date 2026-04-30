@@ -235,6 +235,7 @@ function hasAny(text, patterns) {
 function deriveCustomerScope(rawText) {
   const text = normalized(rawText)
   const overview = 'This proposal covers the fireplace, venting, finish materials, and installation scope for the Freeman fireplace project in Dixon.'
+  const summary = 'A complete fireplace build package with the selected Kozy Heat fireplace, venting, Komfort Zone components, custom limestone hearth and mantel, stone veneer materials, and installation labor.'
   const scope = []
 
   if (hasAny(text, [/Nordik\s*60/i, /NDK-60-TL/i])) {
@@ -273,7 +274,7 @@ function deriveCustomerScope(rawText) {
     notes.push('Preliminary estimate is subject to change after site measure and final client selections.')
   }
 
-  return { overview, scope: scope.join('\n'), notes: notes.join('\n') }
+  return { overview, summary, scope: scope.join('\n'), notes: notes.join('\n') }
 }
 
 function extractAddressBlock(text, label) {
@@ -403,6 +404,7 @@ export function extractScannedBisTrackFields(rawText) {
 
   const customerScope = deriveCustomerScope(rawText)
   setIfBlank('PROJECT_OVERVIEW', customerScope.overview, 'ocr-summary')
+  setIfBlank('PROJECT_SCOPE_SUMMARY', customerScope.summary, 'ocr-summary')
   setIfBlank('INSTALLATION_SCOPE', customerScope.scope, 'ocr-summary')
   setIfBlank('PROJECT_NOTES', customerScope.notes, 'ocr-summary')
 
