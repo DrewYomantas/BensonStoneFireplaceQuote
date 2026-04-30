@@ -62,6 +62,7 @@ export default function App() {
   const [parseContext, setParseContext] = useState(emptyContext)
   const [status, setStatus] = useState('Upload a BisTrack quote PDF to start. Scanned PDFs will be OCRed automatically.')
   const [busy, setBusy] = useState(false)
+  const [rawText, setRawText] = useState('')
   const [openSections, setOpenSections] = useState(() =>
     Object.fromEntries(sectionDefinitions.map((section) => [section.key, true])),
   )
@@ -87,6 +88,7 @@ export default function App() {
       if (!extracted.embeddedTextLikelyMissing) {
         const parsed = parseBisTrackText(extracted.rawText)
         loadParsed(parsed)
+        setRawText(extracted.rawText)
         const lineCount = parsed.lineItems?.length || 0
         setStatus(`Loaded ${file.name} — ${parsed.documentType?.toUpperCase() || 'QUOTE'}${parsed.fields.QUOTE_NO ? ` #${parsed.fields.QUOTE_NO}` : ''} (${lineCount} line item${lineCount === 1 ? '' : 's'}). Review and fill any blanks on the left.`)
       } else {
@@ -100,6 +102,7 @@ export default function App() {
         const combinedText = ocr.pages.map((page) => page.text).join('\n\n')
         const parsed = extractScannedBisTrackFields(combinedText)
         loadParsed(parsed)
+        setRawText(combinedText)
         const avgConfidence = Math.round(
           ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
         )
@@ -117,6 +120,7 @@ export default function App() {
   function handleClear() {
     setFields(emptyFields)
     setParseContext(emptyContext)
+    setRawText('')
     setStatus('Cleared. Upload a PDF or fill the fields manually.')
   }
 
@@ -169,6 +173,13 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          {rawText ? (
+            <details className="bs-raw">
+              <summary>Raw extracted text (use to spot-check or copy missing fields)</summary>
+              <pre>{rawText}</pre>
+            </details>
+          ) : null}
 
           {sectionDefinitions.map((section) => (
             <div className="bs-form__group" key={section.key}>
