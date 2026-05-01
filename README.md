@@ -1,128 +1,110 @@
-# Benson Stone Fireplace Quote Proposal Generator
+# Benson Stone Fireplace Quote Polish
 
-Local web app that takes the official Epicor BisTrack PDF (or pasted notes as a fallback) and turns it into a polished customer-facing proposal/order summary after human review.
+Local web app that takes the official Epicor BisTrack PDF and turns it into a polished customer-facing proposal/order summary after human review.
 
-## Source of truth
+## Current App State
 
-Benson Stone creates the official quote/order in **Epicor BisTrack** — the ERP that handles quoting, order management, inventory/pricing, delivery, customer data, and financials. This app is a **presentation layer after BisTrack**, not a replacement.
+The active UI is intentionally stripped down for ease of access and use:
+
+1. Upload a BisTrack PDF.
+2. Extract embedded text or OCR scanned pages.
+3. Review and edit the structured quote fields.
+4. Preview the customer-facing proposal.
+5. Use the browser print flow to save or print the final PDF.
+
+The broader sales workbench modules are preserved in the repo, but they are not the current active shell. See [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) for the parked feature inventory and reintegration order.
+
+## Source Of Truth
+
+Benson Stone creates the official quote/order in Epicor BisTrack, the ERP that handles quoting, order management, inventory/pricing, delivery, customer data, and financials. This app is a presentation layer after BisTrack, not a replacement.
 
 Workflow:
 
 1. Create the official quote/order in Epicor BisTrack.
 2. Export/save the BisTrack PDF.
-3. Upload the PDF into this app (or paste notes as a fallback).
+3. Upload the PDF into this app.
 4. Review extracted official values.
 5. Generate the polished customer-facing output.
 
 This app never invents customer info, products, prices, tax, totals, or terms. If extraction is unclear, fields stay blank and the app surfaces a warning.
 
-## Department workflow
+## Active Department Workflow
 
-1. On Step 1, choose **Paste Notes**, **Upload BisTrack PDF**, or **Bulk Upload PDFs**.
-2. For a single PDF, select the file — text is extracted, document type is detected, and line items are parsed.
-3. For bulk PDF work, select multiple BisTrack PDFs — each file is parsed into a batch queue with status, confidence, warnings, and review/generate actions.
-4. Review warnings, the document-type badge, unmatched lines, and blank required fields.
-5. Edit the structured proposal fields until export blockers are cleared.
-6. Copy grouped fields or export JSON for recordkeeping.
-7. Click **Generate Customer PDF** to open the customer-facing preview.
-8. In the preview modal, click **Print / Save as PDF** to email or print the polished proposal/order summary.
+1. Click **Upload BisTrack PDF**.
+2. Select the official BisTrack PDF.
+3. Embedded-text PDFs are parsed directly; scanned/image PDFs run OCR.
+4. Review the priority fields first, then open any additional field sections needed.
+5. Use **Raw extracted text** to spot-check OCR output when available.
+6. Edit the customer-facing proposal fields.
+7. Click **Print / Save PDF** to email or print the polished proposal/order summary.
 
-Bulk upload is meant for the realistic department flow where several official BisTrack quotes/orders are created first, then processed together afterward. Bulk generation still keeps review in the loop: files marked **Needs Review** should be opened and checked before sending anything to a customer.
+## Customer-Facing PDF
 
-## Customer-facing PDF
-
-The Generate Customer PDF flow renders an HTML/CSS proposal styled for Benson Stone (warm ivory background, deep green panels, bronze/copper accents) and uses the browser's Print → Save-as-PDF to produce the final file. It reads only the reviewed fields — no reparsing, no invented data.
+The preview renders an HTML/CSS proposal styled for Benson Stone and uses the browser's Print / Save-as-PDF flow to produce the final file. It reads only the reviewed fields: no reparsing, no invented data.
 
 Output rules:
 
-- **Quote / Quotation** → "Fireplace Project Proposal" (or "Outdoor Living Proposal" when the line items are grills/outdoor). Quote-good-for and deposit terms appear; signature block is included.
-- **Order / Bill** → "Project Confirmation". Quote-only language is suppressed.
-- **Invoice / Receipt / outdoor non-quote** → "Order Summary".
-- **Fully paid** (Balance Due = $0.00, Amount Paid > 0) → deposit language is hidden and a "Paid in full — thank you!" callout is shown.
-- **Delivery date** stays hidden unless the modal's "Include delivery date" toggle is checked.
-- **Internal warnings** and the raw extracted PDF text are never shown on the customer-facing output.
+- Quote / Quotation -> "Fireplace Project Proposal" or "Outdoor Living Proposal" when line items are grills/outdoor. Quote-good-for and deposit terms appear; signature block is included.
+- Order / Bill -> "Project Confirmation". Quote-only language is suppressed.
+- Invoice / Receipt / outdoor non-quote -> "Order Summary".
+- Fully paid orders hide deposit language and show a paid-in-full callout.
+- Delivery date stays hidden unless explicitly included by the customer-view options.
+- Internal warnings and raw extracted PDF text are never shown on the customer-facing output.
 
-## What the app does
+## What The Active App Does
 
-- accepts pasted quote notes
-- parses them into the placeholder contract in [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
+- accepts BisTrack PDF uploads
+- extracts embedded PDF text or runs OCR for scanned PDFs
+- parses extracted text into the field contract in [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
 - keeps missing or unclear fields blank
 - applies only the explicit business defaults:
   - `QUOTE_GOOD_FOR = 30 days`
   - `PAYMENT_TERMS = 50% down at time of signing`
   - `DEPOSIT_TERMS = 50% down at time of signing`
-- flags unmatched lines in a review box instead of discarding them
-- lets the user manually assign unmatched lines to fields
-- shows export blockers when required fields are blank
-- provides grouped copy buttons for customer, quote meta, page 1, page 2, and all fields
-- exports JSON for records
-- supports a bulk BisTrack PDF queue for processing several quote/order PDFs together
-- matches parsed line-item codes against a local private BisTrack product snapshot for internal review badges and proposal grouping
-- recommends a safe proposal playbook based on quote age, product match confidence, missing details, display status, and paid/closed context
-- recommends a proposal package variant that defines the safest customer-facing proposal structure or pre-proposal path
-- evaluates the customer's current setup and goals so unclear insert/fireplace/stove/electric language becomes review prompts instead of assumptions
-- saves reviewed quote summaries into a local Opportunity Queue for follow-up, readiness, and next-action tracking
-- drafts safe follow-up copy and logs local opportunity activity without sending anything externally
-- recommends deterministic follow-up cadence so the queue shows what needs attention today, this week, or review before sending
-- provides a simple internal preview and print/PDF option
+- exposes raw extracted text for spot-checking
+- lets the user edit reviewed fields directly
+- renders a customer-facing proposal preview
+- provides a simple print/PDF option
 
-## What this app does not do yet
+## What This App Does Not Do Yet
 
 - it does not integrate with Canva
 - it does not invent customer names, dates, products, prices, tax, totals, or legal terms
 - it does not recalculate totals unless someone explicitly changes them by hand
 - it does not replace the official quote system
+- it does not currently expose the broader workbench shell in the active UI
 - it does not bulk-download a ZIP of generated customer PDFs yet
 
-## Local BisTrack product snapshot
+## Parked Workbench Modules
 
-The app can load the processed BisTrack seed files in [src/data/bistrack-snapshot](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/bistrack-snapshot) as an internal-only snapshot. Exact product-code matches enrich Review Station with display, stock, availability, on-order, margin-sensitive, and needs-review badges. Fuzzy description matches are suggestions only and never overwrite parsed or OCR values.
+The repo still includes the broader sales workbench prototype files and tests. They are intentionally preserved as parked feature inventory, not deleted:
 
-Proposal Builder groups matched lines into Fireplace Unit, Venting / Chimney, Controls / Remotes, Doors / Screens, Trim / Surround, Accessories, and Delivery / Labor / Service / Adjustments. Customer-facing exports do not include average cost, standard buy, margin %, inventory turns, supplier purchase totals, or internal product rank.
+- product intelligence from the private BisTrack snapshot
+- proposal playbooks
+- proposal package variants
+- current setup and goal lens
+- opportunity queue
+- bulk opportunity intake
+- follow-up composer
+- activity timeline
+- follow-up cadence
 
-The real snapshot files are local/private and ignored by git. The app loads them when present, but the committed code must still build without the private seed folder.
+These modules should be reintegrated only after the stripped-down quote polish flow is stable. Customer-facing exports must continue to exclude internal cost, margin, supplier, rank, OCR uncertainty, fuzzy-match, and BisTrack confidence language.
 
-## Proposal playbook recommendations
+## Private Data Boundary
 
-Proposal Playbooks recommends a customer-facing lane such as Warm Showroom Recap, Old Quote Re-Engagement, Value-Focused Option Comparison, Premium Design Proposal, Missing-Info Clarification, or Display Model Follow-Up. Recommendations are deterministic and explain why the lane fits, what to review before sending, and which conservative copy scaffold is safe to use.
+The app can load processed BisTrack seed files from [src/data/bistrack-snapshot](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/bistrack-snapshot) when present locally. That folder contains private/internal data and must stay ignored and uncommitted.
 
-Sales staff can always override the recommendation. Internal cautions are also surfaced in Proposal Builder and Export / Send Prep when product matches need review, contact or install details are missing, a source appears paid/closed/reference, an old quote may need refresh, or display-model wording needs salesperson confirmation.
+Do not stage or commit:
 
-## Proposal package variants
+- `src/data/bistrack-snapshot/`
+- real customer/vendor PDFs
+- real CSV exports
+- private internal reference docs
 
-Proposal packages sit beside playbooks. A playbook explains the internal path and safety reasoning; a package recommends the customer-facing structure to prepare. Package variants include Warm Showroom Proposal, Old Quote Refresh, Value Comparison, Premium Design Proposal, Missing-Info Pre-Proposal, Display Model Follow-Up, and Reference-Only Guardrail.
+The committed code must still build without the private seed folder.
 
-Package recommendations use reviewed local fields, opportunity status, cadence state, source metadata, and internal warning state. They return recommended sections, an internal checklist, conservative customer-facing scaffold copy, confidence, and export safety status. Reference-only, closed, archived, missing-info, uncertain product-match, and unsafe display wording cases are blocked or marked for review instead of being treated as final customer proposals.
-
-## Current setup and goal lens
-
-Review Station and Proposal Builder include a Current Setup + Goal Lens. It reads only reviewed local project fields and helps identify what the customer currently has, what they want, and what needs clarification before proposal/export. It recognizes common fireplace paths such as masonry fireplaces, zero-clearance metal fireplaces, inserts, stoves, pellet units, electric fireplaces, framed chases, and new-construction situations.
-
-The lens produces sales-floor prompts rather than installer claims: setup confidence, customer goal tags, suggested path fit, blockers, customer-friendly questions, internal checklist items, and proposal package impact. Setup blockers can push package guidance toward Missing-Info Pre-Proposal, and saved opportunities can carry those internal warnings into follow-up review.
-
-## Opportunity Queue
-
-The Opportunity Queue is a local-first follow-up board for reviewed quote summaries. It stores opportunity metadata only: customer name/contact when reviewed, quote number/date, source type, selected playbook, status, temperature, next action, due date, readiness, and internal warnings. It does not store raw OCR files, private catalog snapshots, product-cost data, margin data, supplier history, or internal sales metrics.
-
-Statuses include new intake, needs review, ready for proposal, follow-up needed, proposal sent, waiting on customer, closed won/lost, reference only, and archived. Saving a quote is allowed even when fields are incomplete, but the opportunity is classified conservatively as needs review or reference only when warnings are present.
-
-Bulk Opportunity Intake appears in Packet Triage when scanned follow-up candidates are available. It creates reviewable opportunity drafts with duplicate signals, source file/page metadata, safe add/update/skip actions, and an import summary. Add-all-safe excludes uncertain duplicates, reference-only packets, and drafts missing identity/contact blockers.
-
-## Follow-up composer and activity timeline
-
-Opportunity cards include a local Follow-Up Composer for safe email/text/phone-script/Nextdoor draft copy. Drafts are deterministic and conservative: they can mention quote refresh, missing details, or showroom availability only when safe, and they never send messages externally.
-
-The Activity Timeline stores local notes, drafts, sent follow-ups, calls, voicemails, showroom visits, and proposal activity summaries. Logging a follow-up as sent updates the opportunity's last-contacted date and moves active quotes to waiting on customer, but does not reopen closed/reference records.
-
-The queue also evaluates a deterministic follow-up cadence from saved opportunity fields and local activity history. It surfaces practical signals such as needs follow-up, stale opportunity, missing contact info, ready for proposal, waiting on customer, and review before sending. Cadence recommendations never send messages, never reopen closed/reference records, and never use private catalog rows or sensitive BisTrack metrics.
-
-## Template source
-
-The approved editable template that informed the field contract is still the external file in Downloads:
-
-- `C:\Users\beyon\Downloads\MASTER_Benson_Stone_Fireplace_Quote_Proposal_Template_EDITABLE_Canva.pptx`
-
-## Local run
+## Local Run
 
 ```bash
 npm install
@@ -139,122 +121,52 @@ npm test
 npm run build
 ```
 
-## Sample files
+## GitHub Pages
 
-- [src/data/anna-orlinska-notes.txt](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/anna-orlinska-notes.txt)
-- [examples/anna-orlinska-output.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/examples/anna-orlinska-output.json)
+The GitHub remote is `https://github.com/DrewYomantas/FireplaceDepartmentEmailUpdate.git`.
 
-Use **Load Anna sample** only for testing the parser flow.
+The Vite base path is `/FireplaceDepartmentEmailUpdate/`.
 
-## Parser checks
+GitHub Pages deployment is configured in [.github/workflows/deploy.yml](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/.github/workflows/deploy.yml).
 
-Current automated checks cover:
+Do not push unless explicitly told.
 
-**Notes parser (`src/lib/parser.test.js`)**
-- Anna sample exact output
-- two-package quote parsing
-- delivery date mentioned but excluded
-- missing PO number
-- total mismatch warning
+## Important Files
 
-**Epicor BisTrack PDF parser (`src/lib/biztrackPdfParser.test.js`)**
-- quote document type, defaults applied, customer/address/totals/line items extracted
-- order/bill document type warning + no quote defaults
-- delivery date detected but kept out of customer-facing fields
-- fully paid order surfaces info and hides deposit language
-- line items round-trip into DETAIL fields
-- empty/sparse text raises scanned-PDF warning
-- total mismatch warning
-- grill/outdoor keyword detection adjusts output label
+- [src/App.jsx](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/App.jsx) - active stripped-down app shell
+- [src/components/CustomerProposal.jsx](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/components/CustomerProposal.jsx) - customer-facing proposal preview
+- [src/lib/biztrackPdfParser.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/biztrackPdfParser.js) - embedded text BisTrack parser
+- [src/lib/pdfTextExtraction.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/pdfTextExtraction.js) - PDF text/OCR extraction
+- [src/lib/scannedPacketParser.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/scannedPacketParser.js) - OCR-tolerant scanned field extraction
+- [src/lib/fieldContract.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/fieldContract.js) - field ordering, labels, required fields, defaults
+- [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) - preserved workbench feature inventory and reintegration plan
 
-**Product catalog snapshot (`src/lib/productCatalog.test.js`)**
-- exact product-code matching
-- fuzzy suggestion behavior that stays review-required
-- manual order line grouping
-- pasted-note detail rows as a matching source
-- sensitive internal metric blocklist
+## Current Automated Coverage
 
-**Proposal playbooks (`src/lib/proposalPlaybooks.test.js`)**
-- recent complete quote recommendation
-- old quote re-engagement recommendation
-- missing-info recommendation and warnings
-- display model follow-up wording guardrail
-- paid/closed warning
-- sensitive-term exclusion from customer-facing playbook copy
+The test suite covers:
 
-**Proposal packages (`src/lib/proposalPackages.test.js`)**
-- each customer-facing package variant
-- old-quote refresh and soft reactivation behavior
-- missing-info pre-proposal blockers
-- reference-only and closed guardrail behavior
-- display-model wording guardrail
-- sensitive-term exclusion from package scaffold copy
+- real BisTrack embedded-text parser behavior
+- scanned/OCR fallback extraction
+- customer-facing output labels and safety rules
+- parser defaults and total mismatch warnings
+- product intelligence safety boundaries
+- proposal playbooks and package recommendations
+- current setup and goal lens logic
+- opportunity queue, bulk intake, follow-up composer, activity timeline, and cadence helpers
+- sensitive internal metric exclusion from customer-facing copy and stored local activity
 
-**Current setup and goal lens (`src/lib/currentSetup.test.js`)**
-- unknown, masonry, zero-clearance, electric, exterior chase, wood insert, gas log, and special conversion review cases
-- heat/ambiance goal detection and clarification questions
-- setup blockers influencing missing-info package guidance
-- sensitive-term exclusion from customer-friendly questions
+## Known Limitations
 
-**Opportunity queue (`src/lib/opportunities.test.js`)**
-- active quote readiness classification
-- old quote follow-up classification
-- missing contact review classification
-- paid/closed reference-only classification
-- product-match review safety
-- bulk draft creation and dedupe classification
-- safe source metadata without raw OCR text
-- sensitive metric exclusion from stored opportunities
-- localStorage save/list/update/remove helpers
+- PDF text extraction uses `pdfjs-dist`; scanned-packet OCR uses `tesseract.js` and still requires human review.
+- Customer PDF output relies on the browser's print engine. Margins and page breaks may vary slightly across browsers.
+- The active UI is intentionally simpler than the preserved workbench modules.
+- The build has a known large chunk warning from the PDF/OCR stack.
 
-**Follow-up composer and activity (`src/lib/followUpComposer.test.js`, `src/lib/opportunityActivity.test.js`)**
-- reactivation and quote-refresh wording
-- unsafe draft warnings for missing contact and reference records
-- display model wording guardrails
-- sensitive term exclusion from customer-facing draft copy
-- local activity save/list/update/remove
-- sent follow-up status patching
-- raw OCR/private metric exclusion from activity storage
+## Next Product Direction
 
-**Follow-up cadence (`src/lib/followUpCadence.test.js`)**
-- today/soon/waiting/archive-review cadence recommendations
-- old-quote soft reactivation
-- missing-contact and review-before-sending blockers
-- channel-fit hints from safe local contact fields
-- queue-level cadence summary counts
+Polish the stripped-down quote flow first. Reintegrate the broader workbench features later, one lane at a time:
 
-## Document-type behavior
-
-| Detected type | Customer-facing label | Notes |
-|---|---|---|
-| Quote / Quotation | Fireplace Project Proposal (or Outdoor Living Proposal) | Defaults apply: 30-day window, 50% deposit |
-| Order / Bill | Project Confirmation | No quote-only language; balance-due aware |
-| Invoice / Receipt | Order Summary | No deposit language; if fully paid, deposit panel hidden |
-| Unknown | Project Summary | Warning surfaced — verify source document |
-
-## Real BisTrack PDF behavior
-
-The parser is tuned against real Epicor BisTrack PDF exports (Order, Quotation, Bill, Invoice, Receipt). What to expect:
-
-- **Embedded-text PDFs** (the normal BisTrack export) parse correctly: document type, number, date, customer ID, terms, PO#, delivery date, taken-by/sales-rep, invoice and delivery addresses, customer phone, line items, and totals (Total Amount, Tax, Order/Quotation Total, Amount Paid, Balance Due).
-- **Scanned / image-based PDFs** can run OCR in the Scanned packet lane. OCR pages are classified into follow-up candidates, paid/closed orders, support docs, site photos, and manual review; follow-up candidates can be downloaded as CSV or JSON intake records.
-- **Column-reordered output**: pdfjs sometimes emits BisTrack line-item columns in a non-row-by-row order (descriptions stacked, then qty/price/total stacked). The parser handles the common case but may miss qty/price pairings on heavily reordered layouts. Codes and descriptions still extract; totals remain authoritative. The mandatory human review step catches anything off.
-- **Delivery date** is captured but intentionally excluded from customer-facing fields. An info note is surfaced.
-- **Document type** drives output wording: Quotes use proposal language and apply quote-only defaults (30 days, 50% deposit). Orders/Bills/Invoices/Receipts skip those defaults and use "Project Confirmation" or "Order Summary".
-- **Fully paid orders** (Balance Due = $0.00, Amount Paid > 0) automatically hide deposit-terms language in the preview.
-- **Total mismatch** (Total + Tax ≠ Document Total) raises a warning. The official BisTrack values are never recalculated.
-- Human review of every field is mandatory before export.
-
-## Limitations
-
-- PDF text extraction uses `pdfjs-dist`; scanned-packet OCR uses `tesseract.js` and still requires human review before customer-facing output.
-- Customer PDF output relies on the browser's print engine (Save as PDF). Margins and page breaks may vary slightly across browsers.
-- No git remote is configured for this repo.
-- Real customer PDFs and CSVs from the Benson Stone Drive are **not committed** to this repo. Tests use sanitized fixtures based on the real layout.
-
-## V3+ roadmap
-
-- hardened OCR extraction against more real scanned BisTrack packet layouts
-- bulk ZIP export for generated customer PDFs
-- CSV/import support
-- Canva autofill only after field review is proven reliable
+1. Current Setup + Goal Lens
+2. Proposal Package / Playbook Guidance
+3. Opportunity Save / Queue
+4. Follow-Up Composer + Activity Timeline
