@@ -6,10 +6,17 @@ The broader sales workbench code is intentionally preserved in the repo. Those f
 
 ## Active Reintegration
 
+**Quote Polish (active):**
 - `src/components/QuoteSetupLens.jsx`
 - `src/lib/currentSetup.js`
 
 The active lens is advisory only. It shows setup confidence, blockers, customer questions, and fields to fill manually. It does not automatically write proposal fields.
+
+**Old Quote Recovery lane (active — commit e5d3644):**
+- `src/components/OldQuoteRecovery.jsx` — queue, intake form, detail view, draft panel, activity log
+- `src/lib/oldQuoteRecovery.js` — createOldQuoteOpportunity, deriveRecoveryRecommendation, getRecoveryFollowUpDraft, getRecoveryProposalPackage, isSafeActivityForStatus
+
+Accessible via the Quote Recovery tab in the app header. Wires into: opportunities.js (localStorage queue), followUpComposer.js (safe draft generation), opportunityActivity.js (activity log), currentSetup.js (setup blocker evaluation), proposalPackages.js (package routing). No auto-send, no backend, no private data committed.
 
 ## Parked Modules
 
@@ -36,9 +43,11 @@ The active lens is advisory only. It shows setup confidence, blockers, customer 
 
 ## Reintegration Order
 
-1. Proposal Package / Playbook Guidance
-2. Opportunity Save / Queue
-3. Follow-Up Composer + Activity Timeline
+1. ~~Proposal Package / Playbook Guidance~~ — wired into Old Quote Recovery lane
+2. ~~Opportunity Save / Queue~~ — wired into Old Quote Recovery lane
+3. ~~Follow-Up Composer + Activity Timeline~~ — wired into Old Quote Recovery lane
+4. Next: expose Opportunity Queue across both polish and recovery lanes
+5. Next: add "Save to Queue" from Quote Polish flow
 
 ## Reintegration Rules
 
