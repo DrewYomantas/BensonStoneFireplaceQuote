@@ -255,3 +255,37 @@ export function evaluateCurrentSetup({
     },
   }
 }
+
+const reviewFieldLabels = {
+  PROJECT_OVERVIEW: 'Project Overview',
+  PROJECT_SCOPE_SUMMARY: 'Project Scope Summary',
+  INSTALLATION_SCOPE: 'Installation Scope',
+  PROJECT_NOTES: 'Project Notes',
+}
+
+function fieldSuggestion(id, reason) {
+  return {
+    id,
+    label: reviewFieldLabels[id],
+    reason,
+  }
+}
+
+export function buildCurrentSetupReviewAid(guidance = {}) {
+  const blockers = guidance.blockers || []
+  const questions = guidance.clarificationQuestions || []
+  const needsClarification = blockers.length > 0 || guidance.proposalPackageImpact?.exportSafety === 'blocked'
+  const fieldSuggestions = [
+    fieldSuggestion('PROJECT_OVERVIEW', 'Summarize the existing fireplace or appliance in plain language.'),
+    fieldSuggestion('PROJECT_SCOPE_SUMMARY', 'Capture the customer goal and the safest next step.'),
+    fieldSuggestion('INSTALLATION_SCOPE', 'Note confirmed venting, fuel, electrical, framing, or chase details.'),
+    fieldSuggestion('PROJECT_NOTES', 'Record anything that must be clarified before final proposal.'),
+  ]
+
+  return {
+    statusLabel: needsClarification ? 'Clarify before proposal' : 'Path fit looks clear',
+    statusTone: needsClarification ? 'needs-review' : 'ready',
+    fieldSuggestions,
+    questionCopyText: safeLines(questions).join('\n'),
+  }
+}

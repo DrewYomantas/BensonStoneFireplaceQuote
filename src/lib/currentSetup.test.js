@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { evaluateCurrentSetup } from './currentSetup.js'
+import { buildCurrentSetupReviewAid, evaluateCurrentSetup } from './currentSetup.js'
 
 const now = new Date('2026-04-29T12:00:00.000Z')
 
@@ -145,4 +145,52 @@ test('closed reference guardrail remains respected', () => {
 
   assert.equal(result.proposalPackageImpact.exportSafety, 'blocked')
   assert.ok(result.blockers.some((blocker) => /Closed\/reference/i.test(blocker)))
+})
+
+test('review aid for unknown setup returns needs-review suggestions and safe questions', () => {
+  const guidance = setup()
+  const aid = buildCurrentSetupReviewAid(guidance)
+
+  assert.equal(aid.statusTone, 'needs-review')
+  assert.equal(aid.statusLabel, 'Clarify before proposal')
+  assert.deepEqual(aid.fieldSuggestions.map((field) => field.id), [
+    'PROJECT_OVERVIEW',
+    'PROJECT_SCOPE_SUMMARY',
+    'INSTALLATION_SCOPE',
+    'PROJECT_NOTES',
+  ])
+  assert.ok(aid.questionCopyText.includes('what is currently in the fireplace opening') || aid.questionCopyText.includes('mainly looking for more heat'))
+})
+
+test('review aid for clear masonry gas setup is ready', () => {
+  const guidance = setup({
+    PROJECT_OVERVIEW: 'Existing masonry brick fireplace with clay chimney.',
+    INSTALLATION_SCOPE: 'Install gas insert with vent liner. Natural gas available.',
+    PROJECT_NOTES: 'Customer wants more heat and a cleaner modern look.',
+  })
+  const aid = buildCurrentSetupReviewAid(guidance)
+
+  assert.equal(aid.statusTone, 'ready')
+  assert.equal(aid.statusLabel, 'Path fit looks clear')
+})
+
+test('review aid copied questions exclude sensitive terms', () => {
+  const guidance = setup({
+    PROJECT_OVERVIEW: 'Customer asked about insert and electric option.',
+  })
+  const aid = buildCurrentSetupReviewAid(guidance)
+
+  assert.equal(/average cost|buy price|\bcost\b|margin|supplier|product rank|sales rank|ocr|fuzzy match|needs review|bistrack/i.test(aid.questionCopyText), false)
+})
+
+test('review aid keeps closed reference guidance blocked', () => {
+  const guidance = setup({
+    PROJECT_OVERVIEW: 'Existing masonry fireplace with chimney and natural gas available.',
+  }, {
+    opportunity: { status: 'reference-only' },
+  })
+  const aid = buildCurrentSetupReviewAid(guidance)
+
+  assert.equal(aid.statusTone, 'needs-review')
+  assert.equal(aid.statusLabel, 'Clarify before proposal')
 })

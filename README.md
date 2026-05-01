@@ -9,10 +9,11 @@ The active UI is intentionally stripped down for ease of access and use:
 1. Upload a BisTrack PDF.
 2. Extract embedded text or OCR scanned pages.
 3. Review and edit the structured quote fields.
-4. Preview the customer-facing proposal.
-5. Use the browser print flow to save or print the final PDF.
+4. Use the Current Setup + Goal Lens to identify what needs clarification.
+5. Preview the customer-facing proposal.
+6. Use the browser print flow to save or print the final PDF.
 
-The broader sales workbench modules are preserved in the repo, but they are not the current active shell. See [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) for the parked feature inventory and reintegration order.
+The broader sales workbench modules are preserved in the repo, but they are not the current active shell. Current Setup + Goal Lens is the first reintegrated review aid. See [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) for the parked feature inventory and reintegration order.
 
 ## Source Of Truth
 
@@ -34,9 +35,10 @@ This app never invents customer info, products, prices, tax, totals, or terms. I
 2. Select the official BisTrack PDF.
 3. Embedded-text PDFs are parsed directly; scanned/image PDFs run OCR.
 4. Review the priority fields first, then open any additional field sections needed.
-5. Use **Raw extracted text** to spot-check OCR output when available.
-6. Edit the customer-facing proposal fields.
-7. Click **Print / Save PDF** to email or print the polished proposal/order summary.
+5. Use **Current Setup + Goal Lens** to clarify the customer's existing setup, goals, blockers, and customer questions.
+6. Use **Raw extracted text** to spot-check OCR output when available.
+7. Edit the customer-facing proposal fields.
+8. Click **Print / Save PDF** to email or print the polished proposal/order summary.
 
 ## Customer-Facing PDF
 
@@ -62,6 +64,7 @@ Output rules:
   - `PAYMENT_TERMS = 50% down at time of signing`
   - `DEPOSIT_TERMS = 50% down at time of signing`
 - exposes raw extracted text for spot-checking
+- provides a Current Setup + Goal Lens review aid with safe customer questions and manual fill-in guidance
 - lets the user edit reviewed fields directly
 - renders a customer-facing proposal preview
 - provides a simple print/PDF option
@@ -82,7 +85,6 @@ The repo still includes the broader sales workbench prototype files and tests. T
 - product intelligence from the private BisTrack snapshot
 - proposal playbooks
 - proposal package variants
-- current setup and goal lens
 - opportunity queue
 - bulk opportunity intake
 - follow-up composer
@@ -134,10 +136,12 @@ Do not push unless explicitly told.
 ## Important Files
 
 - [src/App.jsx](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/App.jsx) - active stripped-down app shell
+- [src/components/QuoteSetupLens.jsx](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/components/QuoteSetupLens.jsx) - active Current Setup + Goal Lens review aid
 - [src/components/CustomerProposal.jsx](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/components/CustomerProposal.jsx) - customer-facing proposal preview
 - [src/lib/biztrackPdfParser.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/biztrackPdfParser.js) - embedded text BisTrack parser
 - [src/lib/pdfTextExtraction.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/pdfTextExtraction.js) - PDF text/OCR extraction
 - [src/lib/scannedPacketParser.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/scannedPacketParser.js) - OCR-tolerant scanned field extraction
+- [src/lib/currentSetup.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/currentSetup.js) - current setup and goal evaluation
 - [src/lib/fieldContract.js](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/lib/fieldContract.js) - field ordering, labels, required fields, defaults
 - [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) - preserved workbench feature inventory and reintegration plan
 
@@ -164,9 +168,8 @@ The test suite covers:
 
 ## Next Product Direction
 
-Polish the stripped-down quote flow first. Reintegrate the broader workbench features later, one lane at a time:
+Current Setup + Goal Lens is active as the first reintegrated review aid. Reintegrate the remaining broader workbench features later, one lane at a time:
 
-1. Current Setup + Goal Lens
-2. Proposal Package / Playbook Guidance
-3. Opportunity Save / Queue
-4. Follow-Up Composer + Activity Timeline
+1. Proposal Package / Playbook Guidance
+2. Opportunity Save / Queue
+3. Follow-Up Composer + Activity Timeline

@@ -8,9 +8,11 @@ import {
   sectionDefinitions,
 } from './lib/fieldContract.js'
 import { parseBisTrackText } from './lib/biztrackPdfParser.js'
+import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
+import QuoteSetupLens from './components/QuoteSetupLens.jsx'
 
 const emptyContext = {
   unmatchedLines: [],
@@ -67,6 +69,7 @@ export default function App() {
   const [openSections, setOpenSections] = useState(() =>
     Object.fromEntries(sectionDefinitions.map((section) => [section.key, true])),
   )
+  const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const fileInputRef = useRef(null)
 
   function setField(field, value) {
@@ -174,6 +177,8 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          <QuoteSetupLens guidance={setupGuidance} />
 
           {rawText ? (
             <details className="bs-raw">
