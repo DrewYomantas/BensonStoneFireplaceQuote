@@ -41,6 +41,10 @@ const storedKeys = [
   'proposalReadiness',
   'createdAt',
   'updatedAt',
+  'recoverySource',
+  'recoveryClassification',
+  'needsRefresh',
+  'internalNotes',
 ]
 
 function parseCurrency(value) {

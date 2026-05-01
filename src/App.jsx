@@ -12,6 +12,7 @@ import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
+import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
 
 const emptyContext = {
@@ -61,6 +62,7 @@ function FieldInput({ field, value, onChange }) {
 
 export default function App() {
   const emptyFields = useMemo(() => applyDefaults(createEmptyFieldState()), [])
+  const [mode, setMode] = useState('polish')
   const [fields, setFields] = useState(emptyFields)
   const [parseContext, setParseContext] = useState(emptyContext)
   const [status, setStatus] = useState('Upload a BisTrack quote PDF to start. Scanned PDFs will be OCRed automatically.')
@@ -142,77 +144,103 @@ export default function App() {
       <header className="bs-header no-print">
         <div className="bs-header__brand">
           <span className="bs-header__eyebrow">Benson Stone</span>
-          <strong>Fireplace Quote Polish</strong>
+          <strong>Fireplace Department</strong>
         </div>
-        <div className="bs-header__actions">
-          <label className={`bs-button bs-button--primary ${busy ? 'is-disabled' : ''}`}>
-            {busy ? 'Working…' : 'Upload BisTrack PDF'}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={handleFile}
-              disabled={busy}
-              hidden
-            />
-          </label>
-          <button type="button" className="bs-button" onClick={() => window.print()}>
-            Print / Save PDF
+
+        <nav className="bs-tabs no-print" aria-label="App mode">
+          <button
+            type="button"
+            className={`bs-tab ${mode === 'polish' ? 'is-active' : ''}`}
+            onClick={() => setMode('polish')}
+          >
+            Quote Polish
           </button>
-          <button type="button" className="bs-button bs-button--ghost" onClick={handleClear} disabled={busy}>
-            Clear
+          <button
+            type="button"
+            className={`bs-tab ${mode === 'recovery' ? 'is-active' : ''}`}
+            onClick={() => setMode('recovery')}
+          >
+            Quote Recovery
           </button>
-        </div>
+        </nav>
+
+        {mode === 'polish' && (
+          <div className="bs-header__actions">
+            <label className={`bs-button bs-button--primary ${busy ? 'is-disabled' : ''}`}>
+              {busy ? 'Working…' : 'Upload BisTrack PDF'}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handleFile}
+                disabled={busy}
+                hidden
+              />
+            </label>
+            <button type="button" className="bs-button" onClick={() => window.print()}>
+              Print / Save PDF
+            </button>
+            <button type="button" className="bs-button bs-button--ghost" onClick={handleClear} disabled={busy}>
+              Clear
+            </button>
+          </div>
+        )}
       </header>
 
-      <p className="bs-status no-print" role="status">{status}</p>
+      {mode === 'polish' ? (
+        <>
+          <p className="bs-status no-print" role="status">{status}</p>
 
-      <main className="bs-layout">
-        <section className="bs-form no-print" aria-label="Quote fields">
-          <div className="bs-form__group">
-            <h2>Key fields</h2>
-            <div className="bs-grid">
-              {PRIORITY_FIELDS.map((field) => (
-                <FieldInput key={field} field={field} value={fields[field]} onChange={setField} />
-              ))}
-            </div>
-          </div>
-
-          <QuoteSetupLens guidance={setupGuidance} />
-
-          {rawText ? (
-            <details className="bs-raw">
-              <summary>Raw extracted text (use to spot-check or copy missing fields)</summary>
-              <pre>{rawText}</pre>
-            </details>
-          ) : null}
-
-          {sectionDefinitions.map((section) => (
-            <div className="bs-form__group" key={section.key}>
-              <button
-                type="button"
-                className="bs-section-toggle"
-                onClick={() => toggleSection(section.key)}
-                aria-expanded={openSections[section.key]}
-              >
-                <span>{section.label}</span>
-                <span className="bs-section-meta">{sectionFillCount(section)} filled · {openSections[section.key] ? 'hide' : 'show'}</span>
-              </button>
-              {openSections[section.key] ? (
+          <main className="bs-layout">
+            <section className="bs-form no-print" aria-label="Quote fields">
+              <div className="bs-form__group">
+                <h2>Key fields</h2>
                 <div className="bs-grid">
-                  {section.fields.map((field) => (
+                  {PRIORITY_FIELDS.map((field) => (
                     <FieldInput key={field} field={field} value={fields[field]} onChange={setField} />
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ))}
-        </section>
+              </div>
 
-        <section className="bs-preview" aria-label="Customer proposal preview">
-          <CustomerProposal fields={fields} parseContext={parseContext} />
-        </section>
-      </main>
+              <QuoteSetupLens guidance={setupGuidance} />
+
+              {rawText ? (
+                <details className="bs-raw">
+                  <summary>Raw extracted text (use to spot-check or copy missing fields)</summary>
+                  <pre>{rawText}</pre>
+                </details>
+              ) : null}
+
+              {sectionDefinitions.map((section) => (
+                <div className="bs-form__group" key={section.key}>
+                  <button
+                    type="button"
+                    className="bs-section-toggle"
+                    onClick={() => toggleSection(section.key)}
+                    aria-expanded={openSections[section.key]}
+                  >
+                    <span>{section.label}</span>
+                    <span className="bs-section-meta">{sectionFillCount(section)} filled · {openSections[section.key] ? 'hide' : 'show'}</span>
+                  </button>
+                  {openSections[section.key] ? (
+                    <div className="bs-grid">
+                      {section.fields.map((field) => (
+                        <FieldInput key={field} field={field} value={fields[field]} onChange={setField} />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </section>
+
+            <section className="bs-preview" aria-label="Customer proposal preview">
+              <CustomerProposal fields={fields} parseContext={parseContext} />
+            </section>
+          </main>
+        </>
+      ) : (
+        <OldQuoteRecovery />
+      )}
     </div>
   )
 }
