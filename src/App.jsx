@@ -11,6 +11,11 @@ import { parseBisTrackText } from './lib/biztrackPdfParser.js'
 import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
+import {
+  SCENARIO_WARNING,
+  detectDetailedBreakdownRecommended,
+  getProjectScaleScenarios,
+} from './lib/proposalDetail.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
@@ -60,6 +65,40 @@ function FieldInput({ field, value, onChange }) {
   )
 }
 
+function ScenarioHelper({ selectedLevel, onSelectLevel }) {
+  const scenarios = getProjectScaleScenarios()
+  const selected = scenarios.find((s) => s.level === selectedLevel) || null
+
+  return (
+    <div className="bs-scenario">
+      <h2>Project scale scenario</h2>
+      <p className="bs-scenario__warning">{SCENARIO_WARNING}</p>
+      <div className="bs-scenario__levels">
+        {scenarios.map((scenario) => (
+          <button
+            key={scenario.level}
+            type="button"
+            className={`bs-scenario__level ${selectedLevel === scenario.level ? 'is-active' : ''}`}
+            onClick={() => onSelectLevel(scenario.level)}
+          >
+            <span className="bs-scenario__level-num">{scenario.level}</span>
+            <span className="bs-scenario__level-label">{scenario.label}</span>
+          </button>
+        ))}
+      </div>
+      {selected ? (
+        <div className="bs-scenario__detail">
+          <p className="bs-scenario__detail-desc">{selected.description}</p>
+          <ul className="bs-scenario__considerations">
+            {selected.considerations.map((c) => <li key={c}>{c}</li>)}
+          </ul>
+          <p className="bs-scenario__detail-warning">{SCENARIO_WARNING}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function App() {
   const emptyFields = useMemo(() => applyDefaults(createEmptyFieldState()), [])
   const [mode, setMode] = useState('polish')
@@ -71,7 +110,11 @@ export default function App() {
   const [openSections, setOpenSections] = useState(() =>
     Object.fromEntries(sectionDefinitions.map((section) => [section.key, true])),
   )
+  const [lineItems, setLineItems] = useState([])
+  const [proposalMode, setProposalMode] = useState('summary')
+  const [selectedScenarioLevel, setSelectedScenarioLevel] = useState(null)
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
+  const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
   const fileInputRef = useRef(null)
 
   function setField(field, value) {
@@ -81,6 +124,7 @@ export default function App() {
   function loadParsed(parsed) {
     setFields(applyDefaults({ ...createEmptyFieldState(), ...parsed.fields }))
     setParseContext({ ...emptyContext, ...parsed.context })
+    setLineItems(parsed.lineItems || [])
   }
 
   async function handleFile(event) {
@@ -127,6 +171,8 @@ export default function App() {
     setFields(emptyFields)
     setParseContext(emptyContext)
     setRawText('')
+    setLineItems([])
+    setSelectedScenarioLevel(null)
     setStatus('Cleared. Upload a PDF or fill the fields manually.')
   }
 
@@ -204,6 +250,40 @@ export default function App() {
 
               <QuoteSetupLens guidance={setupGuidance} />
 
+              <div className="bs-form__group no-print">
+                <div className="bs-mode-selector">
+                  <div className="bs-mode-selector__head">
+                    <h2>Proposal format</h2>
+                    {detailedRecommended && proposalMode !== 'detailed' ? (
+                      <span className="bs-mode-recommend">Detailed breakdown recommended</span>
+                    ) : null}
+                  </div>
+                  <div className="bs-mode-selector__buttons">
+                    <button
+                      type="button"
+                      className={`bs-mode-btn ${proposalMode === 'summary' ? 'is-active' : ''}`}
+                      onClick={() => setProposalMode('summary')}
+                    >
+                      Warm Summary
+                    </button>
+                    <button
+                      type="button"
+                      className={`bs-mode-btn ${proposalMode === 'detailed' ? 'is-active' : ''}`}
+                      onClick={() => setProposalMode('detailed')}
+                    >
+                      Detailed Investment Breakdown
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bs-form__group no-print">
+                <ScenarioHelper
+                  selectedLevel={selectedScenarioLevel}
+                  onSelectLevel={(level) => setSelectedScenarioLevel(selectedScenarioLevel === level ? null : level)}
+                />
+              </div>
+
               {rawText ? (
                 <details className="bs-raw">
                   <summary>Raw extracted text (use to spot-check or copy missing fields)</summary>
@@ -234,7 +314,7 @@ export default function App() {
             </section>
 
             <section className="bs-preview" aria-label="Customer proposal preview">
-              <CustomerProposal fields={fields} parseContext={parseContext} />
+              <CustomerProposal fields={fields} parseContext={parseContext} lineItems={lineItems} proposalMode={proposalMode} />
             </section>
           </main>
         </>

@@ -1,4 +1,11 @@
 import { buildCustomerView, collectDetailItems, collectPackages } from '../lib/customerView.js'
+import {
+  KOMFORT_ZONE_EXPLAINER,
+  QUOTE_ATTACHMENT_NOTE,
+  detectEstimateBasisItems,
+  detectKomfortZone,
+  groupLineItemsByCategory,
+} from '../lib/proposalDetail.js'
 
 function Block({ value, fallback = null, multiline = false }) {
   if (!value) return fallback
@@ -39,11 +46,85 @@ function ScopeList({ value }) {
   )
 }
 
-export default function CustomerProposal({ fields, parseContext, includeDeliveryDate = false }) {
+function QuoteAttachmentNote() {
+  return (
+    <div className="cp-attachment-note">
+      <p>{QUOTE_ATTACHMENT_NOTE}</p>
+    </div>
+  )
+}
+
+function InvestmentBreakdown({ groups }) {
+  if (!groups.length) return null
+  return (
+    <section className="cp-investment-breakdown cp-detail-section">
+      <div className="cp-detail-head">
+        <h3>Investment Breakdown</h3>
+        <span className="cp-detail-subtotal">By project area</span>
+      </div>
+      <table className="cp-detail-table">
+        <thead>
+          <tr>
+            <th>Project Area</th>
+            <th className="cp-col-right">Estimate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) => (
+            <tr key={group.key}>
+              <td>{group.label}</td>
+              <td className="cp-col-right">{group.categoryTotalFormatted}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="cp-breakdown-note">See attached line-item quote for full official pricing detail.</p>
+    </section>
+  )
+}
+
+function EstimateBasis({ items }) {
+  if (!items.length) return null
+  return (
+    <section className="cp-estimate-basis cp-detail-section">
+      <div className="cp-detail-head">
+        <h3>Estimate Basis &amp; Allowances</h3>
+      </div>
+      <p className="cp-basis-intro">The following quantities were used to build this estimate. Final dimensions should be confirmed before material orders are placed.</p>
+      <ul className="cp-basis-list">
+        {items.map((basisItem, idx) => (
+          <li key={idx} className="cp-basis-item">
+            <span className="cp-basis-label">{basisItem.label}</span>
+            {basisItem.qty ? (
+              <span className="cp-basis-qty">{basisItem.qty}{basisItem.unit ? ` ${basisItem.unit}` : ''}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function KomfortZoneSection() {
+  return (
+    <section className="cp-komfort-zone cp-detail-section">
+      <div className="cp-detail-head">
+        <h3>Heat Management Note</h3>
+      </div>
+      <p className="cp-line">{KOMFORT_ZONE_EXPLAINER}</p>
+    </section>
+  )
+}
+
+export default function CustomerProposal({ fields, parseContext, lineItems = [], proposalMode = 'summary', includeDeliveryDate = false }) {
   const view = buildCustomerView(fields, parseContext, { includeDeliveryDate })
   const packages = collectPackages(fields)
   const details = collectDetailItems(fields)
   const hasInvestment = fields.TOTAL_AMOUNT || fields.QUOTATION_TOTAL || fields.BALANCE_DUE
+  const isDetailed = proposalMode === 'detailed'
+  const categoryGroups = isDetailed ? groupLineItemsByCategory(lineItems) : []
+  const basisItems = isDetailed ? detectEstimateBasisItems(lineItems, fields) : []
+  const showKomfortZone = isDetailed && detectKomfortZone(lineItems, fields)
   const projectLine = [
     fields.CUSTOMER_NAME,
     fields.PROJECT_TITLE,
@@ -169,12 +250,40 @@ export default function CustomerProposal({ fields, parseContext, includeDelivery
         <TemplateHead />
 
         <header className="cp-page-header">
-          <h2>Detailed Scope, Terms &amp; Investment</h2>
+          <h2>{isDetailed ? 'Investment Breakdown, Scope &amp; Terms' : 'Detailed Scope, Terms &amp; Investment'}</h2>
           <p>A complete view of venting components, installation details, and project investment.</p>
           <Divider />
         </header>
 
-        {fields.INSTALLATION_SCOPE ? (
+        {isDetailed ? (
+          <>
+            <QuoteAttachmentNote />
+            {categoryGroups.length ? <InvestmentBreakdown groups={categoryGroups} /> : null}
+            {basisItems.length ? <EstimateBasis items={basisItems} /> : null}
+            {showKomfortZone ? <KomfortZoneSection /> : null}
+            {fields.INSTALLATION_SCOPE ? (
+              <section className="cp-detail-section cp-detail-section--scope">
+                <div className="cp-detail-head">
+                  <h3>Scope &amp; Responsibility Notes</h3>
+                </div>
+                <ScopeList value={fields.INSTALLATION_SCOPE} />
+                {fields.PROJECT_NOTES ? (
+                  <div className="cp-scope-notes">
+                    <h3>Notes and allowances</h3>
+                    <Block value={fields.PROJECT_NOTES} multiline />
+                  </div>
+                ) : null}
+              </section>
+            ) : (
+              <section className="cp-detail-section cp-detail-section--scope">
+                <div className="cp-detail-head">
+                  <h3>Scope &amp; Responsibility Notes</h3>
+                </div>
+                <p className="cp-muted">Installation scope and responsibility notes will appear here once reviewed.</p>
+              </section>
+            )}
+          </>
+        ) : fields.INSTALLATION_SCOPE ? (
           <section className="cp-detail-section cp-detail-section--scope">
             <div className="cp-detail-head">
               <h3>Included project scope</h3>

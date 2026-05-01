@@ -46,8 +46,9 @@ Accessible via the Quote Recovery tab in the app header. Wires into: opportuniti
 1. ~~Proposal Package / Playbook Guidance~~ — wired into Old Quote Recovery lane
 2. ~~Opportunity Save / Queue~~ — wired into Old Quote Recovery lane
 3. ~~Follow-Up Composer + Activity Timeline~~ — wired into Old Quote Recovery lane
-4. Next: expose Opportunity Queue across both polish and recovery lanes
-5. Next: add "Save to Queue" from Quote Polish flow
+4. ~~Proposal Detail Engine V1~~ — mode selector, category grouping, Investment Breakdown, Estimate Basis, Komfort Zone, Scope, Scale Scenario helper
+5. Next: expose Opportunity Queue across both polish and recovery lanes
+6. Next: add "Save to Queue" from Quote Polish flow
 
 ## Reintegration Rules
 

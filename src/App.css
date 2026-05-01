@@ -1925,3 +1925,222 @@ html, body, #root {
     font-size: 8px;
   }
 }
+
+/* ── Proposal mode selector ──────────────────────────────────────── */
+
+.bs-mode-selector { padding: 2px 0 4px; }
+
+.bs-mode-selector__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.bs-mode-selector__head h2 { margin: 0; }
+
+.bs-mode-recommend {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #1a4d2e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 10px;
+}
+
+.bs-mode-selector__buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.bs-mode-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: #fff;
+  border: 1.5px solid #d0d5dd;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #374151;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bs-mode-btn:hover { border-color: #1a4d2e; color: #1a4d2e; }
+
+.bs-mode-btn.is-active {
+  background: #1a4d2e;
+  border-color: #1a4d2e;
+  color: #fff;
+}
+
+/* ── Project scale scenario helper ──────────────────────────────── */
+
+.bs-scenario { padding: 2px 0 4px; }
+
+.bs-scenario h2 { margin-bottom: 6px; }
+
+.bs-scenario__warning {
+  font-size: 12px;
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
+.bs-scenario__levels {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.bs-scenario__level {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 10px;
+  min-width: 100px;
+  background: #fff;
+  border: 1.5px solid #d0d5dd;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bs-scenario__level:hover { border-color: #1a4d2e; }
+
+.bs-scenario__level.is-active {
+  background: #f0fdf4;
+  border-color: #1a4d2e;
+}
+
+.bs-scenario__level-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a4d2e;
+  line-height: 1;
+}
+
+.bs-scenario__level-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.bs-scenario__detail {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 12px 14px;
+}
+
+.bs-scenario__detail-desc {
+  font-size: 13px;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.bs-scenario__considerations {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.bs-scenario__detail-warning {
+  font-size: 11.5px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 5px 9px;
+  margin: 0;
+}
+
+/* ── Customer proposal: detailed mode sections ───────────────────── */
+
+.cp-attachment-note {
+  background: #f8f9fa;
+  border-left: 3px solid #1a4d2e;
+  padding: 9px 14px;
+  margin-bottom: 16px;
+  border-radius: 0 4px 4px 0;
+}
+
+.cp-attachment-note p {
+  margin: 0;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.cp-col-right { text-align: right; }
+
+.cp-breakdown-note {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 8px 0 0;
+  font-style: italic;
+}
+
+.cp-basis-intro {
+  font-size: 12px;
+  color: #374151;
+  margin-bottom: 10px;
+  line-height: 1.45;
+}
+
+.cp-basis-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-basis-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.cp-basis-item:last-child { border-bottom: none; }
+
+.cp-basis-label {
+  flex: 1;
+  color: #374151;
+}
+
+.cp-basis-qty {
+  font-weight: 600;
+  color: #1a4d2e;
+  white-space: nowrap;
+}
+
+.cp-komfort-zone .cp-line {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+@media print {
+  .cp-attachment-note {
+    border-left-width: 2px;
+    padding: 7px 12px;
+    margin-bottom: 14px;
+  }
+
+  .cp-basis-list { gap: 2px; }
+
+  .cp-basis-item { padding: 3px 0; font-size: 11px; }
+}
