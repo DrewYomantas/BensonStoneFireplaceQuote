@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { recoveryIntakeFromParsedQuote } from './recoveryUploadIntake.js'
+import { recoveryIntakeFromParsedQuote, summarizeRecoveryUploadDrafts } from './recoveryUploadIntake.js'
 
 function parsed(overrides = {}) {
   return {
@@ -84,4 +84,24 @@ test('paid or closed uploaded records classify as paid closed', () => {
   })
 
   assert.equal(intake.recoveryClassification, 'paid-closed')
+})
+
+test('bulk recovery upload summary counts review states without raw text', () => {
+  const reviewed = recoveryIntakeFromParsedQuote({ fileName: 'reviewed.pdf', parsed: parsed() })
+  reviewed.reviewedForFollowUp = true
+  const missing = recoveryIntakeFromParsedQuote({
+    fileName: 'missing.pdf',
+    parsed: parsed({ fields: { CUSTOMER_NAME: '', CUSTOMER_EMAIL: '', CUSTOMER_PHONE: '' } }),
+  })
+  const summary = summarizeRecoveryUploadDrafts([
+    { id: '1', status: 'ready-for-review', intake: reviewed },
+    { id: '2', status: 'ready-for-review', intake: missing },
+    { id: '3', status: 'error', intake: recoveryIntakeFromParsedQuote({ fileName: 'bad.pdf' }), error: 'Unreadable' },
+  ])
+
+  assert.equal(summary.draftCount, 3)
+  assert.equal(summary.readyForReview, 2)
+  assert.equal(summary.reviewed, 1)
+  assert.equal(summary.missingContact, 2)
+  assert.equal(summary.errors, 1)
 })

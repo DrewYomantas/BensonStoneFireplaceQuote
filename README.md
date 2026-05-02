@@ -57,7 +57,7 @@ Output rules:
 
 - accepts BisTrack PDF uploads
 - extracts embedded PDF text or runs OCR for scanned PDFs
-- lets Quote Recovery upload old quote PDFs/images, review extracted fields, and save safe metadata to the recovery queue
+- lets Quote Recovery upload one or many old quote PDFs/images, review extracted fields, and save safe metadata to the recovery queue
 - parses extracted text into the field contract in [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
 - keeps missing or unclear fields blank
 - applies only the explicit business defaults:

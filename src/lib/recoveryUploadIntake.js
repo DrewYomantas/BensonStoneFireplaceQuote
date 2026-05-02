@@ -149,3 +149,55 @@ export async function parseRecoveryUploadFile(file, options = {}) {
     usedOcr: true,
   }
 }
+
+export async function parseRecoveryUploadFiles(files = [], options = {}) {
+  const list = Array.from(files || [])
+  const drafts = []
+
+  for (let index = 0; index < list.length; index += 1) {
+    const file = list[index]
+    try {
+      const result = await parseRecoveryUploadFile(file, {
+        ...options,
+        onProgress: (progress) => {
+          options.onProgress?.({
+            fileName: file.name,
+            fileIndex: index + 1,
+            fileCount: list.length,
+            progress,
+          })
+        },
+      })
+      drafts.push({
+        id: `bulk-${index}-${file.name}`,
+        fileName: file.name,
+        intake: { ...result.intake, reviewedForFollowUp: false },
+        status: 'ready-for-review',
+        error: '',
+      })
+    } catch (err) {
+      drafts.push({
+        id: `bulk-${index}-${file.name}`,
+        fileName: file.name,
+        intake: recoveryIntakeFromParsedQuote({ fileName: file.name, fileType: file.type }),
+        status: 'error',
+        error: err.message || String(err),
+      })
+    }
+  }
+
+  return {
+    drafts,
+    summary: summarizeRecoveryUploadDrafts(drafts),
+  }
+}
+
+export function summarizeRecoveryUploadDrafts(drafts = []) {
+  return {
+    draftCount: drafts.length,
+    readyForReview: drafts.filter((draft) => draft.status === 'ready-for-review').length,
+    reviewed: drafts.filter((draft) => draft.intake?.reviewedForFollowUp === true).length,
+    missingContact: drafts.filter((draft) => (draft.intake?.sourceWarnings || []).some((warning) => /missing contact/i.test(warning))).length,
+    errors: drafts.filter((draft) => draft.status === 'error').length,
+  }
+}

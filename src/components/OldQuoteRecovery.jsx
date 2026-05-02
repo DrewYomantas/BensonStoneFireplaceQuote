@@ -19,7 +19,7 @@ import {
   buildSentOpportunityPatch,
   listOpportunityActivities,
 } from '../lib/opportunityActivity.js'
-import { parseRecoveryUploadFile } from '../lib/recoveryUploadIntake.js'
+import { parseRecoveryUploadFile, parseRecoveryUploadFiles, summarizeRecoveryUploadDrafts } from '../lib/recoveryUploadIntake.js'
 
 const emptyIntake = {
   customerName: '',
@@ -691,6 +691,166 @@ function RecoveryUploadReview({ onSave, onCancel }) {
   )
 }
 
+function BulkRecoveryUpload({ onSave, onCancel }) {
+  const fileRef = useRef(null)
+  const [drafts, setDrafts] = useState([])
+  const [status, setStatus] = useState('Upload multiple old quote PDFs or images to create recovery drafts.')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+  const summary = summarizeRecoveryUploadDrafts(drafts)
+  const selectedCount = drafts.filter((draft) => draft.status === 'ready-for-review' && draft.intake.reviewedForFollowUp === true).length
+
+  async function handleFiles(event) {
+    const files = Array.from(event.target.files || [])
+    if (!files.length) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await parseRecoveryUploadFiles(files, {
+        onProgress: ({ fileName, fileIndex, fileCount, progress }) => {
+          if (typeof progress === 'string') setStatus(`${fileIndex}/${fileCount}: ${fileName} - ${progress}`)
+          else if (progress?.progress) setStatus(`${fileIndex}/${fileCount}: ${fileName}`)
+          else {
+            const action = progress?.stage === 'rendering' ? 'Rendering' : 'Reading'
+            setStatus(`${fileIndex}/${fileCount}: ${action} page ${progress?.pageNumber || 1} of ${progress?.pageCount || 1}`)
+          }
+        },
+      })
+      setDrafts(result.drafts)
+      setStatus(`Created ${result.summary.readyForReview} recovery draft${result.summary.readyForReview === 1 ? '' : 's'} for review.`)
+    } catch (err) {
+      setError(err.message || String(err))
+      setStatus('Bulk upload failed.')
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  function updateDraft(id, patch) {
+    setDrafts((current) => current.map((draft) =>
+      draft.id === id ? { ...draft, intake: { ...draft.intake, ...patch } } : draft
+    ))
+  }
+
+  function removeDraft(id) {
+    setDrafts((current) => current.filter((draft) => draft.id !== id))
+  }
+
+  function markAllReviewed() {
+    setDrafts((current) => current.map((draft) =>
+      draft.status === 'ready-for-review'
+        ? { ...draft, intake: { ...draft.intake, reviewedForFollowUp: true } }
+        : draft
+    ))
+  }
+
+  function handleSaveSelected() {
+    const selected = drafts.filter((draft) => draft.status === 'ready-for-review' && draft.intake.reviewedForFollowUp === true)
+    if (!selected.length) {
+      setError('Mark at least one reviewed draft before saving.')
+      return
+    }
+    selected.forEach((draft) => saveOpportunity(createOldQuoteOpportunity(draft.intake)))
+    setSaved(true)
+    setTimeout(() => {
+      setSaved(false)
+      if (onSave) onSave()
+    }, 700)
+  }
+
+  return (
+    <div className="bs-intake bs-upload-intake">
+      <div className="bs-upload-intake__head">
+        <div>
+          <p className="bs-lens__eyebrow">Bulk Recovery Intake</p>
+          <h2>Bulk Upload Old Quotes</h2>
+          <p>Create reviewed recovery drafts from multiple PDFs or images. No raw OCR text is saved.</p>
+        </div>
+        <label className={`bs-button bs-button--primary ${busy ? 'is-disabled' : ''}`}>
+          {busy ? 'Reading...' : 'Bulk Upload'}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,.pdf,image/*"
+            multiple
+            onChange={handleFiles}
+            disabled={busy}
+            hidden
+          />
+        </label>
+      </div>
+
+      <p className="bs-status" role="status">{status}</p>
+
+      {drafts.length ? (
+        <div className="bs-bulk-summary">
+          <span><strong>{summary.draftCount}</strong> files</span>
+          <span><strong>{summary.readyForReview}</strong> drafts</span>
+          <span><strong>{summary.reviewed}</strong> reviewed</span>
+          <span><strong>{summary.missingContact}</strong> missing contact</span>
+          <span><strong>{summary.errors}</strong> errors</span>
+        </div>
+      ) : null}
+
+      {drafts.length ? (
+        <div className="bs-bulk-actions">
+          <button type="button" className="bs-lens__copy" onClick={markAllReviewed}>Mark All Reviewed</button>
+          <button type="button" className="bs-lens__copy" onClick={handleSaveSelected} disabled={saved || !selectedCount}>
+            {saved ? 'Saved' : `Save ${selectedCount} Reviewed`}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="bs-bulk-drafts">
+        {drafts.map((draft) => (
+          <article className={`bs-bulk-draft ${draft.status === 'error' ? 'is-error' : ''}`} key={draft.id}>
+            <div className="bs-bulk-draft__head">
+              <div>
+                <strong>{draft.intake.customerName || draft.fileName || 'Unreviewed source'}</strong>
+                <span>{draft.intake.quoteNumber ? `Quote #${draft.intake.quoteNumber}` : 'Quote number missing'} | {draft.intake.quoteDate || 'Date missing'}</span>
+                <span>{draft.intake.originalQuoteAmount || draft.intake.quotationTotal || 'Total missing'} | {draft.intake.sourceType}</span>
+              </div>
+              <label className="bs-upload-review-check">
+                <input
+                  type="checkbox"
+                  checked={draft.intake.reviewedForFollowUp === true}
+                  disabled={draft.status === 'error'}
+                  onChange={(event) => updateDraft(draft.id, { reviewedForFollowUp: event.target.checked })}
+                />
+                <span>Reviewed</span>
+              </label>
+            </div>
+            {draft.error ? <p className="bs-bulk-error">{draft.error}</p> : null}
+            {draft.intake.sourceWarnings?.length ? (
+              <ul className="bs-lens-list bs-lens-list--warning">
+                {draft.intake.sourceWarnings.slice(0, 4).map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            ) : null}
+            <div className="bs-bulk-draft__fields">
+              <IntakeField id="customerName" label="Customer Name" value={draft.intake.customerName} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
+              <IntakeField id="customerEmail" label="Email" value={draft.intake.customerEmail} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
+              <IntakeField id="customerPhone" label="Phone" value={draft.intake.customerPhone} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
+              <IntakeField id="quoteNumber" label="Quote Number" value={draft.intake.quoteNumber} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
+            </div>
+            <div className="bs-bulk-draft__footer">
+              <span>{draft.intake.sourceTrailNote || draft.fileName}</span>
+              <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Skip</button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {error ? <p style={{ margin: 0, fontSize: 13, color: '#8a2a0d', fontWeight: 600 }}>{error}</p> : null}
+
+      <button type="button" className="bs-button bs-button--ghost" onClick={onCancel} style={{ justifySelf: 'start', color: '#2d2217', borderColor: 'rgba(94,73,51,0.3)' }}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 export default function OldQuoteRecovery() {
   const [view, setView] = useState('queue')
   const [selectedId, setSelectedId] = useState('')
@@ -746,6 +906,18 @@ export default function OldQuoteRecovery() {
     )
   }
 
+  if (view === 'bulk-upload') {
+    return (
+      <BulkRecoveryUpload
+        onSave={() => {
+          refreshOpportunities()
+          setView('queue')
+        }}
+        onCancel={() => setView('queue')}
+      />
+    )
+  }
+
   if (view === 'detail' && selectedOpportunity) {
     return (
       <DetailView
@@ -782,6 +954,15 @@ export default function OldQuoteRecovery() {
           style={{ color: '#173321', borderColor: 'rgba(23,51,33,0.35)' }}
         >
           Upload Old Quote
+        </button>
+
+        <button
+          type="button"
+          className="bs-button"
+          onClick={() => setView('bulk-upload')}
+          style={{ color: '#173321', borderColor: 'rgba(23,51,33,0.35)' }}
+        >
+          Bulk Upload
         </button>
 
         <div className="bs-recovery__filters">

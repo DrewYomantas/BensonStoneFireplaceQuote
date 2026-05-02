@@ -18,7 +18,7 @@ The active lens is advisory only. It shows setup confidence, blockers, customer 
 
 Accessible via the Quote Recovery tab in the app header. Wires into: opportunities.js (localStorage queue), followUpComposer.js (safe draft generation), opportunityActivity.js (activity log), currentSetup.js (setup blocker evaluation), proposalPackages.js (package routing). No auto-send, no backend, no private data committed.
 
-Upload intake is now review-first: old quote PDFs and images can be OCRed or parsed through `src/lib/recoveryUploadIntake.js`, reviewed in the Quote Recovery lane, and saved into the same recovery queue. Raw extracted text and file bytes are not stored on opportunity records.
+Upload intake is now review-first: one or many old quote PDFs/images can be OCRed or parsed through `src/lib/recoveryUploadIntake.js`, reviewed in the Quote Recovery lane, and saved into the same recovery queue. Raw extracted text and file bytes are not stored on opportunity records.
 
 ## Parked Modules
 
@@ -51,7 +51,7 @@ Upload intake is now review-first: old quote PDFs and images can be OCRed or par
 4. ~~Proposal Detail Engine V1~~ - mode selector, category grouping, Investment Breakdown, Estimate Basis, Komfort Zone, Scope, terms, acceptance
 5. Next: expose Opportunity Queue across both polish and recovery lanes
 6. Next: add "Save to Queue" from Quote Polish flow
-7. ~~Quote Recovery upload/OCR intake~~ - reuses Quote Polish PDF/OCR parsing for old scanned PDFs/images and routes reviewed opportunities into the recovery queue
+7. ~~Quote Recovery upload/OCR intake~~ - reuses Quote Polish PDF/OCR parsing for old scanned PDFs/images, supports bulk draft review, and routes reviewed opportunities into the recovery queue
 
 ## Pricing / Source Hierarchy
 
