@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   createDisplayRecord,
   displayFilterDefinitions,
@@ -8,6 +8,7 @@ import {
   getDisplayRegisterEmptyState,
   listDisplayRecords,
   locationZoneOptions,
+  removeDisplayRecord,
   saveDisplayRecord,
   updateDisplayRecord,
   workingStatusOptions,
@@ -85,7 +86,8 @@ export default function ShowroomDisplayRegister() {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [form, setForm] = useState(emptyForm)
-  const [status, setStatus] = useState('Showroom Display Register is local only. Update it when a display is manually checked in the showroom or cellar.')
+  const [status, setStatus] = useState('Track what is physically on the First Floor or in the Cellar. This register is local and internal only.')
+  const formRef = useRef(null)
 
   const filteredRecords = useMemo(() => filterDisplayRecords(records, filter, search), [records, filter, search])
   const counts = useMemo(() => getDisplayFilterCounts(records, search), [records, search])
@@ -98,6 +100,7 @@ export default function ShowroomDisplayRegister() {
 
   function resetForm() {
     setForm(emptyForm)
+    setStatus('Track what is physically on the First Floor or in the Cellar. This register is local and internal only.')
   }
 
   function refreshRecords() {
@@ -123,7 +126,15 @@ export default function ShowroomDisplayRegister() {
 
   function handleEdit(record) {
     setForm(record)
-    setStatus(`Editing ${record.productCode || record.modelName || 'display record'}.`)
+    setStatus(`Editing — ${record.productCode || record.modelName || 'display record'}. Update fields and click Save.`)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function handleDelete(id) {
+    removeDisplayRecord(id)
+    refreshRecords()
+    if (form.id === id) resetForm()
+    setStatus('Display record deleted.')
   }
 
   function markVerifiedToday() {
@@ -134,14 +145,14 @@ export default function ShowroomDisplayRegister() {
     <div className="bs-display-register">
       <section className="bs-display-register__sidebar">
         <div className="bs-display-register__intro">
-          <p className="bs-lens__eyebrow">Internal Fireplace Workbench</p>
+          <p className="bs-lens__eyebrow">Internal Only — Not Customer-Facing</p>
           <h2>Showroom Display Register</h2>
           <p>
-            Track what is physically on the First Floor or in the Cellar, then let the workbench use that as internal-only quote context.
+            Track what is physically on display in the First Floor showroom or The Cellar. Records here let the workbench show internal display context when reviewing quotes. Add records manually when you verify a product is on display.
           </p>
         </div>
 
-        <form className="bs-display-form" onSubmit={handleSubmit}>
+        <form className="bs-display-form" onSubmit={handleSubmit} ref={formRef}>
           <div className="bs-display-form__head">
             <div>
               <p className="bs-recovery__section-label">{editing ? 'Edit Record' : 'Add Record'}</p>
@@ -220,7 +231,10 @@ export default function ShowroomDisplayRegister() {
                     <strong>{record.productCode || record.modelName || 'Unnamed display'}</strong>
                     <span>{record.modelName || record.description || 'Manual fireplace display record'}</span>
                   </div>
-                  <button type="button" className="bs-lens__copy" onClick={() => handleEdit(record)}>Edit</button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" className="bs-lens__copy" onClick={() => handleEdit(record)}>Edit</button>
+                    <button type="button" className="bs-lens__copy bs-lens__copy--danger" onClick={() => handleDelete(record.id)}>Delete</button>
+                  </div>
                 </div>
 
                 <div className="bs-queue-card__badges">

@@ -69,12 +69,12 @@ function VendorCard({ vendor, userNote, onSaveNote }) {
 
       <div className="bs-vb-card__file">
         <span className="bs-vb-card__filename">{vendor.priceListFile}</span>
-        <button type="button" className="bs-lens__copy" onClick={handleCopy}>
-          {copied ? 'Copied' : 'Copy path'}
+        <button type="button" className="bs-lens__copy" onClick={handleCopy} title="Copy file path to open in File Explorer">
+          {copied ? '✓ Copied' : 'Copy Path'}
         </button>
       </div>
 
-      <div className="bs-vb-card__path">{fullPath}</div>
+      <div className="bs-vb-card__path" title="Paste in File Explorer address bar to open">{fullPath}</div>
 
       {vendor.internalNote && !isCostFile ? (
         <p className="bs-vb-card__note">{vendor.internalNote}</p>
@@ -143,8 +143,8 @@ export default function VendorPriceBooks() {
           <p className="bs-lens__eyebrow">Internal reference only</p>
           <h2>Vendors &amp; Price Books</h2>
           <p className="bs-vb__subtitle">
-            {allVendors.length} price lists from FP Central Price List. Copy a file path to open it locally.
-            Pricing never surfaces in customer output.
+            {allVendors.length} price lists from FP Central Price List — internal reference only.
+            Pricing never surfaces in customer output. Copy a file path to open locally in File Explorer.
           </p>
         </div>
         <PricingHierarchy />

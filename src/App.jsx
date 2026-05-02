@@ -12,7 +12,6 @@ import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
 import {
-  detectDetailedBreakdownRecommended,
   getEstimateBasisSummary,
   hasUnclassifiedLineItems,
 } from './lib/proposalDetail.js'
@@ -137,41 +136,41 @@ function QuotePolishSavePanel({
 }) {
   if (!hasQuote) return null
   const reviewReady = reviewState !== 'unresolved'
-  const readinessLabel = reviewState === 'reviewed'
-    ? 'Proposal Ready'
-    : reviewState === 'follow-up'
-      ? 'Follow-Up Needed'
-      : 'Review Before Follow-Up'
 
   return (
     <section className="bs-save-queue no-print" aria-label="Save reviewed quote to queue">
       <div className="bs-save-queue__head">
         <div>
-          <p className="bs-lens__eyebrow">Quote Opportunity</p>
-          <h2>Save Reviewed Quote</h2>
+          <p className="bs-lens__eyebrow">Save to Queue</p>
+          <h2>Customer Packet Includes</h2>
         </div>
-        <span className={`bs-save-queue__pill ${reviewReady ? 'is-ready' : ''}`}>{readinessLabel}</span>
+        {reviewReady && (
+          <span className="bs-save-queue__pill is-ready">
+            {reviewState === 'reviewed' ? 'Ready to Send' : 'Follow-Up Needed'}
+          </span>
+        )}
       </div>
 
-      <div className="bs-save-queue__meta">
-        <span>Proposal mode: {proposalMode === 'detailed' ? 'Detailed Investment Breakdown' : 'Warm Summary'}</span>
-        <span>Source: Quote Polish / BisTrack PDF</span>
-      </div>
-
-      <label className="bs-save-queue__check">
-        <input
-          type="checkbox"
-          checked={lineItemQuoteAttached}
-          onChange={(event) => onAttachmentChange(event.target.checked)}
-        />
-        <span>Original BisTrack line-item quote will be attached.</span>
-      </label>
+      <ul className="bs-packet-list">
+        <li className="bs-packet-list__item bs-packet-list__item--check">Clean customer proposal</li>
+        <li className="bs-packet-list__item bs-packet-list__item--check">
+          {proposalMode === 'detailed' ? 'Detailed investment breakdown' : 'Warm project summary'}
+        </li>
+        <li className="bs-packet-list__item bs-packet-list__item--check">Scope / responsibility notes</li>
+        <li className={`bs-packet-list__item ${lineItemQuoteAttached ? 'bs-packet-list__item--check' : 'bs-packet-list__item--pending'}`}>
+          <label className="bs-packet-list__label">
+            <input
+              type="checkbox"
+              checked={lineItemQuoteAttached}
+              onChange={(event) => onAttachmentChange(event.target.checked)}
+            />
+            Original BisTrack line-item quote attached
+          </label>
+        </li>
+      </ul>
 
       {!reviewReady ? (
-        <p className="bs-save-queue__warning">Mark this quote as reviewed or follow-up needed before saving it to the queue.</p>
-      ) : null}
-      {!lineItemQuoteAttached ? (
-        <p className="bs-save-queue__warning">Queue record will warn until the attached line-item quote is confirmed.</p>
+        <p className="bs-save-queue__warning">Mark this quote as reviewed above before saving.</p>
       ) : null}
 
       {pendingDuplicate ? (
@@ -222,14 +221,13 @@ export default function App() {
     Object.fromEntries(sectionDefinitions.map((section) => [section.key, true])),
   )
   const [lineItems, setLineItems] = useState([])
-  const [proposalMode, setProposalMode] = useState('summary')
+  const [proposalMode, setProposalMode] = useState('detailed')
   const [proposalReviewState, setProposalReviewState] = useState('unresolved')
   const [lineItemQuoteAttached, setLineItemQuoteAttached] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [pendingDuplicate, setPendingDuplicate] = useState(null)
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
-  const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
-  const displayContext = deriveShowroomDisplayContext({
+const displayContext = deriveShowroomDisplayContext({
     displayRecords: listDisplayRecords(),
     fields,
     lineItems,
@@ -495,31 +493,17 @@ export default function App() {
                 }}
               />
 
-              <div className="bs-form__group no-print">
-                <div className="bs-mode-selector">
-                  <div className="bs-mode-selector__head">
-                    <h2>Proposal format</h2>
-                    {detailedRecommended && proposalMode !== 'detailed' ? (
-                      <span className="bs-mode-recommend">Detailed breakdown recommended</span>
-                    ) : null}
-                  </div>
-                  <div className="bs-mode-selector__buttons">
-                    <button
-                      type="button"
-                      className={`bs-mode-btn ${proposalMode === 'summary' ? 'is-active' : ''}`}
-                      onClick={() => setProposalMode('summary')}
-                    >
-                      Warm Summary
-                    </button>
-                    <button
-                      type="button"
-                      className={`bs-mode-btn ${proposalMode === 'detailed' ? 'is-active' : ''}`}
-                      onClick={() => setProposalMode('detailed')}
-                    >
-                      Detailed Investment Breakdown
-                    </button>
-                  </div>
-                </div>
+              <div className="bs-format-toggle no-print">
+                <span className="bs-format-toggle__label">
+                  Format: <strong>{proposalMode === 'detailed' ? 'Detailed Investment Breakdown' : 'Warm Summary'}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="bs-format-toggle__switch"
+                  onClick={() => setProposalMode(proposalMode === 'detailed' ? 'summary' : 'detailed')}
+                >
+                  Switch to {proposalMode === 'detailed' ? 'Warm Summary' : 'Detailed Breakdown'}
+                </button>
               </div>
 
               <QuotePolishSavePanel

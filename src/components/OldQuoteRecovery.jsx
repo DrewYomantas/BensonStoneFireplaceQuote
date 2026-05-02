@@ -15,6 +15,7 @@ import {
   getQueueFilterCounts,
   listOpportunities,
   queueFilterDefinitions,
+  removeOpportunity,
   saveOpportunity,
 } from '../lib/opportunities.js'
 import { listOpportunityActivities } from '../lib/opportunityActivity.js'
@@ -108,7 +109,7 @@ function IntakeSelect({ id, label, value, options, onChange, wide = false }) {
   )
 }
 
-function QueueCard({ opportunity, activities, displayContext, onSelect }) {
+function QueueCard({ opportunity, activities, displayContext, onSelect, onDelete }) {
   const warningCount = (opportunity.warnings || []).filter((w) => !/Sensitive BisTrack fields|quote refresh/i.test(w)).length
   const sourceLabel = getOpportunitySourceLabel(opportunity)
   const readiness = getOpportunityReadinessBadge(opportunity)
@@ -118,12 +119,12 @@ function QueueCard({ opportunity, activities, displayContext, onSelect }) {
   const nextAction = getOpportunityNextActionLabel(opportunity)
 
   return (
-    <button type="button" className="bs-queue-card" onClick={() => onSelect(opportunity)}>
+    <div className="bs-queue-card">
       <div className="bs-queue-card__head">
         <span className="bs-queue-card__name">{opportunity.customerName || 'Unnamed'}</span>
         <span className="bs-queue-card__meta">
           {opportunity.quoteNumber ? `#${opportunity.quoteNumber}` : opportunity.sourceFileName || ''}
-          {opportunity.quoteDate ? ` - ${opportunity.quoteDate}` : ''}
+          {opportunity.quoteDate ? ` · ${opportunity.quoteDate}` : ''}
         </span>
       </div>
       <div className="bs-queue-card__source-row">
@@ -156,7 +157,19 @@ function QueueCard({ opportunity, activities, displayContext, onSelect }) {
           <strong>{latestActivity}</strong>
         </div>
       </div>
-    </button>
+      <div className="bs-queue-card__actions">
+        <button type="button" className="bs-queue-card__action-btn" onClick={() => onSelect(opportunity)}>
+          Open Workspace →
+        </button>
+        <button
+          type="button"
+          className="bs-queue-card__action-btn bs-queue-card__action-btn--danger"
+          onClick={() => onDelete(opportunity.id)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -700,6 +713,11 @@ export default function OldQuoteRecovery() {
     setOpportunities(loadRecoveryOpportunities())
   }
 
+  function handleDeleteOpportunity(id) {
+    removeOpportunity(id)
+    refreshOpportunities()
+  }
+
   function handleSelectOpportunity(opportunity) {
     setSelectedId(opportunity.id)
     setView('detail')
@@ -795,7 +813,7 @@ export default function OldQuoteRecovery() {
           type="button"
           className="bs-button bs-button--primary"
           onClick={() => setView('intake')}
-          style={{ background: '#173321', borderColor: '#173321' }}
+          style={{ background: '#173321', borderColor: '#173321', color: '#f6eddd' }}
         >
           Manual Entry
         </button>
@@ -861,6 +879,7 @@ export default function OldQuoteRecovery() {
               activities={activityCache[opp.id] || []}
               displayContext={displayContextByOpportunity[opp.id]}
               onSelect={handleSelectOpportunity}
+              onDelete={handleDeleteOpportunity}
             />
           ))}
         </div>

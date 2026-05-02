@@ -340,14 +340,14 @@ export default function OpportunityWorkspace({ opportunity, onBack, onRefresh })
               </div>
             ))}
             <p style={{ margin: '4px 0 0', fontSize: 11, color: '#8a481d', fontWeight: 600 }}>
-              Internal reference only — see Vendors &amp; Price Books tab for file paths.
+              Internal reference only — open Vendors &amp; Price Books for the current price list.
             </p>
           </div>
         ) : (
           <div className="bs-workspace-panel">
             <p className="bs-recovery__section-label">Vendor Reference</p>
             <p style={{ margin: 0, fontSize: 12, color: '#8a6d4c' }}>
-              No vendor match detected. Check Vendors &amp; Price Books tab manually.
+              No vendor match detected from quote fields. Check Vendors &amp; Price Books for manual lookup.
             </p>
           </div>
         )}

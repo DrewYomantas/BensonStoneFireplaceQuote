@@ -3519,3 +3519,146 @@ html, body, #root {
   gap: 8px;
   align-items: center;
 }
+
+/* ── Queue card action row ───────────────────────────────────────── */
+
+.bs-queue-card__actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(94, 73, 51, 0.1);
+  flex-wrap: wrap;
+}
+
+.bs-queue-card__action-btn {
+  padding: 6px 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(23, 51, 33, 0.28);
+  background: #173321;
+  color: #f6eddd;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bs-queue-card__action-btn:hover { background: #244a31; }
+
+.bs-queue-card__action-btn--danger {
+  background: transparent;
+  border-color: rgba(180, 60, 30, 0.35);
+  color: #8a2a0d;
+}
+
+.bs-queue-card__action-btn--danger:hover {
+  background: rgba(180, 60, 30, 0.08);
+}
+
+/* ── Danger variant for copy-style buttons ───────────────────────── */
+
+.bs-lens__copy--danger {
+  color: #8a2a0d;
+  border-color: rgba(180, 60, 30, 0.3);
+}
+
+.bs-lens__copy--danger:hover {
+  background: rgba(180, 60, 30, 0.08);
+  border-color: rgba(180, 60, 30, 0.5);
+}
+
+/* ── Customer Packet Includes list ──────────────────────────────── */
+
+.bs-packet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.bs-packet-list__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #2d2217;
+  padding: 4px 0;
+}
+
+.bs-packet-list__item--check::before {
+  content: '✓';
+  color: #173321;
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.bs-packet-list__item--pending::before {
+  content: '○';
+  color: #b46a2d;
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.bs-packet-list__label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #2d2217;
+}
+
+.bs-packet-list__label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Proposal format toggle (de-emphasized) ─────────────────────── */
+
+.bs-format-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(94, 73, 51, 0.06);
+  border: 1px solid rgba(94, 73, 51, 0.14);
+  border-radius: 5px;
+  flex-wrap: wrap;
+}
+
+.bs-format-toggle__label {
+  font-size: 12px;
+  color: #5c4837;
+}
+
+.bs-format-toggle__label strong {
+  color: #173321;
+}
+
+.bs-format-toggle__switch {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b5a47;
+  background: none;
+  border: 1px solid rgba(94, 73, 51, 0.22);
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.bs-format-toggle__switch:hover {
+  background: rgba(94, 73, 51, 0.06);
+  color: #2d2217;
+}
+
+/* ── Opportunity Queue board header ─────────────────────────────── */
+
+.bs-queue-board-head {
+  padding: 20px 24px 4px;
+  border-bottom: 1px solid rgba(94, 73, 51, 0.12);
+  background: #fbf4e7;
+}

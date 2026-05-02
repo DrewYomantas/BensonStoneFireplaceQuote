@@ -189,6 +189,11 @@ export function saveDisplayRecord(record, storage) {
   return clean
 }
 
+export function removeDisplayRecord(id, storage) {
+  const existing = listDisplayRecords(storage)
+  writeDisplayRecords(existing.filter((item) => item.id !== id), storage)
+}
+
 export function updateDisplayRecord(id, patch, storage) {
   const existing = listDisplayRecords(storage)
   const updated = existing.map((item) =>

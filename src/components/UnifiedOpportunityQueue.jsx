@@ -10,6 +10,7 @@ import {
   getQueueFilterCounts,
   listOpportunities,
   queueFilterDefinitions,
+  removeOpportunity,
 } from '../lib/opportunities.js'
 import { listOpportunityActivities } from '../lib/opportunityActivity.js'
 import { deriveShowroomDisplayContext, listDisplayRecords } from '../lib/showroomDisplayRegister.js'
@@ -33,7 +34,7 @@ function readinessBadgeClass(tone) {
   return 'bs-badge bs-badge--unknown'
 }
 
-function QueueCard({ opportunity, activities, displayContext, onSelect }) {
+function QueueCard({ opportunity, activities, displayContext, onSelect, onDelete }) {
   const sourceLabel = getOpportunitySourceLabel(opportunity)
   const readiness = getOpportunityReadinessBadge(opportunity)
   const attachmentWarning = getLineItemAttachmentWarning(opportunity)
@@ -45,34 +46,34 @@ function QueueCard({ opportunity, activities, displayContext, onSelect }) {
   ).length
 
   return (
-    <button type="button" className="bs-queue-card" onClick={() => onSelect(opportunity)}>
+    <div className="bs-queue-card">
       <div className="bs-queue-card__head">
         <span className="bs-queue-card__name">{opportunity.customerName || 'Unnamed'}</span>
         <span className="bs-queue-card__meta">
           {opportunity.quoteNumber ? `#${opportunity.quoteNumber}` : opportunity.sourceFileName || ''}
           {opportunity.quoteDate ? ` · ${opportunity.quoteDate}` : ''}
+          {total ? ` · ${total}` : ''}
         </span>
       </div>
       <div className="bs-queue-card__source-row">
         <span className="bs-source-chip">{sourceLabel}</span>
-        {total ? <span className="bs-queue-card__total">{total}</span> : null}
-      </div>
-      <div className="bs-queue-card__badges">
-        {opportunity.temperature && opportunity.temperature !== 'unknown' ? (
-          <span className={temperatureBadgeClass(opportunity.temperature)}>
-            {titleCase(opportunity.temperature)}
-          </span>
-        ) : null}
-        <span className={readinessBadgeClass(readiness.tone)}>{readiness.label}</span>
-        <span className="bs-badge bs-badge--unknown">{titleCase(opportunity.status || 'unknown')}</span>
-        {displayContext?.chipLabel ? (
-          <span className={readinessBadgeClass(displayContext.tone)}>{displayContext.chipLabel}</span>
-        ) : null}
-        {warningCount > 0 && (
-          <span className="bs-badge bs-badge--warning">
-            {warningCount} warning{warningCount === 1 ? '' : 's'}
-          </span>
-        )}
+        <div className="bs-queue-card__badges" style={{ margin: 0 }}>
+          {opportunity.temperature && opportunity.temperature !== 'unknown' ? (
+            <span className={temperatureBadgeClass(opportunity.temperature)}>
+              {titleCase(opportunity.temperature)}
+            </span>
+          ) : null}
+          <span className={readinessBadgeClass(readiness.tone)}>{readiness.label}</span>
+          <span className="bs-badge bs-badge--unknown">{titleCase(opportunity.status || 'unknown')}</span>
+          {displayContext?.chipLabel ? (
+            <span className={readinessBadgeClass(displayContext.tone)}>{displayContext.chipLabel}</span>
+          ) : null}
+          {warningCount > 0 && (
+            <span className="bs-badge bs-badge--warning">
+              {warningCount} warning{warningCount === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
       </div>
       {attachmentWarning ? (
         <div className="bs-queue-card__warning">
@@ -89,7 +90,19 @@ function QueueCard({ opportunity, activities, displayContext, onSelect }) {
           <strong>{latestActivity}</strong>
         </div>
       </div>
-    </button>
+      <div className="bs-queue-card__actions">
+        <button type="button" className="bs-queue-card__action-btn" onClick={() => onSelect(opportunity)}>
+          Open Workspace →
+        </button>
+        <button
+          type="button"
+          className="bs-queue-card__action-btn bs-queue-card__action-btn--danger"
+          onClick={() => onDelete(opportunity.id)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -104,6 +117,11 @@ export default function UnifiedOpportunityQueue() {
 
   function handleSelectOpportunity(opportunity) {
     setSelectedId(opportunity.id)
+  }
+
+  function handleDeleteOpportunity(id) {
+    removeOpportunity(id)
+    refreshOpportunities()
   }
 
   function handleBack() {
@@ -155,6 +173,13 @@ export default function UnifiedOpportunityQueue() {
 
   return (
     <div className="bs-recovery">
+      <div className="bs-queue-board-head">
+        <div>
+          <p className="bs-lens__eyebrow">Internal Sales Workbench</p>
+          <h2 style={{ margin: '2px 0 4px', color: '#173321', fontSize: 20, fontWeight: 800 }}>Opportunity Queue</h2>
+          <p style={{ margin: 0, fontSize: 13, color: '#6b5a47' }}>All saved quotes and recovery records. Open a workspace to review, draft follow-ups, and log activity.</p>
+        </div>
+      </div>
       <div className="bs-recovery__toolbar no-print">
         <div className="bs-recovery__filters">
           {queueFilterDefinitions.map((f) => (
@@ -196,6 +221,7 @@ export default function UnifiedOpportunityQueue() {
               activities={activityCache[opp.id] || []}
               displayContext={displayContextCache[opp.id]}
               onSelect={handleSelectOpportunity}
+              onDelete={handleDeleteOpportunity}
             />
           ))}
         </div>
