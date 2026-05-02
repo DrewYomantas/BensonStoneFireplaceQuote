@@ -2981,3 +2981,255 @@ html, body, #root {
 
   .cp-basis-item { padding: 3px 0; font-size: 11px; }
 }
+
+
+/* ── Opportunity Workspace ─────────────────────────────────────── */
+
+.ow-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 100vh;
+  background: var(--surface, #f9fafb);
+}
+
+.ow-workspace__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--surface-raised, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.ow-back-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent, #b45309);
+  padding: 6px 0;
+}
+.ow-back-button:hover { text-decoration: underline; }
+
+.ow-workspace__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Header snapshot */
+.ow-header {
+  padding: 24px 24px 20px;
+  background: var(--surface-raised, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 12px 24px;
+}
+
+.ow-header__main { grid-column: 1; grid-row: 1; }
+.ow-header__badges { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; justify-content: flex-end; }
+.ow-header__next-action { grid-column: 1; grid-row: 2; font-size: 14px; color: var(--text, #111827); }
+.ow-header__last-activity { grid-column: 2; grid-row: 2; font-size: 13px; color: var(--text-muted, #6b7280); text-align: right; }
+
+.ow-header__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent, #b45309);
+  margin: 0 0 4px;
+}
+
+.ow-header__name {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text, #111827);
+}
+
+.ow-header__meta {
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+  margin: 0;
+}
+
+.ow-header__amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text, #111827);
+  margin: 4px 0 0;
+}
+
+/* Badges */
+.ow-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+.ow-badge--ready    { background: #d1fae5; color: #065f46; }
+.ow-badge--warning  { background: #fef3c7; color: #92400e; }
+.ow-badge--blocked  { background: #fee2e2; color: #991b1b; }
+.ow-badge--today    { background: #dbeafe; color: #1e40af; }
+.ow-badge--neutral  { background: var(--surface-muted, #f3f4f6); color: var(--text-muted, #6b7280); }
+
+/* Readiness strip */
+.ow-readiness-strip {
+  padding: 10px 24px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.ow-readiness-strip--clear { background: #d1fae5; color: #065f46; }
+.ow-readiness-strip--warn  { background: #fef3c7; color: #92400e; flex-direction: column; }
+.ow-warning-list { margin: 6px 0 0; padding-left: 18px; }
+.ow-warning-list li { margin-bottom: 3px; }
+
+/* Channel hints */
+.ow-channel-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 24px;
+  background: var(--surface-raised, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.ow-hint-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--surface-muted, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+
+/* Body layout */
+.ow-body {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 0;
+  align-items: start;
+  padding: 0;
+}
+
+.ow-body__main {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-right: 1px solid var(--border, #e5e7eb);
+}
+
+.ow-body__sidebar {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface-raised, #fff);
+  min-height: 600px;
+}
+
+/* Panels */
+.ow-panel {
+  background: var(--surface-raised, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.ow-panel--edit { background: var(--surface-muted, #f9fafb); }
+
+.ow-panel__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent, #b45309);
+  margin: 0 0 6px;
+}
+
+.ow-panel__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #111827);
+  margin: 0 0 8px;
+}
+
+.ow-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ow-panel__row .ow-panel__title { margin: 0; }
+
+.ow-panel__line {
+  font-size: 13px;
+  color: var(--text, #374151);
+  margin: 0 0 4px;
+}
+
+.ow-panel__hint {
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  margin: 6px 0 0;
+  font-style: italic;
+}
+
+.ow-panel__safe-note {
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.ow-hint-list {
+  font-size: 12px;
+  color: var(--text, #374151);
+  padding-left: 16px;
+  margin: 6px 0;
+}
+
+/* Vendor items */
+.ow-vendor-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+}
+.ow-vendor-item:last-of-type { border-bottom: none; }
+.ow-vendor-item__cat { color: var(--text-muted, #6b7280); }
+.ow-vendor-item__date { color: var(--text-muted, #9ca3af); font-size: 12px; }
+
+/* Edit grid */
+.ow-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.ow-edit-grid .field--wide { grid-column: 1 / -1; }
+
+@media (max-width: 900px) {
+  .ow-body { grid-template-columns: 1fr; }
+  .ow-body__main { border-right: none; border-bottom: 1px solid var(--border, #e5e7eb); }
+  .ow-edit-grid { grid-template-columns: 1fr 1fr; }
+  .ow-header { grid-template-columns: 1fr; }
+  .ow-header__badges { justify-content: flex-start; }
+  .ow-header__last-activity { text-align: left; }
+}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import ActivityTimeline from './ActivityTimeline.jsx'
 import FollowUpComposer from './FollowUpComposer.jsx'
+import OpportunityWorkspace from './OpportunityWorkspace.jsx'
 import { composeFollowUpDraft } from '../lib/followUpComposer.js'
 import {
   addOpportunityActivity,
@@ -65,6 +66,7 @@ export default function OpportunityQueue({
   saveState,
 }) {
   const [activityVersion, setActivityVersion] = useState(0)
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState(null)
   const [toneByOpportunity, setToneByOpportunity] = useState({})
   const [channelByOpportunity, setChannelByOpportunity] = useState({})
   const [noteBodyByOpportunity, setNoteBodyByOpportunity] = useState({})
@@ -111,6 +113,22 @@ export default function OpportunityQueue({
 
   return (
     <section className="workbench-view opportunity-queue">
+      {selectedOpportunityId ? (() => {
+        const selected = opportunities.find((o) => o.id === selectedOpportunityId)
+        if (!selected) {
+          setSelectedOpportunityId(null)
+          return null
+        }
+        return (
+          <OpportunityWorkspace
+            opportunity={selected}
+            playbooks={playbooks}
+            onClose={() => setSelectedOpportunityId(null)}
+            onUpdateOpportunity={onUpdateOpportunity}
+          />
+        )
+      })() : (
+      <>
       <div className="view-heading">
         <div>
           <p className="kicker">Opportunity Queue</p>
@@ -285,6 +303,9 @@ export default function OpportunityQueue({
             </div>
 
             <div className="action-row">
+              <button type="button" className="primary-button" onClick={() => setSelectedOpportunityId(opportunity.id)}>
+                Open Workspace
+              </button>
               <button type="button" className="ghost-button ghost-button--subtle" onClick={() => onRemoveOpportunity(opportunity.id)}>
                 Remove from queue
               </button>
@@ -350,6 +371,8 @@ export default function OpportunityQueue({
           </section>
         )}
       </div>
+    </>
+    )}
     </section>
   )
 }
