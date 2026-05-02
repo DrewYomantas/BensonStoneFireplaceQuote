@@ -29,6 +29,8 @@ import {
   listOpportunityActivities,
 } from '../lib/opportunityActivity.js'
 import { parseRecoveryUploadFile, parseRecoveryUploadFiles, summarizeRecoveryUploadDrafts } from '../lib/recoveryUploadIntake.js'
+import ShowroomDisplayPanel from './ShowroomDisplayPanel.jsx'
+import { deriveShowroomDisplayContext, listDisplayRecords } from '../lib/showroomDisplayRegister.js'
 
 const emptyIntake = {
   customerName: '',
@@ -122,7 +124,7 @@ function IntakeSelect({ id, label, value, options, onChange, wide = false }) {
   )
 }
 
-function QueueCard({ opportunity, activities, onSelect }) {
+function QueueCard({ opportunity, activities, displayContext, onSelect }) {
   const warningCount = (opportunity.warnings || []).filter((w) => !/Sensitive BisTrack fields|quote refresh/i.test(w)).length
   const sourceLabel = getOpportunitySourceLabel(opportunity)
   const readiness = getOpportunityReadinessBadge(opportunity)
@@ -150,6 +152,9 @@ function QueueCard({ opportunity, activities, onSelect }) {
         </span>
         <span className={readinessBadgeClass(readiness.tone)}>{readiness.label}</span>
         <span className={statusBadgeClass(opportunity.status)}>{titleCase(opportunity.status || 'unknown')}</span>
+        {displayContext?.chipLabel ? (
+          <span className={readinessBadgeClass(displayContext.tone)}>{displayContext.chipLabel}</span>
+        ) : null}
         {warningCount > 0 && (
           <span className="bs-badge bs-badge--warning">{warningCount} warning{warningCount === 1 ? '' : 's'}</span>
         )}
@@ -196,14 +201,14 @@ function SourceTrail({ opportunity }) {
   )
 }
 
-function DraftPanel({ opportunity, activities }) {
+function DraftPanel({ opportunity, activities, displayContext }) {
   const [tone, setTone] = useState('reactivation')
   const [channel, setChannel] = useState('email')
   const [copyStatus, setCopyStatus] = useState('')
 
   const draft = useMemo(
-    () => getRecoveryFollowUpDraft(opportunity, { tone, channel }),
-    [opportunity, tone, channel],
+    () => getRecoveryFollowUpDraft(opportunity, { tone, channel, displayContext }),
+    [displayContext, opportunity, tone, channel],
   )
 
   async function handleCopy() {
@@ -354,7 +359,7 @@ function ActivityLog({ opportunity, activities, onRefresh }) {
   )
 }
 
-function DetailView({ opportunity, onBack, onRefreshQueue }) {
+function DetailView({ opportunity, displayContext, onBack, onRefreshQueue }) {
   const [activities, setActivities] = useState(() => listOpportunityActivities(opportunity.id))
 
   const rec = deriveRecoveryRecommendation(opportunity)
@@ -430,6 +435,7 @@ function DetailView({ opportunity, onBack, onRefreshQueue }) {
         </div>
 
         <WarningsList warnings={opportunity.warnings} />
+        <ShowroomDisplayPanel context={displayContext} title="Showroom Display Match" />
         <SourceTrail opportunity={opportunity} />
 
         {opportunity.internalNotes ? (
@@ -446,7 +452,7 @@ function DetailView({ opportunity, onBack, onRefreshQueue }) {
 
       <div className="bs-detail__main">
         {rec.safe ? (
-          <DraftPanel opportunity={opportunity} activities={activities} />
+          <DraftPanel opportunity={opportunity} activities={activities} displayContext={displayContext} />
         ) : (
           <div className="bs-draft" style={{ borderColor: 'rgba(180,106,45,0.35)' }}>
             <p className="bs-recovery__section-label">Follow-Up Draft</p>
@@ -897,6 +903,7 @@ export default function OldQuoteRecovery() {
   const [selectedId, setSelectedId] = useState('')
   const [opportunities, setOpportunities] = useState(loadRecoveryOpportunities)
   const [filter, setFilter] = useState('all')
+  const displayRecords = useMemo(() => listDisplayRecords(), [])
 
   function refreshOpportunities() {
     setOpportunities(loadRecoveryOpportunities())
@@ -926,6 +933,13 @@ export default function OldQuoteRecovery() {
   const selectedOpportunity = useMemo(
     () => opportunities.find((o) => o.id === selectedId) || null,
     [opportunities, selectedId],
+  )
+  const displayContextByOpportunity = useMemo(
+    () => Object.fromEntries(opportunities.map((opportunity) => [
+      opportunity.id,
+      deriveShowroomDisplayContext({ displayRecords, opportunity }),
+    ])),
+    [displayRecords, opportunities],
   )
 
   if (view === 'intake') {
@@ -968,6 +982,7 @@ export default function OldQuoteRecovery() {
     return (
       <DetailView
         opportunity={selectedOpportunity}
+        displayContext={displayContextByOpportunity[selectedOpportunity.id]}
         onBack={handleBack}
         onRefreshQueue={refreshOpportunities}
       />
@@ -1050,7 +1065,13 @@ export default function OldQuoteRecovery() {
       ) : (
         <div className="bs-queue">
           {filteredOpportunities.map((opp) => (
-            <QueueCard key={opp.id} opportunity={opp} activities={activityCache[opp.id] || []} onSelect={handleSelectOpportunity} />
+            <QueueCard
+              key={opp.id}
+              opportunity={opp}
+              activities={activityCache[opp.id] || []}
+              displayContext={displayContextByOpportunity[opp.id]}
+              onSelect={handleSelectOpportunity}
+            />
           ))}
         </div>
       )}

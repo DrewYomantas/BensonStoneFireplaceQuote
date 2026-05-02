@@ -115,3 +115,9 @@ test('customer proposal copy uses send-ready tax and title labels', () => {
   assert.equal(/Sales Tax/.test(source), true)
   assert.equal(/Terms & Conditions/.test(source), true)
 })
+
+test('customer proposal copy does not expose showroom display register language', () => {
+  const source = readFileSync(new URL('../components/CustomerProposal.jsx', import.meta.url), 'utf8')
+
+  assert.equal(/Showroom Display|Internal Display Note|Ask before saying customer saw it|needs verification|Possible showroom display match/i.test(source), false)
+})

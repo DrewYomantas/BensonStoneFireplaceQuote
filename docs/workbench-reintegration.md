@@ -20,6 +20,12 @@ Accessible via the Quote Recovery tab in the app header. Wires into: opportuniti
 
 Upload intake is now review-first: one or many old quote PDFs/images can be OCRed or parsed through `src/lib/recoveryUploadIntake.js`, reviewed in the Quote Recovery lane, and saved into the same recovery queue. Raw extracted text and file bytes are not stored on opportunity records.
 
+**Showroom Display Register lane (active):**
+- `src/components/ShowroomDisplayRegister.jsx` — manual add/edit lane, search, filters, local-only empty states
+- `src/lib/showroomDisplayRegister.js` — localStorage model, filters, conservative product/display matching helpers
+
+Accessible via the Display Register tab in the app header. It stores manually verified showroom display records only, then lets Quote Polish and Quote Recovery surface safe internal display context such as `On Display: First Floor`, `Display status needs verification`, and `Possible showroom display match`. It does not sync inventory, does not import Drive data, and does not add customer-facing claims by default.
+
 ## Parked Modules
 
 - `src/components/CommandCenter.jsx`
@@ -42,6 +48,7 @@ Upload intake is now review-first: one or many old quote PDFs/images can be OCRe
 - `src/lib/followUpComposer.js`
 - `src/lib/opportunityActivity.js`
 - `src/lib/followUpCadence.js`
+- `src/lib/showroomDisplayRegister.js`
 
 ## Reintegration Order
 
@@ -49,9 +56,10 @@ Upload intake is now review-first: one or many old quote PDFs/images can be OCRe
 2. ~~Opportunity Save / Queue~~ — wired into Old Quote Recovery lane
 3. ~~Follow-Up Composer + Activity Timeline~~ — wired into Old Quote Recovery lane
 4. ~~Proposal Detail Engine V1~~ - mode selector, category grouping, Investment Breakdown, Estimate Basis, Komfort Zone, Scope, terms, acceptance
-5. Next: expose Opportunity Queue across both polish and recovery lanes
-6. Next: add "Save to Queue" from Quote Polish flow
-7. ~~Quote Recovery upload/OCR intake~~ - reuses Quote Polish PDF/OCR parsing for old scanned PDFs/images, supports bulk draft review, and routes reviewed opportunities into the recovery queue
+5. ~~Showroom Display Register~~ - local manual display records with safe internal quote/recovery context
+6. Next: expose Opportunity Queue across both polish and recovery lanes
+7. Next: add "Save to Queue" from Quote Polish flow
+8. ~~Quote Recovery upload/OCR intake~~ - reuses Quote Polish PDF/OCR parsing for old scanned PDFs/images, supports bulk draft review, and routes reviewed opportunities into the recovery queue
 
 ## Pricing / Source Hierarchy
 

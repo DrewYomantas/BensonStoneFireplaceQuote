@@ -10,8 +10,9 @@ The active UI is intentionally stripped down for ease of access and use:
 2. Extract embedded text or OCR scanned pages.
 3. Review and edit the structured quote fields.
 4. Use the Current Setup + Goal Lens to identify what needs clarification.
-5. Preview the customer-facing proposal.
-6. Use the browser print flow to save or print the final PDF.
+5. Check safe showroom context in the local Showroom Display Register when a product match is found.
+6. Preview the customer-facing proposal.
+7. Use the browser print flow to save or print the final PDF.
 
 The broader sales workbench modules are preserved in the repo, but they are not the current active shell. Current Setup + Goal Lens is the first reintegrated review aid. See [docs/workbench-reintegration.md](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/docs/workbench-reintegration.md) for the parked feature inventory and reintegration order.
 
@@ -58,6 +59,7 @@ Output rules:
 - accepts BisTrack PDF uploads
 - extracts embedded PDF text or runs OCR for scanned PDFs
 - lets Quote Recovery upload one or many old quote PDFs/images, review extracted fields, and save safe metadata to the recovery queue
+- includes a local-only Showroom Display Register for manually verified fireplace display records
 - parses extracted text into the field contract in [src/data/fieldMap.json](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/src/data/fieldMap.json)
 - keeps missing or unclear fields blank
 - applies only the explicit business defaults:
@@ -92,6 +94,7 @@ The repo still includes the broader sales workbench prototype files and tests. T
 - follow-up composer
 - activity timeline
 - follow-up cadence
+- showroom display register
 
 These modules should be reintegrated only after the stripped-down quote polish flow is stable. Customer-facing exports must continue to exclude internal cost, margin, supplier, rank, OCR uncertainty, fuzzy-match, and BisTrack confidence language.
 
@@ -175,3 +178,4 @@ Current Setup + Goal Lens is active as the first reintegrated review aid. Reinte
 1. Proposal Package / Playbook Guidance
 2. Opportunity Save / Queue
 3. Follow-Up Composer + Activity Timeline
+4. Showroom Display Register

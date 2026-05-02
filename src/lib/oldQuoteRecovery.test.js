@@ -178,6 +178,24 @@ test('reference-only draft is marked unsafe to send', () => {
   assert.equal(draft.unsafeToSend, true)
 })
 
+test('display suggestions stay internal-only in recovery follow-up drafts', () => {
+  const opportunity = createOldQuoteOpportunity(intake({ recoveryClassification: 'warm' }), now)
+  const draft = getRecoveryFollowUpDraft(opportunity, {
+    tone: 'warm',
+    channel: 'email',
+    displayContext: {
+      followUpContext: {
+        displayModelAvailable: false,
+        warnings: ['Display-model wording requires salesperson confirmation. Do not say the customer viewed it unless approved notes confirm that.'],
+      },
+    },
+  })
+
+  assert.equal(draft.unsafeToSend, true)
+  assert.equal(/available to view in our showroom/i.test(draft.body), false)
+  assert.equal(/you saw this model|you liked this model/i.test(draft.body), false)
+})
+
 test('isSafeActivityForStatus blocks active follow-up actions on closed records', () => {
   assert.equal(isSafeActivityForStatus('follow-up-sent', 'reference-only'), false)
   assert.equal(isSafeActivityForStatus('proposal-sent', 'closed-won'), false)

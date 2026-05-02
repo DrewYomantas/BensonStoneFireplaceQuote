@@ -28,6 +28,9 @@ import {
 import CustomerProposal from './components/CustomerProposal.jsx'
 import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
+import ShowroomDisplayPanel from './components/ShowroomDisplayPanel.jsx'
+import ShowroomDisplayRegister from './components/ShowroomDisplayRegister.jsx'
+import { deriveShowroomDisplayContext, listDisplayRecords } from './lib/showroomDisplayRegister.js'
 
 const emptyContext = {
   unmatchedLines: [],
@@ -223,6 +226,11 @@ export default function App() {
   const [pendingDuplicate, setPendingDuplicate] = useState(null)
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
+  const displayContext = deriveShowroomDisplayContext({
+    displayRecords: listDisplayRecords(),
+    fields,
+    lineItems,
+  })
   const sendReadinessWarnings = useMemo(
     () => buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }),
     [fields, lineItems, proposalMode, setupGuidance],
@@ -393,6 +401,13 @@ export default function App() {
           >
             Quote Recovery
           </button>
+          <button
+            type="button"
+            className={`bs-tab ${mode === 'display' ? 'is-active' : ''}`}
+            onClick={() => setMode('display')}
+          >
+            Display Register
+          </button>
         </nav>
 
         {mode === 'polish' && (
@@ -434,6 +449,7 @@ export default function App() {
               </div>
 
               <QuoteSetupLens guidance={setupGuidance} />
+              <ShowroomDisplayPanel context={displayContext} title="Showroom Display Match" />
 
               <ProposalReadinessReview
                 reviewState={proposalReviewState}
@@ -534,7 +550,7 @@ export default function App() {
           </main>
         </>
       ) : (
-        <OldQuoteRecovery />
+        mode === 'recovery' ? <OldQuoteRecovery /> : <ShowroomDisplayRegister />
       )}
     </div>
   )

@@ -260,6 +260,7 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
 }
 
 export function getRecoveryFollowUpDraft(opportunity = {}, opts = {}) {
+  const displayWarnings = opts.displayContext?.followUpContext?.warnings || []
   if (opportunity.sourceType && opportunity.sourceType !== 'old-quote-recovery' && opportunity.reviewedForFollowUp !== 'true') {
     return {
       subject: 'Review extracted quote first',
@@ -284,8 +285,12 @@ export function getRecoveryFollowUpDraft(opportunity = {}, opts = {}) {
   }
   return composeFollowUpDraft({
     opportunity,
-    fields: { currentSetupGuidance: opts.currentSetupGuidance || {} },
-    warnings: [...(opportunity.warnings || [])],
+    fields: {
+      currentSetupGuidance: opts.currentSetupGuidance || {},
+      displayModelAvailable: opts.displayContext?.followUpContext?.displayModelAvailable === true,
+      displayModelLocation: opts.displayContext?.followUpContext?.displayModelLocation || '',
+    },
+    warnings: [...(opportunity.warnings || []), ...displayWarnings],
     tone: opts.tone || 'reactivation',
     channel: opts.channel || 'email',
   })
