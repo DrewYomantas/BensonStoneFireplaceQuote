@@ -54,7 +54,7 @@ function QuoteAttachmentNote() {
   )
 }
 
-function InvestmentBreakdown({ groups }) {
+function InvestmentBreakdown({ groups, lineItemQuoteAttached }) {
   if (!groups.length) return null
   return (
     <section className="cp-investment-breakdown cp-detail-section">
@@ -78,7 +78,9 @@ function InvestmentBreakdown({ groups }) {
           ))}
         </tbody>
       </table>
-      <p className="cp-breakdown-note">See attached line-item quote for full official pricing detail.</p>
+      {lineItemQuoteAttached ? (
+        <p className="cp-breakdown-note">See attached line-item quote for full official pricing detail.</p>
+      ) : null}
     </section>
   )
 }
@@ -158,7 +160,7 @@ function TermsAcceptance({ fields, view }) {
   )
 }
 
-export default function CustomerProposal({ fields, parseContext, lineItems = [], proposalMode = 'summary', includeDeliveryDate = false }) {
+export default function CustomerProposal({ fields, parseContext, lineItems = [], proposalMode = 'summary', includeDeliveryDate = false, lineItemQuoteAttached = true }) {
   const view = buildCustomerView(fields, parseContext, { includeDeliveryDate })
   const packages = collectPackages(fields)
   const details = collectDetailItems(fields)
@@ -299,8 +301,8 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
 
         {isDetailed ? (
           <>
-            <QuoteAttachmentNote />
-            {categoryGroups.length ? <InvestmentBreakdown groups={categoryGroups} /> : null}
+            {lineItemQuoteAttached ? <QuoteAttachmentNote /> : null}
+            {categoryGroups.length ? <InvestmentBreakdown groups={categoryGroups} lineItemQuoteAttached={lineItemQuoteAttached} /> : null}
             <EstimateBasis items={estimateBasis.items} fallbackNote={estimateBasis.fallbackNote} />
             {showKomfortZone ? <KomfortZoneSection /> : null}
           </>

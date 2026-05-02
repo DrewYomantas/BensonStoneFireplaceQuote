@@ -302,3 +302,43 @@ test('source trail is internal and does not alter customer-facing draft copy', (
 
   assert.equal(/private-folder|source file|intake type/i.test(combined), false)
 })
+
+test('Quote Polish opportunities block follow-up until reviewed', () => {
+  const opportunity = {
+    sourceType: 'quote-polish',
+    reviewedForFollowUp: 'false',
+    customerName: 'Active Customer',
+    customerEmail: 'active@example.com',
+    customerPhone: '815-555-0100',
+    lineItemQuoteAttached: 'true',
+    proposalReadiness: 'ready',
+    warnings: [],
+  }
+  const rec = deriveRecoveryRecommendation(opportunity)
+  const draft = getRecoveryFollowUpDraft(opportunity, { tone: 'warm', channel: 'email' })
+
+  assert.equal(rec.nextAction, 'review-uploaded-source')
+  assert.equal(rec.safe, false)
+  assert.equal(draft.unsafeToSend, true)
+  assert.equal(draft.body, '')
+})
+
+test('Quote Polish opportunities block follow-up until line-item quote attachment is confirmed', () => {
+  const opportunity = {
+    sourceType: 'quote-polish',
+    reviewedForFollowUp: 'true',
+    customerName: 'Active Customer',
+    customerEmail: 'active@example.com',
+    customerPhone: '815-555-0100',
+    lineItemQuoteAttached: 'false',
+    proposalReadiness: 'ready',
+    warnings: [],
+  }
+  const rec = deriveRecoveryRecommendation(opportunity)
+  const draft = getRecoveryFollowUpDraft(opportunity, { tone: 'warm', channel: 'email' })
+
+  assert.equal(rec.nextAction, 'confirm-line-item-quote')
+  assert.equal(rec.safe, false)
+  assert.equal(draft.unsafeToSend, true)
+  assert.equal(draft.body, '')
+})

@@ -146,6 +146,9 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
   )
   const hasProductReviewWarning = warnings.some((w) => /Product match needs review/i.test(w))
   const isUploadedUnreviewed = opportunity.sourceType && opportunity.sourceType !== 'old-quote-recovery' && opportunity.reviewedForFollowUp !== 'true'
+  const isQuotePolish = opportunity.sourceType === 'quote-polish'
+  const quotePolishAttachmentMissing = isQuotePolish && opportunity.lineItemQuoteAttached !== 'true'
+  const quotePolishReadinessBlocked = isQuotePolish && ['blocked', 'needs-review'].includes(opportunity.proposalReadiness)
 
   if (isPaidClosed) {
     return {
@@ -174,6 +177,26 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
       path: 'missing-info-preproposal',
       safe: false,
       reason: 'Uploaded/OCR intake must be reviewed before follow-up copy is available.',
+    }
+  }
+
+  if (quotePolishAttachmentMissing) {
+    return {
+      nextAction: 'confirm-line-item-quote',
+      label: 'Confirm attached line-item quote',
+      path: 'missing-info-preproposal',
+      safe: false,
+      reason: 'The original BisTrack line-item quote must be confirmed before proposal follow-up copy is available.',
+    }
+  }
+
+  if (quotePolishReadinessBlocked) {
+    return {
+      nextAction: 'review-proposal-readiness',
+      label: 'Review proposal readiness',
+      path: 'missing-info-preproposal',
+      safe: false,
+      reason: 'Proposal readiness is not clear enough for follow-up copy yet.',
     }
   }
 
@@ -246,6 +269,17 @@ export function getRecoveryFollowUpDraft(opportunity = {}, opts = {}) {
       warnings: ['Uploaded quote must be reviewed before follow-up copy is available.'],
       unsafeToSend: true,
       reasons: ['OCR/source review is incomplete.'],
+    }
+  }
+  if (opportunity.sourceType === 'quote-polish' && opportunity.lineItemQuoteAttached !== 'true') {
+    return {
+      subject: 'Confirm line-item quote attachment',
+      body: '',
+      channel: opts.channel || 'email',
+      tone: opts.tone || 'reactivation',
+      warnings: ['Original BisTrack line-item quote attachment must be confirmed before follow-up copy is available.'],
+      unsafeToSend: true,
+      reasons: ['Line-item quote attachment is not confirmed.'],
     }
   }
   return composeFollowUpDraft({

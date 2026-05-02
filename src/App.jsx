@@ -16,6 +16,15 @@ import {
   getEstimateBasisSummary,
   hasUnclassifiedLineItems,
 } from './lib/proposalDetail.js'
+import {
+  buildQuotePolishQueueDraft,
+  mergeQuotePolishOpportunity,
+} from './lib/quotePolishOpportunity.js'
+import {
+  listOpportunities,
+  saveOpportunity,
+  updateOpportunity,
+} from './lib/opportunities.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
@@ -107,6 +116,83 @@ function ProposalReadinessReview({ reviewState, warnings, onChange }) {
   )
 }
 
+function QuotePolishSavePanel({
+  hasQuote,
+  reviewState,
+  proposalMode,
+  lineItemQuoteAttached,
+  onAttachmentChange,
+  saveStatus,
+  pendingDuplicate,
+  onSave,
+  onUpdateDuplicate,
+  onSaveSeparate,
+  onCancelDuplicate,
+}) {
+  if (!hasQuote) return null
+  const reviewReady = reviewState !== 'unresolved'
+  const readinessLabel = reviewState === 'reviewed'
+    ? 'Proposal Ready'
+    : reviewState === 'follow-up'
+      ? 'Follow-Up Needed'
+      : 'Review Before Follow-Up'
+
+  return (
+    <section className="bs-save-queue no-print" aria-label="Save reviewed quote to queue">
+      <div className="bs-save-queue__head">
+        <div>
+          <p className="bs-lens__eyebrow">Quote Opportunity</p>
+          <h2>Save Reviewed Quote</h2>
+        </div>
+        <span className={`bs-save-queue__pill ${reviewReady ? 'is-ready' : ''}`}>{readinessLabel}</span>
+      </div>
+
+      <div className="bs-save-queue__meta">
+        <span>Proposal mode: {proposalMode === 'detailed' ? 'Detailed Investment Breakdown' : 'Warm Summary'}</span>
+        <span>Source: Quote Polish / BisTrack PDF</span>
+      </div>
+
+      <label className="bs-save-queue__check">
+        <input
+          type="checkbox"
+          checked={lineItemQuoteAttached}
+          onChange={(event) => onAttachmentChange(event.target.checked)}
+        />
+        <span>Original BisTrack line-item quote will be attached.</span>
+      </label>
+
+      {!reviewReady ? (
+        <p className="bs-save-queue__warning">Mark this quote as reviewed or follow-up needed before saving it to the queue.</p>
+      ) : null}
+      {!lineItemQuoteAttached ? (
+        <p className="bs-save-queue__warning">Queue record will warn until the attached line-item quote is confirmed.</p>
+      ) : null}
+
+      {pendingDuplicate ? (
+        <div className="bs-save-queue__duplicate">
+          <p><strong>Possible duplicate found.</strong> {pendingDuplicate.duplicate.reasons.join(', ') || 'Existing queue record may match.'}</p>
+          <div className="bs-save-queue__actions">
+            <button type="button" className="bs-lens__copy" onClick={onUpdateDuplicate}>Update Existing</button>
+            <button type="button" className="bs-lens__copy" onClick={onSaveSeparate}>Save Separate</button>
+            <button type="button" className="bs-lens__copy bs-lens__copy--ghost" onClick={onCancelDuplicate}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="bs-button bs-button--primary bs-save-queue__button"
+          onClick={onSave}
+          disabled={!reviewReady}
+        >
+          Save Reviewed Quote to Queue
+        </button>
+      )}
+
+      {saveStatus ? <p className="bs-save-queue__status" role="status">{saveStatus}</p> : null}
+    </section>
+  )
+}
+
 function buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }) {
   if (proposalMode !== 'detailed') return []
   const warnings = []
@@ -132,6 +218,9 @@ export default function App() {
   const [lineItems, setLineItems] = useState([])
   const [proposalMode, setProposalMode] = useState('summary')
   const [proposalReviewState, setProposalReviewState] = useState('unresolved')
+  const [lineItemQuoteAttached, setLineItemQuoteAttached] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('')
+  const [pendingDuplicate, setPendingDuplicate] = useState(null)
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
   const sendReadinessWarnings = useMemo(
@@ -142,12 +231,18 @@ export default function App() {
 
   function setField(field, value) {
     setFields((current) => ({ ...current, [field]: value }))
+    setSaveStatus('')
+    setPendingDuplicate(null)
   }
 
   function loadParsed(parsed) {
     setFields(applyDefaults({ ...createEmptyFieldState(), ...parsed.fields }))
     setParseContext({ ...emptyContext, ...parsed.context })
     setLineItems(parsed.lineItems || [])
+    setProposalReviewState('unresolved')
+    setLineItemQuoteAttached(false)
+    setSaveStatus('')
+    setPendingDuplicate(null)
   }
 
   async function handleFile(event) {
@@ -160,7 +255,14 @@ export default function App() {
 
       if (!extracted.embeddedTextLikelyMissing) {
         const parsed = parseBisTrackText(extracted.rawText)
-        loadParsed(parsed)
+        loadParsed({
+          ...parsed,
+          context: {
+            ...parsed.context,
+            sourceFileName: file.name,
+            sourceImportedAt: new Date().toISOString(),
+          },
+        })
         setRawText(extracted.rawText)
         const lineCount = parsed.lineItems?.length || 0
         setStatus(`Loaded ${file.name} — ${parsed.documentType?.toUpperCase() || 'QUOTE'}${parsed.fields.QUOTE_NO ? ` #${parsed.fields.QUOTE_NO}` : ''} (${lineCount} line item${lineCount === 1 ? '' : 's'}). Review and fill any blanks on the left.`)
@@ -174,7 +276,15 @@ export default function App() {
         })
         const combinedText = ocr.pages.map((page) => page.text).join('\n\n')
         const parsed = extractScannedBisTrackFields(combinedText)
-        loadParsed(parsed)
+        loadParsed({
+          ...parsed,
+          context: {
+            ...parsed.context,
+            extractionSource: 'ocr',
+            sourceFileName: file.name,
+            sourceImportedAt: new Date().toISOString(),
+          },
+        })
         setRawText(combinedText)
         const avgConfidence = Math.round(
           ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
@@ -196,7 +306,59 @@ export default function App() {
     setRawText('')
     setLineItems([])
     setProposalReviewState('unresolved')
+    setLineItemQuoteAttached(false)
+    setSaveStatus('')
+    setPendingDuplicate(null)
     setStatus('Cleared. Upload a PDF or fill the fields manually.')
+  }
+
+  function buildQueueDraft() {
+    return buildQuotePolishQueueDraft({
+      fields,
+      parseContext,
+      lineItems,
+      proposalMode,
+      proposalReviewState,
+      lineItemQuoteAttached,
+      setupGuidance,
+      sendReadinessWarnings,
+    }, listOpportunities())
+  }
+
+  function handleSaveToQueue() {
+    if (proposalReviewState === 'unresolved') {
+      setSaveStatus('Review this quote before saving it to the queue.')
+      return
+    }
+    const draft = buildQueueDraft()
+    if (draft.duplicate.isDuplicate) {
+      setPendingDuplicate(draft)
+      setSaveStatus('Possible duplicate found. Choose how to handle it before saving.')
+      return
+    }
+    saveOpportunity(draft.opportunity)
+    setPendingDuplicate(null)
+    setSaveStatus('Saved to the opportunity queue.')
+  }
+
+  function handleUpdateDuplicate() {
+    if (!pendingDuplicate) return
+    const existing = listOpportunities().find((item) => item.id === pendingDuplicate.duplicate.duplicateId)
+    const merged = mergeQuotePolishOpportunity(existing, pendingDuplicate.opportunity)
+    updateOpportunity(merged.id, merged)
+    setPendingDuplicate(null)
+    setSaveStatus('Updated existing queue opportunity.')
+  }
+
+  function handleSaveSeparate() {
+    if (!pendingDuplicate) return
+    saveOpportunity({
+      ...pendingDuplicate.opportunity,
+      id: `${pendingDuplicate.opportunity.id}-queue-${Date.now()}`,
+      warnings: [...pendingDuplicate.opportunity.warnings, 'Saved as separate opportunity after duplicate review.'],
+    })
+    setPendingDuplicate(null)
+    setSaveStatus('Saved as a separate queue opportunity.')
   }
 
   function toggleSection(key) {
@@ -276,7 +438,11 @@ export default function App() {
               <ProposalReadinessReview
                 reviewState={proposalReviewState}
                 warnings={sendReadinessWarnings}
-                onChange={setProposalReviewState}
+                onChange={(value) => {
+                  setProposalReviewState(value)
+                  setSaveStatus('')
+                  setPendingDuplicate(null)
+                }}
               />
 
               <div className="bs-form__group no-print">
@@ -305,6 +471,27 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              <QuotePolishSavePanel
+                hasQuote={Boolean(rawText || fields.QUOTE_NO || fields.CUSTOMER_NAME || lineItems.length)}
+                reviewState={proposalReviewState}
+                proposalMode={proposalMode}
+                lineItemQuoteAttached={lineItemQuoteAttached}
+                onAttachmentChange={(checked) => {
+                  setLineItemQuoteAttached(checked)
+                  setSaveStatus('')
+                  setPendingDuplicate(null)
+                }}
+                saveStatus={saveStatus}
+                pendingDuplicate={pendingDuplicate}
+                onSave={handleSaveToQueue}
+                onUpdateDuplicate={handleUpdateDuplicate}
+                onSaveSeparate={handleSaveSeparate}
+                onCancelDuplicate={() => {
+                  setPendingDuplicate(null)
+                  setSaveStatus('')
+                }}
+              />
 
               {rawText ? (
                 <details className="bs-raw">
@@ -336,7 +523,13 @@ export default function App() {
             </section>
 
             <section className="bs-preview" aria-label="Customer proposal preview">
-              <CustomerProposal fields={fields} parseContext={parseContext} lineItems={lineItems} proposalMode={proposalMode} />
+              <CustomerProposal
+                fields={fields}
+                parseContext={parseContext}
+                lineItems={lineItems}
+                proposalMode={proposalMode}
+                lineItemQuoteAttached={lineItemQuoteAttached}
+              />
             </section>
           </main>
         </>

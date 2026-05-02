@@ -116,6 +116,11 @@ function IntakeSelect({ id, label, value, options, onChange, wide = false }) {
 function QueueCard({ opportunity, onSelect }) {
   const rec = deriveRecoveryRecommendation(opportunity)
   const warningCount = (opportunity.warnings || []).filter((w) => !/Sensitive BisTrack fields|quote refresh/i.test(w)).length
+  const proposalMeta = [
+    opportunity.proposalMode ? titleCase(opportunity.proposalMode) : '',
+    opportunity.proposalReadiness ? titleCase(opportunity.proposalReadiness) : '',
+  ].filter(Boolean).join(' | ')
+  const attachmentWarning = opportunity.sourceType === 'quote-polish' && opportunity.lineItemQuoteAttached !== 'true'
 
   return (
     <button type="button" className="bs-queue-card" onClick={() => onSelect(opportunity)}>
@@ -129,6 +134,9 @@ function QueueCard({ opportunity, onSelect }) {
       <div className="bs-queue-card__subline">
         {[opportunity.originalQuoteAmount || opportunity.quotationTotal, opportunity.sourceType || opportunity.sourceLabel].filter(Boolean).join(' | ')}
       </div>
+      {proposalMeta ? (
+        <div className="bs-queue-card__subline">{proposalMeta}</div>
+      ) : null}
       <div className="bs-queue-card__badges">
         <span className={classificationBadgeClass(opportunity.recoveryClassification)}>
           {titleCase(opportunity.recoveryClassification || 'unknown')}
@@ -139,6 +147,9 @@ function QueueCard({ opportunity, onSelect }) {
         {warningCount > 0 && (
           <span className="bs-badge bs-badge--warning">{warningCount} warning{warningCount === 1 ? '' : 's'}</span>
         )}
+        {attachmentWarning ? (
+          <span className="bs-badge bs-badge--warning">Attachment not confirmed</span>
+        ) : null}
       </div>
       <div className="bs-queue-card__action">{rec.label}</div>
     </button>
@@ -382,6 +393,20 @@ function DetailView({ opportunity, onBack, onRefreshQueue }) {
           <p className="bs-rec__label">{rec.label}</p>
           <p className="bs-rec__reason">{rec.reason}</p>
         </div>
+
+        {opportunity.sourceType === 'quote-polish' ? (
+          <div>
+            <p className="bs-recovery__section-label">Proposal Readiness</p>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: '#173321' }}>
+              {[opportunity.proposalMode ? titleCase(opportunity.proposalMode) : '', opportunity.proposalReadiness ? titleCase(opportunity.proposalReadiness) : ''].filter(Boolean).join(' | ') || 'Review needed'}
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b5a47' }}>
+              {opportunity.lineItemQuoteAttached === 'true'
+                ? 'Attached Line-Item Quote confirmed.'
+                : 'Attached Line-Item Quote still needs confirmation.'}
+            </p>
+          </div>
+        ) : null}
 
         <div>
           <p className="bs-recovery__section-label">Proposal Path</p>
