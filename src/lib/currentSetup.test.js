@@ -152,7 +152,7 @@ test('review aid for unknown setup returns needs-review suggestions and safe que
   const aid = buildCurrentSetupReviewAid(guidance)
 
   assert.equal(aid.statusTone, 'needs-review')
-  assert.equal(aid.statusLabel, 'Clarify before proposal')
+  assert.equal(aid.statusLabel, 'Follow-up needed')
   assert.deepEqual(aid.fieldSuggestions.map((field) => field.id), [
     'PROJECT_OVERVIEW',
     'PROJECT_SCOPE_SUMMARY',
@@ -171,7 +171,7 @@ test('review aid for clear masonry gas setup is ready', () => {
   const aid = buildCurrentSetupReviewAid(guidance)
 
   assert.equal(aid.statusTone, 'ready')
-  assert.equal(aid.statusLabel, 'Path fit looks clear')
+  assert.equal(aid.statusLabel, 'Okay to send')
 })
 
 test('review aid copied questions exclude sensitive terms', () => {
@@ -192,5 +192,5 @@ test('review aid keeps closed reference guidance blocked', () => {
   const aid = buildCurrentSetupReviewAid(guidance)
 
   assert.equal(aid.statusTone, 'needs-review')
-  assert.equal(aid.statusLabel, 'Clarify before proposal')
+  assert.equal(aid.statusLabel, 'Follow-up needed')
 })

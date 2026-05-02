@@ -12,7 +12,7 @@ export const PROPOSAL_CATEGORIES = [
   { key: 'permits', label: 'Permits / Compliance' },
   { key: 'delivery-misc', label: 'Delivery / Freight / Miscellaneous' },
   { key: 'sales-tax', label: 'Sales Tax' },
-  { key: 'other', label: 'Other / Needs Review' },
+  { key: 'other', label: 'Additional Project Items' },
 ]
 
 // Priority-ordered — first match wins
@@ -117,6 +117,10 @@ export function groupLineItemsByCategory(lineItems = []) {
     .map((bucket) => ({ ...bucket, categoryTotalFormatted: formatCurrency(bucket.categoryTotal) }))
 }
 
+export function hasUnclassifiedLineItems(lineItems = []) {
+  return lineItems.some((item) => classifyItem(item) === 'other')
+}
+
 const MAJOR_CATEGORY_KEYS = new Set([
   'fireplace-unit',
   'venting',
@@ -152,18 +156,19 @@ export function detectEstimateBasisItems(lineItems = [], fields = {}) {
     const desc = String(line.description || '').toLowerCase()
     const unit = String(line.unit || '').trim().toUpperCase()
     const qty = String(line.qty || '')
+    const safeQty = /^\d+(\.\d+)?$/.test(qty.trim())
 
-    if (unit === 'SF' || /square[\s-]?f(oo|ee)t|sq\.?\s*ft|\bsf\b/.test(desc)) {
+    if ((unit === 'SF' || /square[\s-]?f(oo|ee)t|sq\.?\s*ft|\bsf\b/.test(desc)) && safeQty) {
       if (/stone|veneer|fieldstone|ledge|masonry/.test(desc) || unit === 'SF') {
         items.push({ type: 'stone-sf', label: 'Stone / Veneer Square Footage', qty, unit, description: line.description })
         continue
       }
     }
-    if (unit === 'LF' || /lineal[\s-]?f(oo|ee)t|lin\.?\s*ft|\blf\b/.test(desc)) {
+    if ((unit === 'LF' || /lineal[\s-]?f(oo|ee)t|lin\.?\s*ft|\blf\b/.test(desc)) && safeQty) {
       items.push({ type: 'corner-lf', label: 'Corner / Return Lineal Footage', qty, unit, description: line.description })
       continue
     }
-    if (/\bmortar\b/.test(desc) || (unit === 'BAG' && /type\s*[sms]|mortar/.test(desc))) {
+    if ((/\bmortar\b/.test(desc) || (unit === 'BAG' && /type\s*[sms]|mortar/.test(desc))) && safeQty) {
       items.push({ type: 'mortar', label: 'Mortar / Bags', qty, unit, description: line.description })
       continue
     }
@@ -190,56 +195,20 @@ export function detectEstimateBasisItems(lineItems = [], fields = {}) {
   return items
 }
 
+export const ESTIMATE_BASIS_FALLBACK_NOTE =
+  'The stone and finish material estimate is based on the quantities shown in the attached line-item quote. Final material needs may change after site measure, final layout, and selected stone design are confirmed.'
+
+export function getEstimateBasisSummary(lineItems = [], fields = {}) {
+  const items = detectEstimateBasisItems(lineItems, fields)
+  return {
+    items,
+    fallbackUsed: items.length === 0,
+    fallbackNote: items.length === 0 ? ESTIMATE_BASIS_FALLBACK_NOTE : '',
+  }
+}
+
 export const KOMFORT_ZONE_EXPLAINER =
   'Komfort Zone is not the sealed direct-vent exhaust system. The direct-vent system is handled separately through the fireplace venting components. Komfort Zone is a heat-management system that uses plenum and flex-line components to help move heat from the fireplace chase. It may be recommended when a project includes a mantel, TV area, finish materials, or other design elements where heat management matters. Final recommendations should be confirmed against the fireplace model, layout, framing, mantel plan, and installation conditions.'
 
 export const QUOTE_ATTACHMENT_NOTE =
-  'A full BisTrack line-item quote is attached for official pricing detail. This proposal summarizes the project in a customer-friendly format and explains the major scope areas, assumptions, and options reviewed with your Benson Stone sales representative.'
-
-export const SCENARIO_WARNING =
-  'This scenario is for discussion only. A revised BisTrack quote is required before final pricing, product availability, and installation scope can be confirmed.'
-
-export function getProjectScaleScenarios() {
-  return [
-    {
-      level: 1,
-      label: 'Compact / Simpler Face',
-      description: 'A clean, straightforward fireplace installation with a simplified stone face and standard accessories.',
-      considerations: ['Smaller stone footprint', 'Standard vent run', 'No specialty mantel or hearth package'],
-    },
-    {
-      level: 2,
-      label: 'Standard Fireplace Build',
-      description: 'A full fireplace package with standard stone face, complete venting, accessories, and installation.',
-      considerations: ['Full stone face coverage', 'Complete vent system', 'Standard hearth and mantel allowance'],
-    },
-    {
-      level: 3,
-      label: 'Expanded Stone Face',
-      description: 'A larger stone design with more coverage, corner returns, or additional masonry detail.',
-      considerations: ['Increased stone and corner footage', 'Extended masonry labor', 'Possible hearth extension'],
-    },
-    {
-      level: 4,
-      label: 'Custom Feature Wall',
-      description: 'A full feature wall build including expanded stone, custom mantel, hearth slab, and heat management.',
-      considerations: [
-        'Full wall stone coverage',
-        'Custom mantel / hearth package',
-        'Heat management recommended',
-        'Extended masonry and fireplace labor',
-      ],
-    },
-    {
-      level: 5,
-      label: 'Premium Custom Build',
-      description: 'A signature build with premium stone, custom millwork, specialty materials, and full project coordination.',
-      considerations: [
-        'Premium stone selection',
-        'Custom millwork and specialty finishes',
-        'Full heat management package',
-        'Comprehensive labor and coordination scope',
-      ],
-    },
-  ]
-}
+  'A full line-item quote is attached for official pricing detail. This proposal summarizes the project in a customer-friendly format and explains the major scope areas and assumptions.'

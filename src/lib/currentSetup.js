@@ -283,7 +283,7 @@ export function buildCurrentSetupReviewAid(guidance = {}) {
   ]
 
   return {
-    statusLabel: needsClarification ? 'Clarify before proposal' : 'Path fit looks clear',
+    statusLabel: needsClarification ? 'Follow-up needed' : 'Okay to send',
     statusTone: needsClarification ? 'needs-review' : 'ready',
     fieldSuggestions,
     questionCopyText: safeLines(questions).join('\n'),

@@ -2,8 +2,8 @@ import { buildCustomerView, collectDetailItems, collectPackages } from '../lib/c
 import {
   KOMFORT_ZONE_EXPLAINER,
   QUOTE_ATTACHMENT_NOTE,
-  detectEstimateBasisItems,
   detectKomfortZone,
+  getEstimateBasisSummary,
   groupLineItemsByCategory,
 } from '../lib/proposalDetail.js'
 
@@ -83,24 +83,30 @@ function InvestmentBreakdown({ groups }) {
   )
 }
 
-function EstimateBasis({ items }) {
-  if (!items.length) return null
+function EstimateBasis({ items, fallbackNote }) {
+  if (!items.length && !fallbackNote) return null
   return (
     <section className="cp-estimate-basis cp-detail-section">
       <div className="cp-detail-head">
-        <h3>Estimate Basis &amp; Allowances</h3>
+        <h3>Estimate Basis & Allowances</h3>
       </div>
-      <p className="cp-basis-intro">The following quantities were used to build this estimate. Final dimensions should be confirmed before material orders are placed.</p>
-      <ul className="cp-basis-list">
-        {items.map((basisItem, idx) => (
-          <li key={idx} className="cp-basis-item">
-            <span className="cp-basis-label">{basisItem.label}</span>
-            {basisItem.qty ? (
-              <span className="cp-basis-qty">{basisItem.qty}{basisItem.unit ? ` ${basisItem.unit}` : ''}</span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      {items.length ? (
+        <>
+          <p className="cp-basis-intro">The following quantities were used to build this estimate. Final dimensions should be confirmed before material orders are placed.</p>
+          <ul className="cp-basis-list">
+            {items.map((basisItem, idx) => (
+              <li key={idx} className="cp-basis-item">
+                <span className="cp-basis-label">{basisItem.label}</span>
+                {basisItem.qty ? (
+                  <span className="cp-basis-qty">{basisItem.qty}{basisItem.unit ? ` ${basisItem.unit}` : ''}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="cp-basis-intro">{fallbackNote}</p>
+      )}
     </section>
   )
 }
@@ -116,6 +122,42 @@ function KomfortZoneSection() {
   )
 }
 
+function TermsAcceptance({ fields, view }) {
+  return (
+    <div className="cp-bottom-grid">
+      <section className="cp-section cp-terms">
+        <h3>Terms & Conditions</h3>
+        {view.showDepositLanguage ? (
+          <p className="cp-line"><strong>Deposit:</strong> {fields.DEPOSIT_TERMS}</p>
+        ) : null}
+        {fields.PAYMENT_TERMS ? <p className="cp-line"><strong>Payment terms:</strong> {fields.PAYMENT_TERMS}</p> : null}
+        {fields.LEGAL_TERMS ? <Block value={fields.LEGAL_TERMS} multiline /> : null}
+        {!view.showDepositLanguage && view.fullyPaid ? (
+          <p className="cp-line cp-callout-soft">This order is paid in full. We appreciate your business.</p>
+        ) : null}
+      </section>
+
+      <section className="cp-acceptance">
+        <h3>Acceptance</h3>
+        <p>I have read and agree to the terms, scope, and investment outlined in this proposal.</p>
+        {fields.DEPOSIT_TERMS ? <p>{fields.DEPOSIT_TERMS}</p> : null}
+        {view.showSignature ? (
+          <div className="cp-signature">
+            <div>
+              <span className="cp-sig-rule" />
+              <p className="cp-sig-meta">Authorized Signature</p>
+            </div>
+            <div>
+              <span className="cp-sig-rule" />
+              <p className="cp-sig-meta">Date</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
 export default function CustomerProposal({ fields, parseContext, lineItems = [], proposalMode = 'summary', includeDeliveryDate = false }) {
   const view = buildCustomerView(fields, parseContext, { includeDeliveryDate })
   const packages = collectPackages(fields)
@@ -123,7 +165,7 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
   const hasInvestment = fields.TOTAL_AMOUNT || fields.QUOTATION_TOTAL || fields.BALANCE_DUE
   const isDetailed = proposalMode === 'detailed'
   const categoryGroups = isDetailed ? groupLineItemsByCategory(lineItems) : []
-  const basisItems = isDetailed ? detectEstimateBasisItems(lineItems, fields) : []
+  const estimateBasis = isDetailed ? getEstimateBasisSummary(lineItems, fields) : { items: [], fallbackNote: '' }
   const showKomfortZone = isDetailed && detectKomfortZone(lineItems, fields)
   const projectLine = [
     fields.CUSTOMER_NAME,
@@ -230,7 +272,7 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
                 <h2>{view.isQuote ? 'Investment summary' : 'Order summary'}</h2>
                 <ul className="cp-totals">
                   {fields.TOTAL_AMOUNT ? <li><span>Total Amount</span><strong>{fields.TOTAL_AMOUNT}</strong></li> : null}
-                  {fields.IR_TAX ? <li><span>IR Tax</span><strong>{fields.IR_TAX}</strong></li> : null}
+                  {fields.IR_TAX ? <li><span>Sales Tax</span><strong>{fields.IR_TAX}</strong></li> : null}
                   {fields.QUOTATION_TOTAL ? <li className="cp-totals-major"><span>{view.isQuote ? 'Quotation Total' : 'Total'}</span><strong>{fields.QUOTATION_TOTAL}</strong></li> : null}
                   {fields.AMOUNT_PAID ? <li><span>Amount Paid</span><strong>{fields.AMOUNT_PAID}</strong></li> : null}
                   {fields.BALANCE_DUE ? <li className="cp-totals-major"><span>Balance Due</span><strong>{fields.BALANCE_DUE}</strong></li> : null}
@@ -242,7 +284,7 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
 
         <footer className="cp-footer">
           <span>Benson Stone Co. | Quote #{fields.QUOTE_NO || ''} | {fields.CUSTOMER_NAME || ''}</span>
-          <span>Page 1 of 2</span>
+          <span>Page 1 of {isDetailed ? '3' : '2'}</span>
         </footer>
       </section>
 
@@ -250,8 +292,8 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
         <TemplateHead />
 
         <header className="cp-page-header">
-          <h2>{isDetailed ? 'Investment Breakdown, Scope &amp; Terms' : 'Detailed Scope, Terms &amp; Investment'}</h2>
-          <p>A complete view of venting components, installation details, and project investment.</p>
+          <h2>{isDetailed ? 'Investment Breakdown' : 'Detailed Scope, Terms & Investment'}</h2>
+          <p>{isDetailed ? 'A customer-friendly summary of the major project areas and estimate basis.' : 'A complete view of venting components, installation details, and project investment.'}</p>
           <Divider />
         </header>
 
@@ -259,29 +301,8 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
           <>
             <QuoteAttachmentNote />
             {categoryGroups.length ? <InvestmentBreakdown groups={categoryGroups} /> : null}
-            {basisItems.length ? <EstimateBasis items={basisItems} /> : null}
+            <EstimateBasis items={estimateBasis.items} fallbackNote={estimateBasis.fallbackNote} />
             {showKomfortZone ? <KomfortZoneSection /> : null}
-            {fields.INSTALLATION_SCOPE ? (
-              <section className="cp-detail-section cp-detail-section--scope">
-                <div className="cp-detail-head">
-                  <h3>Scope &amp; Responsibility Notes</h3>
-                </div>
-                <ScopeList value={fields.INSTALLATION_SCOPE} />
-                {fields.PROJECT_NOTES ? (
-                  <div className="cp-scope-notes">
-                    <h3>Notes and allowances</h3>
-                    <Block value={fields.PROJECT_NOTES} multiline />
-                  </div>
-                ) : null}
-              </section>
-            ) : (
-              <section className="cp-detail-section cp-detail-section--scope">
-                <div className="cp-detail-head">
-                  <h3>Scope &amp; Responsibility Notes</h3>
-                </div>
-                <p className="cp-muted">Installation scope and responsibility notes will appear here once reviewed.</p>
-              </section>
-            )}
           </>
         ) : fields.INSTALLATION_SCOPE ? (
           <section className="cp-detail-section cp-detail-section--scope">
@@ -326,43 +347,54 @@ export default function CustomerProposal({ fields, parseContext, lineItems = [],
           <p className="cp-muted">Detailed line items will appear here once reviewed.</p>
         )}
 
-        <div className="cp-bottom-grid">
-          <section className="cp-section cp-terms">
-            <h3>Terms &amp; Conditions</h3>
-            {view.showDepositLanguage ? (
-              <p className="cp-line"><strong>Deposit:</strong> {fields.DEPOSIT_TERMS}</p>
-            ) : null}
-            {fields.PAYMENT_TERMS ? <p className="cp-line"><strong>Payment terms:</strong> {fields.PAYMENT_TERMS}</p> : null}
-            {fields.LEGAL_TERMS ? <Block value={fields.LEGAL_TERMS} multiline /> : null}
-            {!view.showDepositLanguage && view.fullyPaid ? (
-              <p className="cp-line cp-callout-soft">This order is paid in full. We appreciate your business.</p>
-            ) : null}
-          </section>
-
-          <section className="cp-acceptance">
-            <h3>Acceptance</h3>
-            <p>I have read and agree to the terms, scope, and investment outlined in this proposal.</p>
-            {fields.DEPOSIT_TERMS ? <p>{fields.DEPOSIT_TERMS}</p> : null}
-            {view.showSignature ? (
-              <div className="cp-signature">
-                <div>
-                  <span className="cp-sig-rule" />
-                  <p className="cp-sig-meta">Authorized Signature</p>
-                </div>
-                <div>
-                  <span className="cp-sig-rule" />
-                  <p className="cp-sig-meta">Date</p>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        </div>
+        {!isDetailed ? <TermsAcceptance fields={fields} view={view} /> : null}
 
         <footer className="cp-footer">
           <span>Benson Stone Co. | Quote #{fields.QUOTE_NO || ''} | {fields.CUSTOMER_NAME || ''}</span>
-          <span>Page 2 of 2</span>
+          <span>Page 2 of {isDetailed ? '3' : '2'}</span>
         </footer>
       </section>
+
+      {isDetailed ? (
+        <section className="cp-page">
+          <TemplateHead />
+
+          <header className="cp-page-header">
+            <h2>Included Scope & Terms</h2>
+            <p>Scope notes, allowances, and the clean acceptance area for the attached official quote.</p>
+            <Divider />
+          </header>
+
+          {fields.INSTALLATION_SCOPE ? (
+            <section className="cp-detail-section cp-detail-section--scope">
+              <div className="cp-detail-head">
+                <h3>Scope & Responsibility Notes</h3>
+              </div>
+              <ScopeList value={fields.INSTALLATION_SCOPE} />
+              {fields.PROJECT_NOTES ? (
+                <div className="cp-scope-notes">
+                  <h3>Notes and allowances</h3>
+                  <Block value={fields.PROJECT_NOTES} multiline />
+                </div>
+              ) : null}
+            </section>
+          ) : (
+            <section className="cp-detail-section cp-detail-section--scope">
+              <div className="cp-detail-head">
+                <h3>Scope & Responsibility Notes</h3>
+              </div>
+              <p className="cp-muted">Installation scope and responsibility notes will appear here once reviewed.</p>
+            </section>
+          )}
+
+          <TermsAcceptance fields={fields} view={view} />
+
+          <footer className="cp-footer">
+            <span>Benson Stone Co. | Quote #{fields.QUOTE_NO || ''} | {fields.CUSTOMER_NAME || ''}</span>
+            <span>Page 3 of 3</span>
+          </footer>
+        </section>
+      ) : null}
     </article>
   )
 }

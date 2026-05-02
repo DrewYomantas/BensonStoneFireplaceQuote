@@ -46,9 +46,17 @@ Accessible via the Quote Recovery tab in the app header. Wires into: opportuniti
 1. ~~Proposal Package / Playbook Guidance~~ — wired into Old Quote Recovery lane
 2. ~~Opportunity Save / Queue~~ — wired into Old Quote Recovery lane
 3. ~~Follow-Up Composer + Activity Timeline~~ — wired into Old Quote Recovery lane
-4. ~~Proposal Detail Engine V1~~ — mode selector, category grouping, Investment Breakdown, Estimate Basis, Komfort Zone, Scope, Scale Scenario helper
+4. ~~Proposal Detail Engine V1~~ - mode selector, category grouping, Investment Breakdown, Estimate Basis, Komfort Zone, Scope, terms, acceptance
 5. Next: expose Opportunity Queue across both polish and recovery lanes
 6. Next: add "Save to Queue" from Quote Polish flow
+7. Next: Quote Recovery should reuse Quote Polish upload/OCR intake for old scanned PDFs/images and route reviewed opportunities into the recovery queue.
+
+## Pricing / Source Hierarchy
+
+1. Reviewed active quote lines.
+2. FP CURRENT PRICE LIST / FP Central Price List for future current-price authority.
+3. 2025+ vendor files as supporting references only.
+4. 2024 and older files only for history/archive unless Drew or Liam approve otherwise.
 
 ## Reintegration Rules
 

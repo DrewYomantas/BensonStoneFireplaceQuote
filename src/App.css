@@ -1972,95 +1972,94 @@ html, body, #root {
   color: #fff;
 }
 
-/* ── Project scale scenario helper ──────────────────────────────── */
+/* Proposal readiness review */
 
-.bs-scenario { padding: 2px 0 4px; }
-
-.bs-scenario h2 { margin-bottom: 6px; }
-
-.bs-scenario__warning {
-  font-size: 12px;
-  color: #854d0e;
-  background: #fef9c3;
-  border: 1px solid #fde68a;
-  border-radius: 5px;
-  padding: 6px 10px;
-  margin-bottom: 10px;
-  line-height: 1.45;
+.bs-readiness {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(94, 73, 51, 0.18);
+  border-radius: 6px;
+  background: #fff9ee;
 }
 
-.bs-scenario__levels {
+.bs-readiness__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bs-readiness h2 {
+  margin: 0;
+  font-size: 15px;
+  color: #173321;
+}
+
+.bs-readiness__status {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.bs-readiness__status--reviewed {
+  background: rgba(23, 51, 33, 0.12);
+  color: #173321;
+}
+
+.bs-readiness__status--follow-up,
+.bs-readiness__status--unresolved {
+  background: rgba(180, 106, 45, 0.16);
+  color: #8a481d;
+}
+
+.bs-readiness__warnings {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #4f3e2f;
+}
+
+.bs-readiness__warnings li::marker {
+  color: #b46a2d;
+}
+
+.bs-readiness__clear {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #6b5a47;
+}
+
+.bs-readiness__actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
 }
 
-.bs-scenario__level {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 8px 10px;
-  min-width: 100px;
-  background: #fff;
-  border: 1.5px solid #d0d5dd;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.bs-scenario__level:hover { border-color: #1a4d2e; }
-
-.bs-scenario__level.is-active {
-  background: #f0fdf4;
-  border-color: #1a4d2e;
-}
-
-.bs-scenario__level-num {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1a4d2e;
-  line-height: 1;
-}
-
-.bs-scenario__level-label {
+.bs-readiness__actions button {
+  padding: 6px 9px;
+  border: 1px solid rgba(94, 73, 51, 0.22);
+  border-radius: 5px;
+  background: #fffdf6;
+  color: #4f3e2f;
+  font: inherit;
   font-size: 11px;
-  font-weight: 500;
-  color: #374151;
-  text-align: center;
-  line-height: 1.3;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.bs-scenario__detail {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 7px;
-  padding: 12px 14px;
-}
-
-.bs-scenario__detail-desc {
-  font-size: 13px;
-  color: #1f2937;
-  margin-bottom: 8px;
-}
-
-.bs-scenario__considerations {
-  margin: 0 0 10px;
-  padding-left: 18px;
-  font-size: 12.5px;
-  color: #374151;
-  line-height: 1.5;
-}
-
-.bs-scenario__detail-warning {
-  font-size: 11.5px;
-  color: #92400e;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 4px;
-  padding: 5px 9px;
-  margin: 0;
+.bs-readiness__actions button.is-active {
+  background: #173321;
+  border-color: #173321;
+  color: #f6eddd;
 }
 
 /* ── Customer proposal: detailed mode sections ───────────────────── */

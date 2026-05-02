@@ -12,9 +12,9 @@ import { evaluateCurrentSetup } from './lib/currentSetup.js'
 import { extractOcrFromPdf, extractTextFromPdf } from './lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from './lib/scannedPacketParser.js'
 import {
-  SCENARIO_WARNING,
   detectDetailedBreakdownRecommended,
-  getProjectScaleScenarios,
+  getEstimateBasisSummary,
+  hasUnclassifiedLineItems,
 } from './lib/proposalDetail.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
@@ -65,38 +65,57 @@ function FieldInput({ field, value, onChange }) {
   )
 }
 
-function ScenarioHelper({ selectedLevel, onSelectLevel }) {
-  const scenarios = getProjectScaleScenarios()
-  const selected = scenarios.find((s) => s.level === selectedLevel) || null
+function quoteAgeDays(value, now = new Date()) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return Math.floor((now.getTime() - date.getTime()) / 86400000)
+}
 
+function ProposalReadinessReview({ reviewState, warnings, onChange }) {
+  const hasWarnings = warnings.length > 0
   return (
-    <div className="bs-scenario">
-      <h2>Project scale scenario</h2>
-      <p className="bs-scenario__warning">{SCENARIO_WARNING}</p>
-      <div className="bs-scenario__levels">
-        {scenarios.map((scenario) => (
-          <button
-            key={scenario.level}
-            type="button"
-            className={`bs-scenario__level ${selectedLevel === scenario.level ? 'is-active' : ''}`}
-            onClick={() => onSelectLevel(scenario.level)}
-          >
-            <span className="bs-scenario__level-num">{scenario.level}</span>
-            <span className="bs-scenario__level-label">{scenario.label}</span>
-          </button>
-        ))}
-      </div>
-      {selected ? (
-        <div className="bs-scenario__detail">
-          <p className="bs-scenario__detail-desc">{selected.description}</p>
-          <ul className="bs-scenario__considerations">
-            {selected.considerations.map((c) => <li key={c}>{c}</li>)}
-          </ul>
-          <p className="bs-scenario__detail-warning">{SCENARIO_WARNING}</p>
+    <section className="bs-readiness no-print" aria-label="Proposal readiness review">
+      <div className="bs-readiness__head">
+        <div>
+          <p className="bs-lens__eyebrow">Proposal Readiness Review</p>
+          <h2>Missing Info Review</h2>
         </div>
-      ) : null}
-    </div>
+        <span className={`bs-readiness__status bs-readiness__status--${reviewState}`}>
+          {reviewState === 'reviewed' ? 'Okay to Send' : reviewState === 'follow-up' ? 'Follow-Up Needed' : 'Unresolved'}
+        </span>
+      </div>
+      {hasWarnings ? (
+        <ul className="bs-readiness__warnings">
+          {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+        </ul>
+      ) : (
+        <p className="bs-readiness__clear">No detailed-mode send-readiness warnings detected.</p>
+      )}
+      <div className="bs-readiness__actions" aria-label="Internal review state">
+        <button type="button" className={reviewState === 'unresolved' ? 'is-active' : ''} onClick={() => onChange('unresolved')}>
+          Unresolved
+        </button>
+        <button type="button" className={reviewState === 'follow-up' ? 'is-active' : ''} onClick={() => onChange('follow-up')}>
+          Follow-Up Questions, if needed
+        </button>
+        <button type="button" className={reviewState === 'reviewed' ? 'is-active' : ''} onClick={() => onChange('reviewed')}>
+          Mark Reviewed / Okay to Send
+        </button>
+      </div>
+    </section>
   )
+}
+
+function buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }) {
+  if (proposalMode !== 'detailed') return []
+  const warnings = []
+  if (hasUnclassifiedLineItems(lineItems)) warnings.push('Some line items need category review before sending.')
+  if (getEstimateBasisSummary(lineItems, fields).fallbackUsed) warnings.push('Estimate basis is using the attached line-item quote fallback.')
+  if (setupGuidance?.blockers?.length) warnings.push('Current setup or goal details need internal review before sending.')
+  const age = quoteAgeDays(fields.QUOTE_DATE)
+  if (age !== null && age > 90) warnings.push('Quote date is older than expected. Confirm pricing/source review before sending.')
+  return warnings
 }
 
 export default function App() {
@@ -112,9 +131,13 @@ export default function App() {
   )
   const [lineItems, setLineItems] = useState([])
   const [proposalMode, setProposalMode] = useState('summary')
-  const [selectedScenarioLevel, setSelectedScenarioLevel] = useState(null)
+  const [proposalReviewState, setProposalReviewState] = useState('unresolved')
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
+  const sendReadinessWarnings = useMemo(
+    () => buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }),
+    [fields, lineItems, proposalMode, setupGuidance],
+  )
   const fileInputRef = useRef(null)
 
   function setField(field, value) {
@@ -172,7 +195,7 @@ export default function App() {
     setParseContext(emptyContext)
     setRawText('')
     setLineItems([])
-    setSelectedScenarioLevel(null)
+    setProposalReviewState('unresolved')
     setStatus('Cleared. Upload a PDF or fill the fields manually.')
   }
 
@@ -250,6 +273,12 @@ export default function App() {
 
               <QuoteSetupLens guidance={setupGuidance} />
 
+              <ProposalReadinessReview
+                reviewState={proposalReviewState}
+                warnings={sendReadinessWarnings}
+                onChange={setProposalReviewState}
+              />
+
               <div className="bs-form__group no-print">
                 <div className="bs-mode-selector">
                   <div className="bs-mode-selector__head">
@@ -275,13 +304,6 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              </div>
-
-              <div className="bs-form__group no-print">
-                <ScenarioHelper
-                  selectedLevel={selectedScenarioLevel}
-                  onSelectLevel={(level) => setSelectedScenarioLevel(selectedScenarioLevel === level ? null : level)}
-                />
               </div>
 
               {rawText ? (

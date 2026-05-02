@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   KOMFORT_ZONE_EXPLAINER,
+  ESTIMATE_BASIS_FALLBACK_NOTE,
   QUOTE_ATTACHMENT_NOTE,
-  SCENARIO_WARNING,
   detectDetailedBreakdownRecommended,
   detectEstimateBasisItems,
   detectKomfortZone,
-  getProjectScaleScenarios,
+  getEstimateBasisSummary,
   groupLineItemsByCategory,
+  hasUnclassifiedLineItems,
 } from './proposalDetail.js'
 
 function item(description, overrides = {}) {
@@ -98,6 +99,18 @@ test('delivery charge routes to delivery-misc', () => {
 test('truly unknown item routes to other', () => {
   const groups = groupLineItemsByCategory([item('CUSTOM WIDGET PART ABC123 NONDESCRIPT')])
   assert.ok(groups.some((g) => g.key === 'other'))
+})
+
+test('unknown customer-facing group label is safe', () => {
+  const groups = groupLineItemsByCategory([item('CUSTOM WIDGET PART ABC123 NONDESCRIPT')])
+  const other = groups.find((g) => g.key === 'other')
+  assert.equal(other.label, 'Additional Project Items')
+  assert.equal(/Needs Review|Other/i.test(other.label), false)
+})
+
+test('detects unclassified line items for internal readiness warning', () => {
+  assert.equal(hasUnclassifiedLineItems([item('CUSTOM WIDGET PART ABC123 NONDESCRIPT')]), true)
+  assert.equal(hasUnclassifiedLineItems([item('NAPOLEON GX70 FIREPLACE')]), false)
 })
 
 test('empty line items returns empty groups', () => {
@@ -248,44 +261,28 @@ test('returns empty array when no basis indicators', () => {
   assert.equal(items.length, 0)
 })
 
+test('ignores unclear parsed finish quantities', () => {
+  const items = detectEstimateBasisItems([
+    item('COUNTRY LEDGESTONE FLAT', { qty: '3', unit: 'HP' }),
+    item('LIMESTONE HEARTH PAD', { qty: '1', unit: 'BB' }),
+  ])
+  assert.equal(items.length, 0)
+})
+
+test('estimate basis summary falls back when no confident quantity is available', () => {
+  const summary = getEstimateBasisSummary([item('COUNTRY LEDGESTONE FLAT', { qty: '3', unit: 'HP' })])
+  assert.equal(summary.fallbackUsed, true)
+  assert.equal(summary.items.length, 0)
+  assert.equal(summary.fallbackNote, ESTIMATE_BASIS_FALLBACK_NOTE)
+  assert.equal(/3 HP|1 BB/i.test(summary.fallbackNote), false)
+})
+
 test('preserves qty and unit on basis items', () => {
   const items = detectEstimateBasisItems([item('COUNTRY LEDGESTONE FLAT', { unit: 'SF', qty: '95' })])
   const sf = items.find((i) => i.type === 'stone-sf')
   assert.ok(sf)
   assert.equal(sf.qty, '95')
   assert.equal(sf.unit, 'SF')
-})
-
-// --- getProjectScaleScenarios ---
-
-test('returns exactly 5 scenario levels', () => {
-  const scenarios = getProjectScaleScenarios()
-  assert.equal(scenarios.length, 5)
-})
-
-test('scenario levels are numbered 1 through 5', () => {
-  const scenarios = getProjectScaleScenarios()
-  assert.deepEqual(scenarios.map((s) => s.level), [1, 2, 3, 4, 5])
-})
-
-test('each scenario has label, description, and considerations', () => {
-  const scenarios = getProjectScaleScenarios()
-  for (const scenario of scenarios) {
-    assert.ok(scenario.label, `level ${scenario.level} should have a label`)
-    assert.ok(scenario.description, `level ${scenario.level} should have a description`)
-    assert.ok(Array.isArray(scenario.considerations), `level ${scenario.level} should have considerations array`)
-    assert.ok(scenario.considerations.length > 0, `level ${scenario.level} should have at least one consideration`)
-  }
-})
-
-test('scenarios do not contain pricing engine language', () => {
-  const scenarios = getProjectScaleScenarios()
-  const serialized = JSON.stringify(scenarios)
-  assert.equal(
-    /exact\s*price|final\s*price|guaranteed|\baverage\s*cost\b|\bmargin\b/i.test(serialized),
-    false,
-    'scenarios must not imply final pricing guarantees',
-  )
 })
 
 // --- exported constants safety ---
@@ -304,14 +301,9 @@ test('QUOTE_ATTACHMENT_NOTE is customer-safe', () => {
   )
 })
 
-test('SCENARIO_WARNING mentions BisTrack quote requirement', () => {
-  assert.ok(SCENARIO_WARNING.length > 20)
-  assert.ok(/bistrack\s*quote/i.test(SCENARIO_WARNING), 'scenario warning should reference BisTrack quote requirement')
-})
-
-test('SCENARIO_WARNING does not promise final pricing', () => {
+test('ESTIMATE_BASIS_FALLBACK_NOTE is customer-safe', () => {
   assert.equal(
-    /final\s*price|guaranteed\s*price|confirmed\s*price/i.test(SCENARIO_WARNING),
+    /margin|\bcost\b|fuzzy|ocr|supplier|rank|needs review|bistrack|3 HP|1 BB/i.test(ESTIMATE_BASIS_FALLBACK_NOTE),
     false,
   )
 })

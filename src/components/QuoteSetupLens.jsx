@@ -31,9 +31,9 @@ export default function QuoteSetupLens({ guidance }) {
     if (!hasQuestions) return
     try {
       await navigator.clipboard.writeText(aid.questionCopyText)
-      setCopyStatus('Questions copied.')
+      setCopyStatus('Follow-up prompts copied.')
     } catch {
-      setCopyStatus('Could not copy. Select the questions below instead.')
+      setCopyStatus('Could not copy. Select the prompts below instead.')
     }
   }
 
@@ -42,7 +42,7 @@ export default function QuoteSetupLens({ guidance }) {
       <div className="bs-lens__head">
         <div>
           <p className="bs-lens__eyebrow">Current Setup + Goal Lens</p>
-          <h3>Clarify the path before proposal.</h3>
+          <h3>Proposal Readiness Review</h3>
         </div>
         <span className={`bs-lens__status bs-lens__status--${aid.statusTone}`}>{aid.statusLabel}</span>
       </div>
@@ -64,15 +64,15 @@ export default function QuoteSetupLens({ guidance }) {
       <ListBlock
         emptyText="No setup blocker detected from reviewed fields."
         items={guidance.blockers}
-        title="Clarify Before Proposal"
+        title="Missing Info Review"
         warning
       />
 
       <div className="bs-lens-block">
         <div className="bs-lens-block__head">
-          <h4>Customer Questions</h4>
+          <h4>Follow-Up Questions, if needed</h4>
           <button type="button" className="bs-lens__copy" onClick={copyQuestions} disabled={!hasQuestions}>
-            Copy Questions
+            Copy Follow-Up Prompts
           </button>
         </div>
         {guidance.clarificationQuestions.length ? (
@@ -80,7 +80,7 @@ export default function QuoteSetupLens({ guidance }) {
             {guidance.clarificationQuestions.map((question) => <li key={question}>{question}</li>)}
           </ul>
         ) : (
-          <p>No extra questions needed from this lens.</p>
+          <p>No follow-up prompts needed from this lens.</p>
         )}
         {copyStatus ? <p className="bs-lens__copy-status" role="status">{copyStatus}</p> : null}
       </div>
