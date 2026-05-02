@@ -22,13 +22,12 @@ import {
 } from './lib/quotePolishOpportunity.js'
 import {
   listOpportunities,
-  removeOpportunity,
   saveOpportunity,
   updateOpportunity,
 } from './lib/opportunities.js'
 import CustomerProposal from './components/CustomerProposal.jsx'
 import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
-import OpportunityQueue from './components/OpportunityQueue.jsx'
+import UnifiedOpportunityQueue from './components/UnifiedOpportunityQueue.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
 import ShowroomDisplayPanel from './components/ShowroomDisplayPanel.jsx'
 import ShowroomDisplayRegister from './components/ShowroomDisplayRegister.jsx'
@@ -228,9 +227,6 @@ export default function App() {
   const [lineItemQuoteAttached, setLineItemQuoteAttached] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [pendingDuplicate, setPendingDuplicate] = useState(null)
-  const [opportunities, setOpportunities] = useState(() => listOpportunities())
-  const [queueFilter, setQueueFilter] = useState('all')
-  const [playbooks] = useState([])
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const detailedRecommended = useMemo(() => detectDetailedBreakdownRecommended(lineItems), [lineItems])
   const displayContext = deriveShowroomDisplayContext({
@@ -358,7 +354,6 @@ export default function App() {
     saveOpportunity(draft.opportunity)
     setPendingDuplicate(null)
     setSaveStatus('Saved to the opportunity queue.')
-    setOpportunities(listOpportunities())
   }
 
   function handleUpdateDuplicate() {
@@ -379,17 +374,6 @@ export default function App() {
     })
     setPendingDuplicate(null)
     setSaveStatus('Saved as a separate queue opportunity.')
-    setOpportunities(listOpportunities())
-  }
-
-  function handleRemoveOpportunity(id) {
-    removeOpportunity(id)
-    setOpportunities(listOpportunities())
-  }
-
-  function handleUpdateOpportunityFromQueue(id, patch) {
-    updateOpportunity(id, patch)
-    setOpportunities(listOpportunities())
   }
 
   function toggleSection(key) {
@@ -605,18 +589,7 @@ export default function App() {
           : mode === 'display'
             ? <ShowroomDisplayRegister />
             : mode === 'queue'
-              ? (
-                <OpportunityQueue
-                  filter={queueFilter}
-                  onFilterChange={setQueueFilter}
-                  onRemoveOpportunity={handleRemoveOpportunity}
-                  onSaveCurrent={handleSaveToQueue}
-                  onUpdateOpportunity={handleUpdateOpportunityFromQueue}
-                  opportunities={opportunities}
-                  playbooks={playbooks}
-                  saveState={saveStatus}
-                />
-              )
+              ? <UnifiedOpportunityQueue />
               : <VendorPriceBooks />
       )}
     </div>

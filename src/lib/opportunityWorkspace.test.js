@@ -5,7 +5,34 @@ import {
   getWorkspaceReadinessWarnings,
   getWorkspaceProposalPanel,
   getWorkspaceVendorRef,
+  opportunityToQuoteFields,
 } from './opportunityWorkspace.js'
+
+// ── opportunityToQuoteFields ─────────────────────────────────────
+
+describe('opportunityToQuoteFields', () => {
+  it('maps opportunity text fields to BisTrack-style keys', () => {
+    const opp = {
+      projectTitle: 'Gas Insert',
+      productsNotes: 'Kingsman ZRB46',
+      existingSetup: 'Wood burning',
+      desiredOutcome: 'Convert to gas',
+    }
+    const fields = opportunityToQuoteFields(opp)
+    assert.equal(fields.PROJECT_TITLE, 'Gas Insert')
+    assert.equal(fields.PROJECT_SCOPE_SUMMARY, 'Kingsman ZRB46')
+    assert.equal(fields.INSTALLATION_SCOPE, 'Wood burning')
+    assert.equal(fields.PROJECT_NOTES, 'Convert to gas')
+  })
+
+  it('returns empty strings for missing fields', () => {
+    const fields = opportunityToQuoteFields({})
+    assert.equal(fields.PROJECT_TITLE, '')
+    assert.equal(fields.PROJECT_SCOPE_SUMMARY, '')
+    assert.equal(fields.INSTALLATION_SCOPE, '')
+    assert.equal(fields.PROJECT_NOTES, '')
+  })
+})
 
 // ── getWorkspaceSourceSummary ────────────────────────────────────
 
@@ -170,11 +197,6 @@ describe('getWorkspaceVendorRef', () => {
 // ── Customer-facing safety: workspace language must not leak ─────
 
 describe('workspace safety — customer-facing leakage', () => {
-  const internalTerms = [
-    'dealer cost', 'margin', 'supplier', 'confidence', 'ocr', 'fuzzy',
-    'needs review', 'source trail', 'internal', 'file path',
-  ]
-
   it('getWorkspaceSourceSummary output contains no internal pricing/cost terms', () => {
     const result = getWorkspaceSourceSummary({
       sourceType: 'quote-polish',
