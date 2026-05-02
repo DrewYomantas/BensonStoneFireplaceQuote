@@ -6,6 +6,7 @@ import {
   getRecoveryFollowUpDraft,
   isSafeActivityForStatus,
 } from './oldQuoteRecovery.js'
+import { getOpportunitySourceLabel } from './opportunities.js'
 
 const now = '2026-04-29T12:00:00.000Z'
 
@@ -289,6 +290,24 @@ test('uploaded opportunity appears in same recovery queue model as manual opport
   assert.equal(manual.recoverySource, 'true')
   assert.equal(uploaded.recoverySource, 'true')
   assert.ok([manual, uploaded].every((item) => item.id && item.status))
+})
+
+test('manual single-upload and bulk-upload records classify for queue source chips', () => {
+  const manual = createOldQuoteOpportunity(intake({ sourceType: 'manual' }), now)
+  const singleUpload = createOldQuoteOpportunity(intake({
+    sourceType: 'pdf',
+    sourceFileNote: 'single-upload.pdf',
+    reviewedForFollowUp: true,
+  }), now)
+  const bulkUpload = createOldQuoteOpportunity(intake({
+    sourceType: 'bulk-scan',
+    sourceFileNote: 'bulk-upload.pdf',
+    reviewedForFollowUp: true,
+  }), now)
+
+  assert.equal(getOpportunitySourceLabel(manual), 'Manual Recovery')
+  assert.equal(getOpportunitySourceLabel(singleUpload), 'Uploaded Old Quote')
+  assert.equal(getOpportunitySourceLabel(bulkUpload), 'Bulk Uploaded Old Quote / Scanned Intake')
 })
 
 test('source trail is internal and does not alter customer-facing draft copy', () => {

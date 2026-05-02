@@ -5,6 +5,11 @@ import {
   createQuotePolishOpportunity,
   mergeQuotePolishOpportunity,
 } from './quotePolishOpportunity.js'
+import {
+  getLineItemAttachmentWarning,
+  getOpportunityReadinessBadge,
+  getOpportunitySourceLabel,
+} from './opportunities.js'
 
 const now = '2026-04-29T12:00:00.000Z'
 
@@ -108,6 +113,9 @@ test('line-item attachment confirmation changes readiness and queue warnings', (
   assert.equal(opportunity.proposalReadiness, 'blocked')
   assert.equal(opportunity.nextAction, 'Confirm attached line-item quote')
   assert.ok(opportunity.warnings.some((warning) => /attachment is not confirmed/i.test(warning)))
+  assert.equal(getOpportunitySourceLabel(opportunity), 'Quote Polish / Active BisTrack Quote')
+  assert.equal(getOpportunityReadinessBadge(opportunity).label, 'Line-Item Quote Needed')
+  assert.equal(getLineItemAttachmentWarning(opportunity), 'Line-item quote attachment not confirmed')
 })
 
 test('duplicate quote number does not silently create a queue record', () => {

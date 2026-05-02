@@ -111,7 +111,7 @@ test('customer proposal copy does not expose internal BisTrack wording', () => {
 test('customer proposal copy uses send-ready tax and title labels', () => {
   const source = readFileSync(new URL('../components/CustomerProposal.jsx', import.meta.url), 'utf8')
 
-  assert.equal(/IR Tax|&amp;|Other \/ Needs Review|Needs Review/i.test(source), false)
+  assert.equal(/IR Tax|&amp;|Other \/ Needs Review|Needs Review|Source Trail|OCR|fuzzy match|internal confidence|supplier|margin|cost/i.test(source), false)
   assert.equal(/Sales Tax/.test(source), true)
   assert.equal(/Terms & Conditions/.test(source), true)
 })

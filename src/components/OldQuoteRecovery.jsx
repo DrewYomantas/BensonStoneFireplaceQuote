@@ -10,7 +10,16 @@ import {
 } from '../lib/oldQuoteRecovery.js'
 import {
   filterOpportunities,
+  filterQueueOpportunities,
+  getLatestActivitySummary,
+  getLineItemAttachmentWarning,
+  getOpportunityNextActionLabel,
+  getOpportunityReadinessBadge,
+  getOpportunitySourceLabel,
+  getQueueEmptyState,
+  getQueueFilterCounts,
   listOpportunities,
+  queueFilterDefinitions,
   saveOpportunity,
   updateOpportunity,
 } from '../lib/opportunities.js'
@@ -45,14 +54,6 @@ const emptyIntake = {
   reviewedForFollowUp: true,
 }
 
-const queueFilters = [
-  { value: 'all', label: 'All' },
-  { value: 'needs-review', label: 'Needs Review' },
-  { value: 'follow-up-needed', label: 'Follow Up' },
-  { value: 'ready-for-proposal', label: 'Ready' },
-  { value: 'closed-reference', label: 'Reference / Closed' },
-]
-
 function titleCase(str) {
   return String(str || '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -81,6 +82,14 @@ function statusBadgeClass(status) {
 
 function loadRecoveryOpportunities() {
   return listOpportunities().filter((opp) => opp.recoverySource === 'true')
+}
+
+function readinessBadgeClass(tone) {
+  if (tone === 'ready') return 'bs-badge bs-badge--status'
+  if (tone === 'waiting') return 'bs-badge bs-badge--cool'
+  if (tone === 'follow-up') return 'bs-badge bs-badge--warm'
+  if (tone === 'warning') return 'bs-badge bs-badge--warning'
+  return 'bs-badge bs-badge--unknown'
 }
 
 function IntakeField({ id, label, value, onChange, multiline = false, required = false, type = 'text' }) {
@@ -113,14 +122,14 @@ function IntakeSelect({ id, label, value, options, onChange, wide = false }) {
   )
 }
 
-function QueueCard({ opportunity, onSelect }) {
-  const rec = deriveRecoveryRecommendation(opportunity)
+function QueueCard({ opportunity, activities, onSelect }) {
   const warningCount = (opportunity.warnings || []).filter((w) => !/Sensitive BisTrack fields|quote refresh/i.test(w)).length
-  const proposalMeta = [
-    opportunity.proposalMode ? titleCase(opportunity.proposalMode) : '',
-    opportunity.proposalReadiness ? titleCase(opportunity.proposalReadiness) : '',
-  ].filter(Boolean).join(' | ')
-  const attachmentWarning = opportunity.sourceType === 'quote-polish' && opportunity.lineItemQuoteAttached !== 'true'
+  const sourceLabel = getOpportunitySourceLabel(opportunity)
+  const readiness = getOpportunityReadinessBadge(opportunity)
+  const attachmentWarning = getLineItemAttachmentWarning(opportunity)
+  const latestActivity = getLatestActivitySummary(activities[0], opportunity)
+  const total = opportunity.originalQuoteAmount || opportunity.quotationTotal
+  const nextAction = getOpportunityNextActionLabel(opportunity)
 
   return (
     <button type="button" className="bs-queue-card" onClick={() => onSelect(opportunity)}>
@@ -131,27 +140,33 @@ function QueueCard({ opportunity, onSelect }) {
           {opportunity.quoteDate ? ` - ${opportunity.quoteDate}` : ''}
         </span>
       </div>
-      <div className="bs-queue-card__subline">
-        {[opportunity.originalQuoteAmount || opportunity.quotationTotal, opportunity.sourceType || opportunity.sourceLabel].filter(Boolean).join(' | ')}
+      <div className="bs-queue-card__source-row">
+        <span className="bs-source-chip">{sourceLabel}</span>
+        {total ? <span className="bs-queue-card__total">{total}</span> : null}
       </div>
-      {proposalMeta ? (
-        <div className="bs-queue-card__subline">{proposalMeta}</div>
-      ) : null}
       <div className="bs-queue-card__badges">
         <span className={classificationBadgeClass(opportunity.recoveryClassification)}>
           {titleCase(opportunity.recoveryClassification || 'unknown')}
         </span>
-        <span className={statusBadgeClass(opportunity.status)}>
-          {titleCase(opportunity.status || 'unknown')}
-        </span>
+        <span className={readinessBadgeClass(readiness.tone)}>{readiness.label}</span>
+        <span className={statusBadgeClass(opportunity.status)}>{titleCase(opportunity.status || 'unknown')}</span>
         {warningCount > 0 && (
           <span className="bs-badge bs-badge--warning">{warningCount} warning{warningCount === 1 ? '' : 's'}</span>
         )}
-        {attachmentWarning ? (
-          <span className="bs-badge bs-badge--warning">Attachment not confirmed</span>
-        ) : null}
       </div>
-      <div className="bs-queue-card__action">{rec.label}</div>
+      {attachmentWarning ? (
+        <div className="bs-queue-card__warning">{attachmentWarning}. Confirm original BisTrack quote before sending.</div>
+      ) : null}
+      <div className="bs-queue-card__work">
+        <div>
+          <span>Next Action</span>
+          <strong>{nextAction}</strong>
+        </div>
+        <div>
+          <span>Latest Activity</span>
+          <strong>{latestActivity}</strong>
+        </div>
+      </div>
     </button>
   )
 }
@@ -177,9 +192,6 @@ function SourceTrail({ opportunity }) {
       <p style={{ margin: '0 0 4px', fontSize: 12, color: '#4f3e2f', lineHeight: 1.45 }}>
         {opportunity.sourceTrailNote || opportunity.sourceLabel || opportunity.sourceFileName}
       </p>
-      {opportunity.sourceConfidence ? (
-        <p style={{ margin: 0, fontSize: 11, color: '#8a6d4c' }}>{opportunity.sourceConfidence}</p>
-      ) : null}
     </div>
   )
 }
@@ -777,7 +789,11 @@ function BulkRecoveryUpload({ onSave, onCancel }) {
       setError('Mark at least one reviewed draft before saving.')
       return
     }
-    selected.forEach((draft) => saveOpportunity(createOldQuoteOpportunity(draft.intake)))
+    selected.forEach((draft) => saveOpportunity(createOldQuoteOpportunity({
+      ...draft.intake,
+      sourceType: `bulk-${draft.intake.sourceType || 'upload'}`,
+      sourceLabel: draft.intake.sourceLabel || 'Bulk uploaded old quote',
+    })))
     setSaved(true)
     setTimeout(() => {
       setSaved(false)
@@ -898,9 +914,14 @@ export default function OldQuoteRecovery() {
   }
 
   const filteredOpportunities = useMemo(() => {
+    if (queueFilterDefinitions.some((item) => item.value === filter)) return filterQueueOpportunities(opportunities, filter)
     if (filter === 'all') return opportunities
     return filterOpportunities(opportunities, filter)
   }, [opportunities, filter])
+
+  const activityCache = useMemo(() => (
+    Object.fromEntries(opportunities.map((opportunity) => [opportunity.id, listOpportunityActivities(opportunity.id)]))
+  ), [opportunities])
 
   const selectedOpportunity = useMemo(
     () => opportunities.find((o) => o.id === selectedId) || null,
@@ -959,6 +980,8 @@ export default function OldQuoteRecovery() {
     ready: opportunities.filter((o) => o.status === 'ready-for-proposal').length,
     reference: opportunities.filter((o) => ['reference-only', 'closed-won', 'closed-lost', 'archived'].includes(o.status)).length,
   }
+  const filterCounts = getQueueFilterCounts(opportunities)
+  const emptyState = getQueueEmptyState(filter)
 
   return (
     <div className="bs-recovery">
@@ -991,7 +1014,7 @@ export default function OldQuoteRecovery() {
         </button>
 
         <div className="bs-recovery__filters">
-          {queueFilters.map((f) => (
+          {queueFilterDefinitions.map((f) => (
             <button
               key={f.value}
               type="button"
@@ -999,7 +1022,8 @@ export default function OldQuoteRecovery() {
               onClick={() => setFilter(f.value)}
               style={{ padding: '6px 12px' }}
             >
-              {f.label}
+              <span>{f.label}</span>
+              <span className="bs-filter-count">{filterCounts[f.value] || 0}</span>
             </button>
           ))}
         </div>
@@ -1017,18 +1041,16 @@ export default function OldQuoteRecovery() {
       {filteredOpportunities.length === 0 ? (
         <div className="bs-queue-empty">
           <p style={{ margin: '0 0 8px', fontWeight: 700, color: '#173321', fontSize: 16 }}>
-            {opportunities.length === 0 ? 'Opportunity Queue is Empty' : 'No matches for this filter'}
+            {emptyState.title}
           </p>
           <p style={{ margin: 0, fontSize: 13, color: '#6b5a47' }}>
-            {opportunities.length === 0
-              ? 'Upload an old quote or add one manually. Each entry will be classified, reviewed, and queued for safe follow-up.'
-              : 'Try a different filter to see other opportunities.'}
+            {emptyState.body}
           </p>
         </div>
       ) : (
         <div className="bs-queue">
           {filteredOpportunities.map((opp) => (
-            <QueueCard key={opp.id} opportunity={opp} onSelect={handleSelectOpportunity} />
+            <QueueCard key={opp.id} opportunity={opp} activities={activityCache[opp.id] || []} onSelect={handleSelectOpportunity} />
           ))}
         </div>
       )}

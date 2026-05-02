@@ -14,6 +14,19 @@ export const opportunityStatuses = [
 export const opportunityTemperatures = ['hot', 'warm', 'cool', 'unknown']
 export const proposalReadinessOptions = ['blocked', 'needs-review', 'ready', 'sent']
 
+export const queueFilterDefinitions = [
+  { value: 'all', label: 'All' },
+  { value: 'active-quotes', label: 'Active Quotes' },
+  { value: 'recovery-quotes', label: 'Recovery Quotes' },
+  { value: 'ready-for-proposal', label: 'Ready for Proposal' },
+  { value: 'follow-up-needed', label: 'Follow-Up Needed' },
+  { value: 'blocked-missing-info', label: 'Blocked / Missing Info' },
+  { value: 'waiting-on-customer', label: 'Waiting on Customer' },
+  { value: 'hot', label: 'Hot' },
+  { value: 'warm', label: 'Warm' },
+  { value: 'cool', label: 'Cool' },
+]
+
 const STORAGE_KEY = 'benson-stone-opportunity-queue-v1'
 
 const storedKeys = [
@@ -483,4 +496,160 @@ export function filterOpportunities(opportunities, filter) {
   if (filter === 'waiting-on-customer') return opportunities.filter((item) => item.status === 'waiting-on-customer')
   if (filter === 'closed-reference') return opportunities.filter((item) => ['closed-won', 'closed-lost', 'reference-only', 'archived'].includes(item.status))
   return opportunities
+}
+
+export function isActiveQuoteOpportunity(opportunity = {}) {
+  return opportunity.sourceType === 'quote-polish'
+}
+
+export function isRecoveryQuoteOpportunity(opportunity = {}) {
+  return Boolean(opportunity.recoverySource === 'true' && !isActiveQuoteOpportunity(opportunity))
+}
+
+export function getOpportunitySourceLabel(opportunity = {}) {
+  const sourceType = String(opportunity.sourceType || '').toLowerCase()
+  const label = String(opportunity.sourceLabel || opportunity.sourceTrailNote || '').toLowerCase()
+
+  if (sourceType === 'quote-polish') return 'Quote Polish / Active BisTrack Quote'
+  if (sourceType === 'manual' || sourceType === 'old-quote-recovery') return 'Manual Recovery'
+  if (sourceType.startsWith('bulk-')) return sourceType.includes('scan') || sourceType.includes('image') ? 'Bulk Uploaded Old Quote / Scanned Intake' : 'Bulk Uploaded Old Quote'
+  if (sourceType === 'scan' || sourceType === 'image' || sourceType === 'ocr-packet') return 'Uploaded Old Quote / Scanned Intake'
+  if (sourceType === 'pdf') return 'Uploaded Old Quote'
+  if (/bulk/.test(label)) return 'Bulk Uploaded Old Quote'
+  if (/ocr|scanned|scan/.test(label)) return 'Scanned/OCR Intake'
+  return opportunity.sourceLabel || opportunity.sourceType || 'Local Queue Entry'
+}
+
+export function getLineItemAttachmentWarning(opportunity = {}) {
+  if (isActiveQuoteOpportunity(opportunity) && opportunity.lineItemQuoteAttached !== 'true') {
+    return 'Line-item quote attachment not confirmed'
+  }
+  return ''
+}
+
+function missingContact(opportunity = {}) {
+  return !opportunity.customerName || (!opportunity.customerEmail && !opportunity.customerPhone)
+}
+
+function hasBlockingWarning(opportunity = {}) {
+  return (opportunity.warnings || []).some((warning) =>
+    /missing|attachment|setup|goal|review before|review required|unresolved|product details|quote date|quote total/i.test(warning)
+  )
+}
+
+export function getOpportunityReadinessBadge(opportunity = {}) {
+  if (getLineItemAttachmentWarning(opportunity)) return { label: 'Line-Item Quote Needed', tone: 'warning' }
+  if (opportunity.status === 'waiting-on-customer' || opportunity.status === 'proposal-sent' || opportunity.proposalReadiness === 'sent') {
+    return { label: 'Sent / Waiting', tone: 'waiting' }
+  }
+  if (opportunity.proposalReadiness === 'ready' || opportunity.status === 'ready-for-proposal') {
+    return { label: 'Ready for Proposal', tone: 'ready' }
+  }
+  if (opportunity.status === 'follow-up-needed') return { label: 'Follow-Up First', tone: 'follow-up' }
+  if (missingContact(opportunity)) return { label: 'Missing Info', tone: 'warning' }
+  if (opportunity.proposalReadiness === 'blocked' || hasBlockingWarning(opportunity)) return { label: 'Review Needed', tone: 'warning' }
+  return { label: 'Review Before Sending', tone: 'neutral' }
+}
+
+export function getOpportunityNextActionLabel(opportunity = {}) {
+  if (getLineItemAttachmentWarning(opportunity)) return 'Confirm original BisTrack quote before sending'
+  if (missingContact(opportunity)) return 'Review missing contact info'
+  if (opportunity.status === 'waiting-on-customer' || opportunity.status === 'proposal-sent') return 'Waiting on customer'
+  if (opportunity.status === 'reference-only' || opportunity.recoveryClassification === 'reference-only' || opportunity.recoveryClassification === 'paid-closed') return 'Reference only, no contact action'
+  if (opportunity.needsRefresh === 'true' && opportunity.status === 'follow-up-needed') return 'Refresh old quote pricing before follow-up'
+  if (opportunity.status === 'ready-for-proposal' || opportunity.proposalReadiness === 'ready') return 'Prepare proposal'
+  if (opportunity.status === 'follow-up-needed') return 'Draft follow-up'
+  if (opportunity.proposalReadiness === 'blocked' || opportunity.proposalReadiness === 'needs-review') return 'Review before sending'
+  return opportunity.nextAction || 'Review opportunity'
+}
+
+export function getLatestActivitySummary(activity, opportunity = {}) {
+  if (activity) {
+    const date = activity.createdAt ? new Date(activity.createdAt) : null
+    const dateLabel = date && !Number.isNaN(date.getTime())
+      ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : ''
+    const typeLabel = String(activity.type || activity.title || 'activity').replace(/-/g, ' ')
+    return [typeLabel.replace(/\b\w/g, (char) => char.toUpperCase()), dateLabel].filter(Boolean).join(' - ')
+  }
+  if (opportunity.lastContactedAt) return `Last contacted ${opportunity.lastContactedAt}`
+  if (opportunity.status === 'waiting-on-customer') return 'Waiting on customer'
+  return 'No activity logged yet'
+}
+
+export function isBlockedQueueOpportunity(opportunity = {}) {
+  return (
+    opportunity.status === 'needs-review' ||
+    opportunity.proposalReadiness === 'blocked' ||
+    missingContact(opportunity) ||
+    Boolean(getLineItemAttachmentWarning(opportunity)) ||
+    hasBlockingWarning(opportunity)
+  )
+}
+
+export function filterQueueOpportunities(opportunities = [], filter = 'all') {
+  if (filter === 'active-quotes') return opportunities.filter(isActiveQuoteOpportunity)
+  if (filter === 'recovery-quotes') return opportunities.filter(isRecoveryQuoteOpportunity)
+  if (filter === 'ready-for-proposal') return opportunities.filter((item) => item.status === 'ready-for-proposal' || item.proposalReadiness === 'ready')
+  if (filter === 'follow-up-needed') return opportunities.filter((item) => item.status === 'follow-up-needed')
+  if (filter === 'blocked-missing-info') return opportunities.filter(isBlockedQueueOpportunity)
+  if (filter === 'waiting-on-customer') return opportunities.filter((item) => item.status === 'waiting-on-customer' || item.status === 'proposal-sent')
+  if (['hot', 'warm', 'cool'].includes(filter)) return opportunities.filter((item) => item.temperature === filter || item.recoveryClassification === filter)
+  return opportunities
+}
+
+export function getQueueFilterCounts(opportunities = []) {
+  return Object.fromEntries(queueFilterDefinitions.map((filter) => [
+    filter.value,
+    filterQueueOpportunities(opportunities, filter.value).length,
+  ]))
+}
+
+export function getQueueEmptyState(filter = 'all') {
+  const states = {
+    all: {
+      title: 'Opportunity Queue is empty',
+      body: 'No active quotes saved yet. Use Quote Polish to review a BisTrack PDF, or use Quote Recovery for manual, uploaded, or bulk old quotes.',
+    },
+    'active-quotes': {
+      title: 'No active quotes saved yet',
+      body: 'Use Quote Polish to review a BisTrack PDF, then save it to the queue.',
+    },
+    'recovery-quotes': {
+      title: 'No recovery quotes yet',
+      body: 'Use Manual Entry, Upload Old Quote, or Bulk Upload in Quote Recovery.',
+    },
+    'ready-for-proposal': {
+      title: 'Nothing ready for proposal yet',
+      body: 'Review blocked opportunities first, then confirm proposal readiness.',
+    },
+    'follow-up-needed': {
+      title: 'No follow-up needed right now',
+      body: 'Saved quotes that need a draft, call, or reactivation step will appear here.',
+    },
+    'blocked-missing-info': {
+      title: 'No blocked opportunities',
+      body: 'Missing contact, setup, proposal readiness, and line-item attachment issues will appear here.',
+    },
+    'waiting-on-customer': {
+      title: 'No quotes waiting on the customer',
+      body: 'When a follow-up or proposal is marked sent, it will move into this waiting lane.',
+    },
+    hot: {
+      title: 'No hot opportunities',
+      body: 'Reviewed ready-for-proposal quotes and hot recovery opportunities will appear here.',
+    },
+    warm: {
+      title: 'No warm opportunities',
+      body: 'Follow-up and waiting opportunities with warm signals will appear here.',
+    },
+    cool: {
+      title: 'No cool opportunities',
+      body: 'Older recovery quotes that need a lighter touch will appear here.',
+    },
+  }
+  return states[filter] || {
+    title: 'No matches for this filter',
+    body: 'Try another queue segment to see saved opportunities.',
+  }
 }
