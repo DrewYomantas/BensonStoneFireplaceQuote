@@ -19,12 +19,10 @@ Key folders:
 
 | Folder | Contents |
 |---|---|
-| `01 - Price Lists/CURRENT (2024-2026)/2025 Price Lists/` | Vendor price lists by brand (PDFs, current) |
+| `01 - Price Lists/CURRENT (2024-2026)/FP Central Price List/` | 39 current vendor price list PDFs — the authoritative price book source |
+| `01 - Price Lists/CURRENT (2024-2026)/2025 Price Lists/` | Small supplemental folder (6 files only, not the main vendor list) |
 | `02 - Vendors/` | Vendor contacts, supplier list, brand mapping |
 | `03 - Showroom & Inventory/` | Showroom layout, inventory masters, sale tags |
-| `05 - Sales Tools/Active Quote Examples/` | Real active quote PDFs for each vendor |
-| `05 - Sales Tools/Old Quotes Needing Follow Up/` | Recovery queue source material |
-| `05 - Sales Tools/Customer-Facing Proposal Templates/` | Output format references |
 | `11 - Customer Quotes & Follow Ups/` | Historical customer quotes |
 
 This folder is **local-only and never committed.** Do not reference file paths from it in customer-facing output.
@@ -54,6 +52,7 @@ Many components exist but are **parked** (preserved, not rendered in active shel
 - `QuoteSetupLens.jsx` + `currentSetup.js` — Current Setup + Goal Lens
 - `OldQuoteRecovery.jsx` + `oldQuoteRecovery.js` — Quote Recovery lane (upload, review, queue)
 - `ShowroomDisplayPanel.jsx` + `ShowroomDisplayRegister.jsx` — local Showroom Display Register
+- `VendorPriceBooks.jsx` + `vendorPriceBooks.js` — Vendors & Price Books tab (39-vendor index, localStorage notes, vendor chip in Quote Polish)
 - `CustomerProposal.jsx` — customer-facing proposal preview + print
 
 **Parked (do not remove, do not wire up without explicit intent):**
@@ -83,8 +82,14 @@ DEPOSIT_TERMS  = 50% down at time of signing
 ## Pricing Hierarchy
 
 1. Reviewed active BisTrack quote lines (always wins)
-2. `01 - Price Lists/CURRENT (2024-2026)/2025 Price Lists/` — current vendor PDFs
+2. `01 - Price Lists/CURRENT (2024-2026)/FP Central Price List/` — 39 current vendor PDFs, the Benson-offered pricing authority
 3. 2024 and older files — history/archive only unless Drew or Liam approve otherwise
+
+## Code Patterns
+
+- JSON imports require `with { type: 'json' }`: `import data from '../data/foo.json' with { type: 'json' }` — Node 24 enforces this; Vite handles it fine.
+- Tests use `import { describe, it } from 'node:test'` + `import assert from 'node:assert/strict'` — no test framework, just Node built-ins.
+- localStorage modules follow the pattern in `src/lib/showroomDisplayRegister.js` — storage key constant, get/save/list/sanitize exports, optional storage param for testability.
 
 ## Reintegration Rules
 
