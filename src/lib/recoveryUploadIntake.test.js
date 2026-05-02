@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { recoveryIntakeFromParsedQuote, summarizeRecoveryUploadDrafts } from './recoveryUploadIntake.js'
+import { recoveryIntakeFromParsedQuote, summarizeRecoveryUploadDrafts, triageBulkDraft } from './recoveryUploadIntake.js'
 
 function parsed(overrides = {}) {
   return {
@@ -84,6 +84,54 @@ test('paid or closed uploaded records classify as paid closed', () => {
   })
 
   assert.equal(intake.recoveryClassification, 'paid-closed')
+})
+
+test('triageBulkDraft returns ready for draft with name and contact', () => {
+  const draft = { status: 'ready-for-review', intake: { customerName: 'Jane', customerEmail: 'j@b.com', customerPhone: '', recoveryClassification: 'warm' } }
+  assert.equal(triageBulkDraft(draft).bucket, 'ready')
+})
+
+test('triageBulkDraft returns needsReview when name is missing', () => {
+  const draft = { status: 'ready-for-review', intake: { customerName: '', customerEmail: 'j@b.com', recoveryClassification: 'warm' } }
+  assert.equal(triageBulkDraft(draft).bucket, 'needsReview')
+})
+
+test('triageBulkDraft returns needsReview when contact is missing', () => {
+  const draft = { status: 'ready-for-review', intake: { customerName: 'Jane', customerEmail: '', customerPhone: '', recoveryClassification: 'warm' } }
+  const result = triageBulkDraft(draft)
+  assert.equal(result.bucket, 'needsReview')
+  assert.match(result.reason, /email or phone/i)
+})
+
+test('triageBulkDraft returns reference for paid-closed classification', () => {
+  const draft = { status: 'ready-for-review', intake: { customerName: 'Jane', customerEmail: 'j@b.com', recoveryClassification: 'paid-closed' } }
+  assert.equal(triageBulkDraft(draft).bucket, 'reference')
+})
+
+test('triageBulkDraft returns reference for reference-only classification', () => {
+  const draft = { status: 'ready-for-review', intake: { customerName: 'Jane', customerEmail: 'j@b.com', recoveryClassification: 'reference-only' } }
+  assert.equal(triageBulkDraft(draft).bucket, 'reference')
+})
+
+test('triageBulkDraft returns error for error status', () => {
+  const draft = { status: 'error', intake: {}, error: 'Unreadable PDF' }
+  const result = triageBulkDraft(draft)
+  assert.equal(result.bucket, 'error')
+  assert.match(result.reason, /Unreadable/)
+})
+
+test('summarizeRecoveryUploadDrafts includes triage bucket counts', () => {
+  const drafts = [
+    { id: '1', status: 'ready-for-review', intake: { customerName: 'A', customerEmail: 'a@b.com', customerPhone: '', recoveryClassification: 'warm' } },
+    { id: '2', status: 'ready-for-review', intake: { customerName: 'B', customerEmail: '', customerPhone: '', recoveryClassification: 'warm' } },
+    { id: '3', status: 'ready-for-review', intake: { customerName: 'C', customerEmail: 'c@b.com', recoveryClassification: 'paid-closed' } },
+    { id: '4', status: 'error', intake: {}, error: 'fail' },
+  ]
+  const summary = summarizeRecoveryUploadDrafts(drafts)
+  assert.equal(summary.ready, 1)
+  assert.equal(summary.needsReview, 1)
+  assert.equal(summary.reference, 1)
+  assert.equal(summary.errors, 1)
 })
 
 test('bulk recovery upload summary counts review states without raw text', () => {

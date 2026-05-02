@@ -18,7 +18,7 @@ import {
   saveOpportunity,
 } from '../lib/opportunities.js'
 import { listOpportunityActivities } from '../lib/opportunityActivity.js'
-import { parseRecoveryUploadFile, parseRecoveryUploadFiles, summarizeRecoveryUploadDrafts } from '../lib/recoveryUploadIntake.js'
+import { parseRecoveryUploadFile, parseRecoveryUploadFiles, triageBulkDraft } from '../lib/recoveryUploadIntake.js'
 import { deriveShowroomDisplayContext, listDisplayRecords } from '../lib/showroomDisplayRegister.js'
 import OpportunityWorkspace from './OpportunityWorkspace.jsx'
 
@@ -430,23 +430,31 @@ function RecoveryUploadReview({ onSave, onCancel }) {
 function BulkRecoveryUpload({ onSave, onCancel }) {
   const fileRef = useRef(null)
   const [drafts, setDrafts] = useState([])
-  const [status, setStatus] = useState('Upload multiple old quote PDFs or images to create recovery drafts.')
+  const [status, setStatus] = useState('Select multiple old quote PDFs to batch-add to the recovery queue.')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const summary = summarizeRecoveryUploadDrafts(drafts)
-  const selectedCount = drafts.filter((draft) => draft.status === 'ready-for-review' && draft.intake.reviewedForFollowUp === true).length
+  const [addedCount, setAddedCount] = useState(0)
+  const [refOpen, setRefOpen] = useState(false)
+
+  const triaged = useMemo(() => {
+    const buckets = { ready: [], needsReview: [], reference: [], error: [] }
+    drafts.forEach((draft) => {
+      const t = triageBulkDraft(draft)
+      buckets[t.bucket].push({ draft, reason: t.reason })
+    })
+    return buckets
+  }, [drafts])
 
   async function handleFiles(event) {
     const files = Array.from(event.target.files || [])
     if (!files.length) return
     setBusy(true)
     setError('')
+    setAddedCount(0)
     try {
       const result = await parseRecoveryUploadFiles(files, {
         onProgress: ({ fileName, fileIndex, fileCount, progress }) => {
-          if (typeof progress === 'string') setStatus(`${fileIndex}/${fileCount}: ${fileName} - ${progress}`)
-          else if (progress?.progress) setStatus(`${fileIndex}/${fileCount}: ${fileName}`)
+          if (typeof progress === 'string') setStatus(`${fileIndex}/${fileCount}: ${fileName} — ${progress}`)
           else {
             const action = progress?.stage === 'rendering' ? 'Rendering' : 'Reading'
             setStatus(`${fileIndex}/${fileCount}: ${action} page ${progress?.pageNumber || 1} of ${progress?.pageCount || 1}`)
@@ -454,7 +462,8 @@ function BulkRecoveryUpload({ onSave, onCancel }) {
         },
       })
       setDrafts(result.drafts)
-      setStatus(`Created ${result.summary.readyForReview} recovery draft${result.summary.readyForReview === 1 ? '' : 's'} for review.`)
+      const s = result.summary
+      setStatus(`${s.ready || 0} ready · ${s.needsReview || 0} need review · ${s.reference || 0} reference · ${s.errors || 0} failed`)
     } catch (err) {
       setError(err.message || String(err))
       setStatus('Bulk upload failed.')
@@ -464,40 +473,45 @@ function BulkRecoveryUpload({ onSave, onCancel }) {
     }
   }
 
-  function updateDraft(id, patch) {
-    setDrafts((current) => current.map((draft) =>
-      draft.id === id ? { ...draft, intake: { ...draft.intake, ...patch } } : draft
-    ))
-  }
-
   function removeDraft(id) {
-    setDrafts((current) => current.filter((draft) => draft.id !== id))
+    setDrafts((current) => current.filter((d) => d.id !== id))
   }
 
-  function markAllReviewed() {
-    setDrafts((current) => current.map((draft) =>
-      draft.status === 'ready-for-review'
-        ? { ...draft, intake: { ...draft.intake, reviewedForFollowUp: true } }
-        : draft
+  function updateDraft(id, patch) {
+    setDrafts((current) => current.map((d) =>
+      d.id === id ? { ...d, intake: { ...d.intake, ...patch } } : d
     ))
   }
 
-  function handleSaveSelected() {
-    const selected = drafts.filter((draft) => draft.status === 'ready-for-review' && draft.intake.reviewedForFollowUp === true)
-    if (!selected.length) {
-      setError('Mark at least one reviewed draft before saving.')
-      return
-    }
-    selected.forEach((draft) => saveOpportunity(createOldQuoteOpportunity({
+  function saveDraft(draft, overrides = {}) {
+    saveOpportunity(createOldQuoteOpportunity({
       ...draft.intake,
+      ...overrides,
       sourceType: `bulk-${draft.intake.sourceType || 'upload'}`,
       sourceLabel: draft.intake.sourceLabel || 'Bulk uploaded old quote',
-    })))
-    setSaved(true)
-    setTimeout(() => {
-      setSaved(false)
-      if (onSave) onSave()
-    }, 700)
+      reviewedForFollowUp: true,
+    }))
+  }
+
+  function handleAddBucket(bucket, overrides = {}) {
+    const items = triaged[bucket]
+    items.forEach(({ draft }) => saveDraft(draft, overrides))
+    const ids = new Set(items.map(({ draft }) => draft.id))
+    setDrafts((current) => current.filter((d) => !ids.has(d.id)))
+    setAddedCount((c) => c + items.length)
+  }
+
+  function handleAddSingle(id) {
+    const draft = drafts.find((d) => d.id === id)
+    if (!draft) return
+    saveDraft(draft)
+    setAddedCount((c) => c + 1)
+    removeDraft(id)
+  }
+
+  function skipBucket(bucket) {
+    const ids = new Set(triaged[bucket].map(({ draft }) => draft.id))
+    setDrafts((current) => current.filter((d) => !ids.has(d.id)))
   }
 
   return (
@@ -506,87 +520,171 @@ function BulkRecoveryUpload({ onSave, onCancel }) {
         <div>
           <p className="bs-lens__eyebrow">Bulk Recovery Intake</p>
           <h2>Bulk Upload Old Quotes</h2>
-          <p>Create reviewed recovery drafts from multiple PDFs or images. No raw OCR text is saved.</p>
+          <p>Auto-triages uploads into ready, needs-review, and reference buckets. No raw OCR text is saved.</p>
         </div>
         <label className={`bs-button bs-button--primary ${busy ? 'is-disabled' : ''}`}>
-          {busy ? 'Reading...' : 'Bulk Upload'}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,.pdf,image/*"
-            multiple
-            onChange={handleFiles}
-            disabled={busy}
-            hidden
-          />
+          {busy ? 'Reading...' : 'Select PDFs'}
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf,image/*" multiple onChange={handleFiles} disabled={busy} hidden />
         </label>
       </div>
 
       <p className="bs-status" role="status">{status}</p>
 
-      {drafts.length ? (
-        <div className="bs-bulk-summary">
-          <span><strong>{summary.draftCount}</strong> files</span>
-          <span><strong>{summary.readyForReview}</strong> drafts</span>
-          <span><strong>{summary.reviewed}</strong> reviewed</span>
-          <span><strong>{summary.missingContact}</strong> missing contact</span>
-          <span><strong>{summary.errors}</strong> errors</span>
+      {(drafts.length > 0 || addedCount > 0) && (
+        <div className="bs-triage-summary">
+          {addedCount > 0 && <span className="bs-badge bs-badge--status">✓ {addedCount} added to queue</span>}
+          {triaged.ready.length > 0 && <span className="bs-badge bs-badge--status">{triaged.ready.length} ready</span>}
+          {triaged.needsReview.length > 0 && <span className="bs-badge bs-badge--warning">{triaged.needsReview.length} need review</span>}
+          {triaged.reference.length > 0 && <span className="bs-badge bs-badge--unknown">{triaged.reference.length} reference/paid</span>}
+          {triaged.error.length > 0 && <span className="bs-badge bs-badge--blocked">{triaged.error.length} failed</span>}
         </div>
-      ) : null}
+      )}
 
-      {drafts.length ? (
-        <div className="bs-bulk-actions">
-          <button type="button" className="bs-lens__copy" onClick={markAllReviewed}>Mark All Reviewed</button>
-          <button type="button" className="bs-lens__copy" onClick={handleSaveSelected} disabled={saved || !selectedCount}>
-            {saved ? 'Saved' : `Save ${selectedCount} Reviewed`}
-          </button>
-        </div>
-      ) : null}
-
-      <div className="bs-bulk-drafts">
-        {drafts.map((draft) => (
-          <article className={`bs-bulk-draft ${draft.status === 'error' ? 'is-error' : ''}`} key={draft.id}>
-            <div className="bs-bulk-draft__head">
-              <div>
-                <strong>{draft.intake.customerName || draft.fileName || 'Unreviewed source'}</strong>
-                <span>{draft.intake.quoteNumber ? `Quote #${draft.intake.quoteNumber}` : 'Quote number missing'} | {draft.intake.quoteDate || 'Date missing'}</span>
-                <span>{draft.intake.originalQuoteAmount || draft.intake.quotationTotal || 'Total missing'} | {draft.intake.sourceType}</span>
+      {triaged.ready.length > 0 && (
+        <div className="bs-triage-bucket">
+          <div className="bs-triage-bucket__header">
+            <div>
+              <strong>Ready to Add</strong>
+              <span className="bs-badge bs-badge--status">{triaged.ready.length}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="bs-button bs-button--primary"
+                onClick={() => handleAddBucket('ready')}
+                style={{ background: '#173321', borderColor: '#173321', color: '#f6eddd', fontSize: 13, padding: '7px 14px' }}>
+                Add All Ready ({triaged.ready.length})
+              </button>
+              <button type="button" className="bs-lens__copy" onClick={() => skipBucket('ready')}>Skip All</button>
+            </div>
+          </div>
+          <div className="bs-triage-rows">
+            {triaged.ready.map(({ draft }) => (
+              <div key={draft.id} className="bs-triage-row">
+                <div className="bs-triage-row__info">
+                  <strong>{draft.intake.customerName}</strong>
+                  <span>
+                    {draft.intake.quoteNumber ? `#${draft.intake.quoteNumber}` : ''}
+                    {draft.intake.quoteDate ? ` · ${draft.intake.quoteDate}` : ''}
+                    {draft.intake.originalQuoteAmount || draft.intake.quotationTotal ? ` · ${draft.intake.originalQuoteAmount || draft.intake.quotationTotal}` : ''}
+                  </span>
+                </div>
+                <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Skip</button>
               </div>
-              <label className="bs-upload-review-check">
-                <input
-                  type="checkbox"
-                  checked={draft.intake.reviewedForFollowUp === true}
-                  disabled={draft.status === 'error'}
-                  onChange={(event) => updateDraft(draft.id, { reviewedForFollowUp: event.target.checked })}
-                />
-                <span>Reviewed</span>
-              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {triaged.needsReview.length > 0 && (
+        <div className="bs-triage-bucket bs-triage-bucket--warn">
+          <div className="bs-triage-bucket__header">
+            <div>
+              <strong>Needs Review</strong>
+              <span className="bs-badge bs-badge--warning">{triaged.needsReview.length}</span>
             </div>
-            {draft.error ? <p className="bs-bulk-error">{draft.error}</p> : null}
-            {draft.intake.sourceWarnings?.length ? (
-              <ul className="bs-lens-list bs-lens-list--warning">
-                {draft.intake.sourceWarnings.slice(0, 4).map((warning) => <li key={warning}>{warning}</li>)}
-              </ul>
-            ) : null}
-            <div className="bs-bulk-draft__fields">
-              <IntakeField id="customerName" label="Customer Name" value={draft.intake.customerName} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
-              <IntakeField id="customerEmail" label="Email" value={draft.intake.customerEmail} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
-              <IntakeField id="customerPhone" label="Phone" value={draft.intake.customerPhone} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
-              <IntakeField id="quoteNumber" label="Quote Number" value={draft.intake.quoteNumber} onChange={(field, value) => updateDraft(draft.id, { [field]: value })} />
+            <button type="button" className="bs-lens__copy" onClick={() => skipBucket('needsReview')}>Skip All</button>
+          </div>
+          <div className="bs-triage-cards">
+            {triaged.needsReview.map(({ draft, reason }) => (
+              <article key={draft.id} className="bs-triage-card">
+                <div className="bs-triage-card__head">
+                  <div>
+                    <strong>{draft.intake.customerName || draft.fileName || 'Unknown'}</strong>
+                    <span>
+                      {draft.intake.quoteNumber ? `#${draft.intake.quoteNumber}` : 'No quote #'}
+                      {draft.intake.quoteDate ? ` · ${draft.intake.quoteDate}` : ''}
+                    </span>
+                  </div>
+                  <span className="bs-badge bs-badge--warning">{reason}</span>
+                </div>
+                <div className="bs-bulk-draft__fields">
+                  {!draft.intake.customerName?.trim() && (
+                    <IntakeField id="customerName" label="Customer Name" value={draft.intake.customerName} onChange={(f, v) => updateDraft(draft.id, { [f]: v })} />
+                  )}
+                  <IntakeField id="customerEmail" label="Email" value={draft.intake.customerEmail} onChange={(f, v) => updateDraft(draft.id, { [f]: v })} />
+                  <IntakeField id="customerPhone" label="Phone" value={draft.intake.customerPhone} onChange={(f, v) => updateDraft(draft.id, { [f]: v })} />
+                </div>
+                <div className="bs-triage-card__actions">
+                  <button type="button" className="bs-button bs-button--primary" onClick={() => handleAddSingle(draft.id)}
+                    style={{ fontSize: 12, padding: '6px 12px', background: '#173321', borderColor: '#173321', color: '#f6eddd' }}>
+                    Add to Queue
+                  </button>
+                  <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Skip</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {triaged.reference.length > 0 && (
+        <div className="bs-triage-bucket">
+          <div className="bs-triage-bucket__header">
+            <button type="button" className="bs-triage-bucket__toggle" onClick={() => setRefOpen((o) => !o)}>
+              <strong>{refOpen ? '▾' : '▸'} Reference / Paid ({triaged.reference.length})</strong>
+              <span style={{ fontSize: 11, color: '#8a6d4c', fontWeight: 400 }}>Closed or paid quotes — not active follow-ups</span>
+            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="bs-lens__copy" onClick={() => handleAddBucket('reference', { recoveryClassification: 'reference-only' })}>Add as Reference</button>
+              <button type="button" className="bs-lens__copy" onClick={() => skipBucket('reference')}>Skip All</button>
             </div>
-            <div className="bs-bulk-draft__footer">
-              <span>{draft.intake.sourceTrailNote || draft.fileName}</span>
-              <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Skip</button>
+          </div>
+          {refOpen && (
+            <div className="bs-triage-rows">
+              {triaged.reference.map(({ draft, reason }) => (
+                <div key={draft.id} className="bs-triage-row">
+                  <div className="bs-triage-row__info">
+                    <strong>{draft.intake.customerName || draft.fileName || 'Unknown'}</strong>
+                    <span>{draft.intake.quoteNumber ? `#${draft.intake.quoteNumber}` : ''}{draft.intake.quoteDate ? ` · ${draft.intake.quoteDate}` : ''}</span>
+                    <span style={{ color: '#8a481d' }}>{reason}</span>
+                  </div>
+                  <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Skip</button>
+                </div>
+              ))}
             </div>
-          </article>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
+
+      {triaged.error.length > 0 && (
+        <div className="bs-triage-bucket bs-triage-bucket--err">
+          <div className="bs-triage-bucket__header">
+            <strong>Failed to Parse ({triaged.error.length})</strong>
+            <button type="button" className="bs-lens__copy" onClick={() => skipBucket('error')}>Dismiss All</button>
+          </div>
+          <div className="bs-triage-rows">
+            {triaged.error.map(({ draft, reason }) => (
+              <div key={draft.id} className="bs-triage-row">
+                <div className="bs-triage-row__info">
+                  <strong>{draft.fileName}</strong>
+                  <span style={{ color: '#8a2a0d' }}>{reason}</span>
+                </div>
+                <button type="button" className="bs-lens__copy" onClick={() => removeDraft(draft.id)}>Dismiss</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {addedCount > 0 && drafts.length === 0 && (
+        <p style={{ margin: 0, fontSize: 13, color: '#173321', fontWeight: 600 }}>
+          ✓ All handled. {addedCount} added to the recovery queue.
+        </p>
+      )}
 
       {error ? <p style={{ margin: 0, fontSize: 13, color: '#8a2a0d', fontWeight: 600 }}>{error}</p> : null}
 
-      <button type="button" className="bs-button bs-button--ghost" onClick={onCancel} style={{ justifySelf: 'start', color: '#2d2217', borderColor: 'rgba(94,73,51,0.3)' }}>
-        Cancel
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {addedCount > 0 && (
+          <button type="button" className="bs-button bs-button--primary" onClick={onSave}
+            style={{ background: '#173321', borderColor: '#173321', color: '#f6eddd' }}>
+            Done — View Queue
+          </button>
+        )}
+        <button type="button" className="bs-button bs-button--ghost" onClick={onCancel}
+          style={{ color: '#2d2217', borderColor: 'rgba(94,73,51,0.3)' }}>
+          {addedCount > 0 ? 'Cancel Remaining' : 'Cancel'}
+        </button>
+      </div>
     </div>
   )
 }

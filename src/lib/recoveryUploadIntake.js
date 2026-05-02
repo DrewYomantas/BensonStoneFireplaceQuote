@@ -192,12 +192,27 @@ export async function parseRecoveryUploadFiles(files = [], options = {}) {
   }
 }
 
+export function triageBulkDraft(draft) {
+  if (draft.status === 'error') return { bucket: 'error', reason: draft.error || 'Parse failed' }
+  const { intake } = draft
+  const classification = intake?.recoveryClassification || 'unknown'
+  if (classification === 'paid-closed') return { bucket: 'reference', reason: 'Appears paid or closed' }
+  if (classification === 'reference-only') return { bucket: 'reference', reason: 'Reference only' }
+  if (!intake?.customerName?.trim()) return { bucket: 'needsReview', reason: 'Customer name missing' }
+  if (!intake?.customerEmail?.trim() && !intake?.customerPhone?.trim()) return { bucket: 'needsReview', reason: 'No email or phone found' }
+  return { bucket: 'ready', reason: '' }
+}
+
 export function summarizeRecoveryUploadDrafts(drafts = []) {
+  const triaged = drafts.map(triageBulkDraft)
   return {
     draftCount: drafts.length,
     readyForReview: drafts.filter((draft) => draft.status === 'ready-for-review').length,
     reviewed: drafts.filter((draft) => draft.intake?.reviewedForFollowUp === true).length,
     missingContact: drafts.filter((draft) => (draft.intake?.sourceWarnings || []).some((warning) => /missing contact/i.test(warning))).length,
     errors: drafts.filter((draft) => draft.status === 'error').length,
+    ready: triaged.filter((t) => t.bucket === 'ready').length,
+    needsReview: triaged.filter((t) => t.bucket === 'needsReview').length,
+    reference: triaged.filter((t) => t.bucket === 'reference').length,
   }
 }
