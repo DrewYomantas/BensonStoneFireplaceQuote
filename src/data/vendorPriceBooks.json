@@ -1,0 +1,392 @@
+[
+  {
+    "id": "aog",
+    "name": "AOG — American Outdoor Grill",
+    "aliases": ["aog", "american outdoor grill"],
+    "category": "grill-outdoor",
+    "priceListFile": "AOG American Outdoor Grill October 2025.pdf",
+    "priceListDate": "October 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "bishop",
+    "name": "Bishop — Door & Mantel",
+    "aliases": ["bishop"],
+    "category": "stone-mantel",
+    "priceListFile": "Bishop door and mantel quote.pdf",
+    "priceListDate": "current",
+    "priceListYear": 2025,
+    "internalNote": "Reference quote, not a standard price sheet."
+  },
+  {
+    "id": "broil-king",
+    "name": "Broil King",
+    "aliases": ["broil king", "broilking"],
+    "category": "grill-outdoor",
+    "priceListFile": "Broil King April 2025.pdf",
+    "priceListDate": "April 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "dimplex",
+    "name": "Dimplex",
+    "aliases": ["dimplex"],
+    "category": "electric",
+    "priceListFile": "Dimplex October 2025.pdf",
+    "priceListDate": "October 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "dracme",
+    "name": "Dracme",
+    "aliases": ["dracme"],
+    "category": "accessories",
+    "priceListFile": "Dracme 2024 current in 2025.pdf",
+    "priceListDate": "2024 current in 2025",
+    "priceListYear": 2025,
+    "internalNote": "2024 list confirmed current in 2025."
+  },
+  {
+    "id": "empire-gas",
+    "name": "Empire Gas",
+    "aliases": ["empire", "empire gas"],
+    "category": "gas-fireplace",
+    "priceListFile": "Empire Gas June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "enviro",
+    "name": "Enviro",
+    "aliases": ["enviro"],
+    "category": "wood",
+    "priceListFile": "Enviro March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "fire-magic",
+    "name": "Fire Magic Grill",
+    "aliases": ["fire magic", "firemagic"],
+    "category": "grill-outdoor",
+    "priceListFile": "Fire Magic Grill October 2025.pdf",
+    "priceListDate": "October 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "green-mountain-grills",
+    "name": "Green Mountain Grills",
+    "aliases": ["green mountain", "green mountain grills", "gmg"],
+    "category": "grill-outdoor",
+    "priceListFile": "Green Mountain Grills Feb 2026.pdf",
+    "priceListDate": "Feb 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "hargrove-vented",
+    "name": "Hargrove — Vented Gas Logs",
+    "aliases": ["hargrove"],
+    "category": "gas-log",
+    "priceListFile": "Hargrove 2026 Vented Gas Log price list.pdf",
+    "priceListDate": "2026",
+    "priceListYear": 2026,
+    "internalNote": "Separate vent-free list also available."
+  },
+  {
+    "id": "hargrove-vent-free",
+    "name": "Hargrove — Vent Free",
+    "aliases": ["hargrove"],
+    "category": "gas-log",
+    "priceListFile": "Hargrove Vent Free 2026.pdf",
+    "priceListDate": "2026",
+    "priceListYear": 2026,
+    "internalNote": "Separate vented list also available."
+  },
+  {
+    "id": "heatilator",
+    "name": "Heatilator",
+    "aliases": ["heatilator"],
+    "category": "gas-fireplace",
+    "priceListFile": "Heatilator March 2025.pdf",
+    "priceListDate": "March 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "ironhaus",
+    "name": "Ironhaus",
+    "aliases": ["ironhaus"],
+    "category": "stone-mantel",
+    "priceListFile": "Ironhaus 2025.pdf",
+    "priceListDate": "2025",
+    "priceListYear": 2025,
+    "internalNote": "Line-specific lists also available: Heavy Duty Mantel, Home Mantel, Portland/Willamette."
+  },
+  {
+    "id": "ironhaus-heavy-duty",
+    "name": "Ironhaus — Heavy Duty Mantel",
+    "aliases": ["ironhaus"],
+    "category": "stone-mantel",
+    "priceListFile": "Ironhaus Heavy Duty Mantel 2022-current in 2026.pdf",
+    "priceListDate": "2022 current in 2026",
+    "priceListYear": 2026,
+    "internalNote": "2022 list confirmed current through 2026."
+  },
+  {
+    "id": "ironhaus-home-mantel",
+    "name": "Ironhaus — Home Mantel",
+    "aliases": ["ironhaus"],
+    "category": "stone-mantel",
+    "priceListFile": "Ironhaus Home Mantel 2022- current in 2026.pdf",
+    "priceListDate": "2022 current in 2026",
+    "priceListYear": 2026,
+    "internalNote": "2022 list confirmed current through 2026."
+  },
+  {
+    "id": "ironhaus-portland-willamette",
+    "name": "Ironhaus — Portland / Willamette",
+    "aliases": ["ironhaus"],
+    "category": "stone-mantel",
+    "priceListFile": "Ironhaus-Portland Willamette 2025.pdf",
+    "priceListDate": "2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "kingsman",
+    "name": "Kingsman",
+    "aliases": ["kingsman"],
+    "category": "gas-fireplace",
+    "priceListFile": "Kingsman March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "kozy-heat",
+    "name": "Kozy Heat",
+    "aliases": ["kozy heat", "kozyheat"],
+    "category": "gas-fireplace",
+    "priceListFile": "Kozy Heat June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "magrahearth",
+    "name": "MagraHearth",
+    "aliases": ["magrahearth", "magraHearth"],
+    "category": "stone-mantel",
+    "priceListFile": "MagraHearth Dealer Cost Pricing 2025 and 2026.pdf",
+    "priceListDate": "2025 and 2026",
+    "priceListYear": 2026,
+    "internalNote": "INTERNAL ONLY — file contains dealer cost pricing. Never use for customer-facing output."
+  },
+  {
+    "id": "marquis",
+    "name": "Marquis",
+    "aliases": ["marquis"],
+    "category": "gas-fireplace",
+    "priceListFile": "Marquis March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "mhp-2024",
+    "name": "MHP Grill (2024)",
+    "aliases": ["mhp"],
+    "category": "grill-outdoor",
+    "priceListFile": "MHP Grill 2024.pdf",
+    "priceListDate": "2024",
+    "priceListYear": 2024,
+    "internalNote": "Older list kept for reference. See Nov 2025 list for current pricing."
+  },
+  {
+    "id": "mhp",
+    "name": "MHP",
+    "aliases": ["mhp"],
+    "category": "grill-outdoor",
+    "priceListFile": "MHP November 2025.pdf",
+    "priceListDate": "November 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "napoleon-grill",
+    "name": "Napoleon — Grill",
+    "aliases": ["napoleon"],
+    "category": "grill-outdoor",
+    "priceListFile": "Napoleon Grill April 2025.pdf",
+    "priceListDate": "April 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "pacific-energy",
+    "name": "Pacific Energy",
+    "aliases": ["pacific energy", "pacificenergy"],
+    "category": "wood",
+    "priceListFile": "Pacific Energy June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "realfyre",
+    "name": "Realfyre",
+    "aliases": ["realfyre"],
+    "category": "gas-log",
+    "priceListFile": "Realfyre price list March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "rsf",
+    "name": "RSF",
+    "aliases": ["rsf"],
+    "category": "gas-fireplace",
+    "priceListFile": "RSF June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "stoll-glass",
+    "name": "Stoll — Glass Doors",
+    "aliases": ["stoll"],
+    "category": "doors-glass",
+    "priceListFile": "Stoll Glass Door orderbook 2025.pdf",
+    "priceListDate": "2025",
+    "priceListYear": 2025,
+    "internalNote": "Separate outdoor living list also available."
+  },
+  {
+    "id": "stoll-outdoor",
+    "name": "Stoll — Outdoor Living",
+    "aliases": ["stoll"],
+    "category": "grill-outdoor",
+    "priceListFile": "Stoll Outdoor Living 2025.pdf",
+    "priceListDate": "2025",
+    "priceListYear": 2025,
+    "internalNote": "Separate glass door orderbook also available."
+  },
+  {
+    "id": "stuv",
+    "name": "Stuv",
+    "aliases": ["stuv"],
+    "category": "wood",
+    "priceListFile": "Stuv September 2025.pdf",
+    "priceListDate": "September 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "summerset",
+    "name": "Summerset Grills",
+    "aliases": ["summerset"],
+    "category": "grill-outdoor",
+    "priceListFile": "Summerset Grills Feb 2026.pdf",
+    "priceListDate": "Feb 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "travis-electric-davinci",
+    "name": "Travis — Electric DaVinci",
+    "aliases": ["travis", "davinci", "da vinci"],
+    "category": "electric",
+    "priceListFile": "Travis Electric DaVinci July 2025.pdf",
+    "priceListDate": "July 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "travis-fpx",
+    "name": "Travis — FPX",
+    "aliases": ["travis", "fpx"],
+    "category": "wood",
+    "priceListFile": "Travis FPX September 2025.pdf",
+    "priceListDate": "September 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "travis-fire-garden",
+    "name": "Travis — Fire Garden",
+    "aliases": ["travis", "fire garden"],
+    "category": "grill-outdoor",
+    "priceListFile": "Travis Fire Garden June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "travis-gas-davinci",
+    "name": "Travis — Gas DaVinci",
+    "aliases": ["travis", "davinci", "da vinci"],
+    "category": "gas-fireplace",
+    "priceListFile": "Travis Gas DaVinci June 2025.pdf",
+    "priceListDate": "June 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "travis-lopi",
+    "name": "Travis — Lopi",
+    "aliases": ["travis", "lopi"],
+    "category": "wood",
+    "priceListFile": "Travis Lopi September 2025.pdf",
+    "priceListDate": "September 2025",
+    "priceListYear": 2025,
+    "internalNote": ""
+  },
+  {
+    "id": "uptown",
+    "name": "Uptown",
+    "aliases": ["uptown"],
+    "category": "stone-mantel",
+    "priceListFile": "Uptown March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "urbana",
+    "name": "Urbana",
+    "aliases": ["urbana"],
+    "category": "gas-fireplace",
+    "priceListFile": "Urbana March 2026.pdf",
+    "priceListDate": "March 2026",
+    "priceListYear": 2026,
+    "internalNote": ""
+  },
+  {
+    "id": "warming-trends",
+    "name": "Warming Trends",
+    "aliases": ["warming trends"],
+    "category": "accessories",
+    "priceListFile": "Warming Trends August 2025.pdf",
+    "priceListDate": "August 2025",
+    "priceListYear": 2025,
+    "internalNote": "Fire pit burner kits and CROSSFIRE burner systems."
+  },
+  {
+    "id": "jotul",
+    "name": "Jøtul",
+    "aliases": ["jotul", "jøtul"],
+    "category": "wood",
+    "priceListFile": "jøtul monsma stock pages 1-16-26.pdf",
+    "priceListDate": "Jan 2026",
+    "priceListYear": 2026,
+    "internalNote": "Monsma stock pages — partial reference."
+  }
+]

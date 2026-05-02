@@ -30,7 +30,9 @@ import OldQuoteRecovery from './components/OldQuoteRecovery.jsx'
 import QuoteSetupLens from './components/QuoteSetupLens.jsx'
 import ShowroomDisplayPanel from './components/ShowroomDisplayPanel.jsx'
 import ShowroomDisplayRegister from './components/ShowroomDisplayRegister.jsx'
+import VendorPriceBooks from './components/VendorPriceBooks.jsx'
 import { deriveShowroomDisplayContext, listDisplayRecords } from './lib/showroomDisplayRegister.js'
+import { listVendors, matchVendorToQuote } from './lib/vendorPriceBooks.js'
 
 const emptyContext = {
   unmatchedLines: [],
@@ -231,6 +233,10 @@ export default function App() {
     fields,
     lineItems,
   })
+  const matchedVendors = useMemo(
+    () => matchVendorToQuote(listVendors(), { fields, lineItems }),
+    [fields, lineItems],
+  )
   const sendReadinessWarnings = useMemo(
     () => buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }),
     [fields, lineItems, proposalMode, setupGuidance],
@@ -408,6 +414,13 @@ export default function App() {
           >
             Display Register
           </button>
+          <button
+            type="button"
+            className={`bs-tab ${mode === 'vendors' ? 'is-active' : ''}`}
+            onClick={() => setMode('vendors')}
+          >
+            Vendors &amp; Price Books
+          </button>
         </nav>
 
         {mode === 'polish' && (
@@ -450,6 +463,19 @@ export default function App() {
 
               <QuoteSetupLens guidance={setupGuidance} />
               <ShowroomDisplayPanel context={displayContext} title="Showroom Display Match" />
+              {matchedVendors.length > 0 ? (
+                <div className="bs-vb-quote-chip no-print">
+                  <p className="bs-lens__eyebrow">Vendor price books</p>
+                  <div className="bs-vb-quote-chip__list">
+                    {matchedVendors.map((vendor) => (
+                      <span key={vendor.id} className="bs-vb-quote-chip__item">
+                        {vendor.name} — {vendor.priceListDate}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="bs-vb-quote-chip__hint">See Vendors &amp; Price Books tab for file paths. Internal reference only.</p>
+                </div>
+              ) : null}
 
               <ProposalReadinessReview
                 reviewState={proposalReviewState}
@@ -550,7 +576,11 @@ export default function App() {
           </main>
         </>
       ) : (
-        mode === 'recovery' ? <OldQuoteRecovery /> : <ShowroomDisplayRegister />
+        mode === 'recovery'
+          ? <OldQuoteRecovery />
+          : mode === 'display'
+            ? <ShowroomDisplayRegister />
+            : <VendorPriceBooks />
       )}
     </div>
   )
