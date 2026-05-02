@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   createOldQuoteOpportunity,
   deriveRecoveryRecommendation,
@@ -19,6 +19,7 @@ import {
   buildSentOpportunityPatch,
   listOpportunityActivities,
 } from '../lib/opportunityActivity.js'
+import { parseRecoveryUploadFile } from '../lib/recoveryUploadIntake.js'
 
 const emptyIntake = {
   customerName: '',
@@ -27,15 +28,21 @@ const emptyIntake = {
   quoteNumber: '',
   quoteDate: '',
   originalQuoteAmount: '',
+  quotationTotal: '',
   projectType: '',
+  projectTitle: '',
   existingSetup: '',
   desiredOutcome: '',
   productsNotes: '',
   sourceFileNote: '',
   sourceLabel: '',
+  sourceType: 'manual',
   sourceConfidence: '',
+  sourceWarnings: [],
+  sourceTrailNote: '',
   internalNotes: '',
   recoveryClassification: 'unknown',
+  reviewedForFollowUp: true,
 }
 
 const queueFilters = [
@@ -115,8 +122,12 @@ function QueueCard({ opportunity, onSelect }) {
       <div className="bs-queue-card__head">
         <span className="bs-queue-card__name">{opportunity.customerName || 'Unnamed'}</span>
         <span className="bs-queue-card__meta">
-          {opportunity.quoteNumber ? `#${opportunity.quoteNumber}` : ''} {opportunity.quoteDate ? `· ${opportunity.quoteDate}` : ''}
+          {opportunity.quoteNumber ? `#${opportunity.quoteNumber}` : opportunity.sourceFileName || ''}
+          {opportunity.quoteDate ? ` - ${opportunity.quoteDate}` : ''}
         </span>
+      </div>
+      <div className="bs-queue-card__subline">
+        {[opportunity.originalQuoteAmount || opportunity.quotationTotal, opportunity.sourceType || opportunity.sourceLabel].filter(Boolean).join(' | ')}
       </div>
       <div className="bs-queue-card__badges">
         <span className={classificationBadgeClass(opportunity.recoveryClassification)}>
@@ -143,6 +154,21 @@ function WarningsList({ warnings }) {
       <ul className="bs-lens-list bs-lens-list--warning">
         {visible.map((w) => <li key={w}>{w}</li>)}
       </ul>
+    </div>
+  )
+}
+
+function SourceTrail({ opportunity }) {
+  if (!opportunity.sourceTrailNote && !opportunity.sourceFileName && !opportunity.sourceType) return null
+  return (
+    <div>
+      <p className="bs-recovery__section-label">Source Trail</p>
+      <p style={{ margin: '0 0 4px', fontSize: 12, color: '#4f3e2f', lineHeight: 1.45 }}>
+        {opportunity.sourceTrailNote || opportunity.sourceLabel || opportunity.sourceFileName}
+      </p>
+      {opportunity.sourceConfidence ? (
+        <p style={{ margin: 0, fontSize: 11, color: '#8a6d4c' }}>{opportunity.sourceConfidence}</p>
+      ) : null}
     </div>
   )
 }
@@ -367,6 +393,7 @@ function DetailView({ opportunity, onBack, onRefreshQueue }) {
         </div>
 
         <WarningsList warnings={opportunity.warnings} />
+        <SourceTrail opportunity={opportunity} />
 
         {opportunity.internalNotes ? (
           <div>
@@ -512,6 +539,158 @@ function IntakeForm({ onSave, onCancel }) {
   )
 }
 
+function RecoveryUploadReview({ onSave, onCancel }) {
+  const fileRef = useRef(null)
+  const [form, setForm] = useState(emptyIntake)
+  const [status, setStatus] = useState('Upload an old quote PDF or image to start recovery intake.')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [hasUpload, setHasUpload] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  function handleChange(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+    setError('')
+  }
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await parseRecoveryUploadFile(file, {
+        onProgress: (progress) => {
+          if (typeof progress === 'string') setStatus(progress)
+          else {
+            const action = progress.stage === 'rendering' ? 'Rendering' : 'Reading'
+            setStatus(`${action} page ${progress.pageNumber} of ${progress.pageCount}...`)
+          }
+        },
+      })
+      setForm({ ...emptyIntake, ...result.intake, reviewedForFollowUp: false })
+      setHasUpload(true)
+      setStatus('Review extracted quote fields before saving to the recovery queue.')
+    } catch (err) {
+      setError(err.message || String(err))
+      setStatus('Upload failed. Try a PDF or image with readable quote content.')
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  function handleSubmit() {
+    if (!hasUpload) {
+      setError('Upload a file before saving.')
+      return
+    }
+    if (!form.customerName.trim() && !form.quoteNumber.trim() && !form.sourceFileNote.trim()) {
+      setError('Keep at least a customer name, quote number, or source file name.')
+      return
+    }
+    const opportunity = createOldQuoteOpportunity(form)
+    saveOpportunity(opportunity)
+    setSaved(true)
+    setTimeout(() => {
+      setSaved(false)
+      if (onSave) onSave()
+    }, 700)
+  }
+
+  const classificationOptions = recoveryClassifications.map((c) => ({ value: c, label: titleCase(c) }))
+
+  return (
+    <div className="bs-intake bs-upload-intake">
+      <div className="bs-upload-intake__head">
+        <div>
+          <p className="bs-lens__eyebrow">Recovery Intake</p>
+          <h2>Upload Old Quote</h2>
+          <p>Extract the old quote, review the fields, then add it to the existing recovery queue.</p>
+        </div>
+        <label className={`bs-button bs-button--primary ${busy ? 'is-disabled' : ''}`}>
+          {busy ? 'Reading...' : 'Upload Old Quote'}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,.pdf,image/*"
+            onChange={handleFile}
+            disabled={busy}
+            hidden
+          />
+        </label>
+      </div>
+
+      <p className="bs-status" role="status">{status}</p>
+
+      {form.sourceWarnings?.length ? (
+        <div className="bs-upload-warning">
+          <p className="bs-recovery__section-label">OCR Review Required</p>
+          <ul className="bs-lens-list bs-lens-list--warning">
+            {form.sourceWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="bs-form__group">
+        <h3>Review Extracted Quote</h3>
+        <div className="bs-grid">
+          <IntakeField id="customerName" label="Customer Name" value={form.customerName} onChange={handleChange} />
+          <IntakeField id="customerEmail" label="Email" type="email" value={form.customerEmail} onChange={handleChange} />
+          <IntakeField id="customerPhone" label="Phone" type="tel" value={form.customerPhone} onChange={handleChange} />
+          <IntakeField id="quoteNumber" label="Quote Number" value={form.quoteNumber} onChange={handleChange} />
+          <IntakeField id="quoteDate" label="Quote Date" value={form.quoteDate} onChange={handleChange} />
+          <IntakeField id="originalQuoteAmount" label="Original Quote Amount" value={form.originalQuoteAmount} onChange={handleChange} />
+          <IntakeField id="quotationTotal" label="Quotation Total" value={form.quotationTotal} onChange={handleChange} />
+          <IntakeSelect id="recoveryClassification" label="Recovery Classification" value={form.recoveryClassification} options={classificationOptions} onChange={handleChange} />
+          <IntakeField id="projectTitle" label="Project Title / PO Number" value={form.projectTitle} onChange={handleChange} />
+          <IntakeField id="projectType" label="Project Type" value={form.projectType} onChange={handleChange} />
+          <IntakeField id="existingSetup" label="Existing Setup, if detected" value={form.existingSetup} onChange={handleChange} multiline />
+          <IntakeField id="desiredOutcome" label="Desired Outcome / Goal, if detected" value={form.desiredOutcome} onChange={handleChange} multiline />
+          <IntakeField id="productsNotes" label="Products / Notes from Quote" value={form.productsNotes} onChange={handleChange} multiline />
+        </div>
+      </div>
+
+      <div className="bs-form__group">
+        <h3>Source Trail</h3>
+        <div className="bs-grid">
+          <IntakeField id="sourceFileNote" label="Source File Name" value={form.sourceFileNote} onChange={handleChange} />
+          <IntakeField id="sourceType" label="Source Type" value={form.sourceType} onChange={handleChange} />
+          <IntakeField id="sourceConfidence" label="OCR Confidence (internal)" value={form.sourceConfidence} onChange={handleChange} />
+          <IntakeField id="sourceTrailNote" label="Source Trail Note" value={form.sourceTrailNote} onChange={handleChange} multiline />
+          <IntakeField id="internalNotes" label="Internal Notes" value={form.internalNotes} onChange={handleChange} multiline />
+        </div>
+      </div>
+
+      <label className="bs-upload-review-check">
+        <input
+          type="checkbox"
+          checked={form.reviewedForFollowUp === true}
+          onChange={(event) => handleChange('reviewedForFollowUp', event.target.checked)}
+        />
+        <span>Ready for Recovery Queue: I reviewed the extracted fields for follow-up use.</span>
+      </label>
+
+      {error ? <p style={{ margin: 0, fontSize: 13, color: '#8a2a0d', fontWeight: 600 }}>{error}</p> : null}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          type="button"
+          className="bs-button bs-button--primary"
+          onClick={handleSubmit}
+          disabled={saved || !hasUpload}
+          style={{ background: '#173321', borderColor: '#173321', color: '#f6eddd' }}
+        >
+          {saved ? 'Saved' : 'Add to Recovery Queue'}
+        </button>
+        <button type="button" className="bs-button bs-button--ghost" onClick={onCancel} style={{ color: '#2d2217', borderColor: 'rgba(94,73,51,0.3)' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function OldQuoteRecovery() {
   const [view, setView] = useState('queue')
   const [selectedId, setSelectedId] = useState('')
@@ -555,6 +734,18 @@ export default function OldQuoteRecovery() {
     )
   }
 
+  if (view === 'upload') {
+    return (
+      <RecoveryUploadReview
+        onSave={() => {
+          refreshOpportunities()
+          setView('queue')
+        }}
+        onCancel={() => setView('queue')}
+      />
+    )
+  }
+
   if (view === 'detail' && selectedOpportunity) {
     return (
       <DetailView
@@ -581,7 +772,16 @@ export default function OldQuoteRecovery() {
           onClick={() => setView('intake')}
           style={{ background: '#173321', borderColor: '#173321' }}
         >
-          + New Old Quote
+          Manual Entry
+        </button>
+
+        <button
+          type="button"
+          className="bs-button"
+          onClick={() => setView('upload')}
+          style={{ color: '#173321', borderColor: 'rgba(23,51,33,0.35)' }}
+        >
+          Upload Old Quote
         </button>
 
         <div className="bs-recovery__filters">
@@ -615,7 +815,7 @@ export default function OldQuoteRecovery() {
           </p>
           <p style={{ margin: 0, fontSize: 13, color: '#6b5a47' }}>
             {opportunities.length === 0
-              ? 'Add old quotes manually using the button above. Each entry will be classified, reviewed, and queued for safe follow-up.'
+              ? 'Upload an old quote or add one manually. Each entry will be classified, reviewed, and queued for safe follow-up.'
               : 'Try a different filter to see other opportunities.'}
           </p>
         </div>

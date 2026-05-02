@@ -34,8 +34,8 @@ function buildSetupFields(intake) {
     CUSTOMER_PHONE: intake.customerPhone || '',
     QUOTE_NO: intake.quoteNumber || '',
     QUOTE_DATE: intake.quoteDate || '',
-    QUOTATION_TOTAL: intake.originalQuoteAmount || '',
-    PROJECT_TITLE: intake.projectType || '',
+    QUOTATION_TOTAL: intake.quotationTotal || intake.originalQuoteAmount || '',
+    PROJECT_TITLE: intake.projectTitle || intake.projectType || '',
     PROJECT_SCOPE_SUMMARY: intake.desiredOutcome || '',
     INSTALLATION_SCOPE: intake.existingSetup || '',
     PROJECT_NOTES: intake.productsNotes || '',
@@ -53,6 +53,17 @@ function buildPlaybookWarnings(classification) {
   if (classification === 'missing-contact') {
     warnings.push('Missing customer contact info. Confirm preferred contact before sending.')
   }
+  return warnings
+}
+
+function uploadedWarnings(intake) {
+  const warnings = []
+  const isUploaded = Boolean(intake.sourceType && intake.sourceType !== 'manual')
+  if (isUploaded) warnings.push('Review extracted text before follow-up.')
+  if (isUploaded && intake.reviewedForFollowUp !== true && intake.reviewedForFollowUp !== 'true') warnings.push('OCR/source review required before follow-up draft.')
+  if (!intake.quoteDate) warnings.push('Quote date missing.')
+  if (!intake.originalQuoteAmount && !intake.quotationTotal) warnings.push('Quote total missing.')
+  if (!intake.productsNotes) warnings.push('Product details need review.')
   return warnings
 }
 
@@ -74,7 +85,7 @@ export function createOldQuoteOpportunity(intake = {}, now = new Date()) {
     sourceLabel: intake.sourceLabel || intake.sourceFileNote || 'Old quote recovery intake',
     sourceFileName: intake.sourceFileNote || '',
     sourceConfidence: intake.sourceConfidence || '',
-    sourceWarnings: [],
+    sourceWarnings: intake.sourceWarnings || [],
   }
 
   const playbookRecommendation = {
@@ -96,15 +107,28 @@ export function createOldQuoteOpportunity(intake = {}, now = new Date()) {
   const setupGuidance = hasSetupText ? evaluateCurrentSetup({ fields }) : { blockers: [] }
   const setupBlockerWarnings = (setupGuidance.blockers || []).filter(Boolean)
 
-  const allWarnings = [...new Set([...base.warnings, ...setupBlockerWarnings])]
+  const allWarnings = [...new Set([...base.warnings, ...setupBlockerWarnings, ...uploadedWarnings(intake), ...(intake.sourceWarnings || [])])]
+  const reviewedForFollowUp = intake.reviewedForFollowUp === true || intake.reviewedForFollowUp === 'true'
 
   return sanitizeOpportunity({
     ...base,
+    sourceType: intake.sourceType || base.sourceType,
+    sourceLabel: intake.sourceLabel || base.sourceLabel,
+    sourceFileName: intake.sourceFileNote || base.sourceFileName,
+    sourceTrailNote: intake.sourceTrailNote || intake.sourceLabel || '',
+    sourceWarnings: intake.sourceWarnings || base.sourceWarnings,
+    originalQuoteAmount: intake.originalQuoteAmount || '',
+    quotationTotal: intake.quotationTotal || intake.originalQuoteAmount || '',
+    projectTitle: intake.projectTitle || '',
+    existingSetup: intake.existingSetup || '',
+    desiredOutcome: intake.desiredOutcome || '',
+    productsNotes: intake.productsNotes || '',
     temperature,
     warnings: allWarnings,
     recoverySource: 'true',
     recoveryClassification: classification,
     needsRefresh: 'true',
+    reviewedForFollowUp: reviewedForFollowUp ? 'true' : 'false',
     internalNotes: String(intake.internalNotes || ''),
   })
 }
@@ -121,6 +145,7 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
     /current appliance type is unknown|chimney or venting path|fuel type is unknown|customer says insert|framing|electrical availability/i.test(w),
   )
   const hasProductReviewWarning = warnings.some((w) => /Product match needs review/i.test(w))
+  const isUploadedUnreviewed = opportunity.sourceType && opportunity.sourceType !== 'old-quote-recovery' && opportunity.reviewedForFollowUp !== 'true'
 
   if (isPaidClosed) {
     return {
@@ -139,6 +164,16 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
       path: 'reference-only-guardrail',
       safe: false,
       reason: 'Record is reference-only. Keep internal unless intentionally reopened.',
+    }
+  }
+
+  if (isUploadedUnreviewed) {
+    return {
+      nextAction: 'review-uploaded-source',
+      label: 'Review extracted quote before outreach',
+      path: 'missing-info-preproposal',
+      safe: false,
+      reason: 'Uploaded/OCR intake must be reviewed before follow-up copy is available.',
     }
   }
 
@@ -202,6 +237,17 @@ export function deriveRecoveryRecommendation(opportunity = {}) {
 }
 
 export function getRecoveryFollowUpDraft(opportunity = {}, opts = {}) {
+  if (opportunity.sourceType && opportunity.sourceType !== 'old-quote-recovery' && opportunity.reviewedForFollowUp !== 'true') {
+    return {
+      subject: 'Review extracted quote first',
+      body: '',
+      channel: opts.channel || 'email',
+      tone: opts.tone || 'reactivation',
+      warnings: ['Uploaded quote must be reviewed before follow-up copy is available.'],
+      unsafeToSend: true,
+      reasons: ['OCR/source review is incomplete.'],
+    }
+  }
   return composeFollowUpDraft({
     opportunity,
     fields: { currentSetupGuidance: opts.currentSetupGuidance || {} },

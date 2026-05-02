@@ -24,6 +24,12 @@ const storedKeys = [
   'quoteNumber',
   'quoteDate',
   'projectType',
+  'projectTitle',
+  'originalQuoteAmount',
+  'quotationTotal',
+  'existingSetup',
+  'desiredOutcome',
+  'productsNotes',
   'status',
   'temperature',
   'sourceType',
@@ -32,6 +38,7 @@ const storedKeys = [
   'sourceImportedAt',
   'sourceConfidence',
   'sourceWarnings',
+  'sourceTrailNote',
   'recommendedPlaybookId',
   'selectedPlaybookId',
   'warnings',
@@ -44,6 +51,7 @@ const storedKeys = [
   'recoverySource',
   'recoveryClassification',
   'needsRefresh',
+  'reviewedForFollowUp',
   'internalNotes',
 ]
 

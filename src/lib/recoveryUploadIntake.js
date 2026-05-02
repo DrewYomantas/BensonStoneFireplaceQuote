@@ -1,0 +1,151 @@
+import { parseBisTrackText } from './biztrackPdfParser.js'
+import { evaluateCurrentSetup } from './currentSetup.js'
+import { extractScannedBisTrackFields } from './scannedPacketParser.js'
+
+function clean(value) {
+  return String(value || '').trim()
+}
+
+function confidenceValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Number(String(value || '').replace(/[^0-9.]/g, ''))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function sourceTypeFor(file, parsed, usedOcr) {
+  if (file?.type?.startsWith('image/')) return 'image'
+  if (usedOcr || parsed?.context?.extractionSource === 'ocr') return 'scan'
+  return 'pdf'
+}
+
+function classificationFromParsed(parsed, warnings) {
+  if (parsed?.context?.fullyPaid) return 'paid-closed'
+  if (['bill', 'invoice', 'receipt', 'order'].includes(parsed?.documentType) && parsed?.fields?.BALANCE_DUE === '$0.00') return 'paid-closed'
+  if (warnings.some((warning) => /missing contact/i.test(warning))) return 'missing-contact'
+  return 'needs-review'
+}
+
+function buildSourceWarnings({ parsed, ocrConfidence, fields }) {
+  const warnings = ['Review extracted text before follow-up.']
+  const confidence = confidenceValue(ocrConfidence)
+  if (confidence !== null && confidence < 70) warnings.push('OCR Review Required: low OCR confidence.')
+  if (!fields.CUSTOMER_NAME || (!fields.CUSTOMER_EMAIL && !fields.CUSTOMER_PHONE)) warnings.push('Missing contact info.')
+  if (!fields.QUOTE_DATE) warnings.push('Quote date missing.')
+  if (!fields.QUOTATION_TOTAL && !fields.TOTAL_AMOUNT) warnings.push('Quote total missing.')
+  if (!fields.PROJECT_NOTES && !fields.PROJECT_SCOPE_SUMMARY && !(parsed.lineItems || []).length) warnings.push('Product details need review.')
+  warnings.push('Old quote likely needs pricing refresh.')
+  return [...new Set(warnings)]
+}
+
+export function recoveryIntakeFromParsedQuote({
+  fileName = '',
+  fileType = '',
+  parsed = {},
+  ocrConfidence = '',
+  usedOcr = false,
+  now = new Date(),
+} = {}) {
+  const fields = parsed.fields || {}
+  const setupText = [
+    fields.PROJECT_SCOPE_SUMMARY,
+    fields.INSTALLATION_SCOPE,
+    fields.PROJECT_NOTES,
+  ].filter(Boolean).join('\n')
+  const setupGuidance = evaluateCurrentSetup({ fields, parseContext: parsed.context || {}, now })
+  const sourceType = sourceTypeFor({ type: fileType }, parsed, usedOcr)
+  const sourceWarnings = buildSourceWarnings({ parsed, ocrConfidence, fields })
+  const sourceTrailNote = [
+    fileName ? `Source file: ${fileName}` : '',
+    `Intake type: ${sourceType}`,
+    usedOcr ? 'OCR Review Required' : 'Embedded text parsed',
+  ].filter(Boolean).join(' | ')
+
+  return {
+    customerName: clean(fields.CUSTOMER_NAME),
+    customerEmail: clean(fields.CUSTOMER_EMAIL),
+    customerPhone: clean(fields.CUSTOMER_PHONE || fields.PROJECT_PHONE),
+    quoteNumber: clean(fields.QUOTE_NO),
+    quoteDate: clean(fields.QUOTE_DATE),
+    originalQuoteAmount: clean(fields.TOTAL_AMOUNT || fields.QUOTATION_TOTAL),
+    quotationTotal: clean(fields.QUOTATION_TOTAL),
+    projectType: clean(parsed.context?.itemMix === 'outdoor' ? 'Outdoor Living' : fields.PROJECT_TITLE || parsed.context?.outputLabel || 'Fireplace Project'),
+    projectTitle: clean(fields.PROJECT_TITLE || fields.PO_NUMBER),
+    existingSetup: clean(fields.INSTALLATION_SCOPE),
+    desiredOutcome: clean(fields.PROJECT_SCOPE_SUMMARY),
+    productsNotes: clean(setupText),
+    sourceFileNote: clean(fileName),
+    sourceLabel: sourceTrailNote,
+    sourceType,
+    sourceConfidence: usedOcr && ocrConfidence !== '' ? `${ocrConfidence}% OCR` : parsed.extractionConfidence || 'parsed',
+    sourceWarnings,
+    sourceTrailNote,
+    internalNotes: sourceWarnings.join('\n'),
+    recoveryClassification: classificationFromParsed(parsed, sourceWarnings),
+    reviewedForFollowUp: false,
+    setupReviewStatus: setupGuidance.blockers?.length ? 'follow-up-needed' : 'review-required',
+  }
+}
+
+export async function parseRecoveryUploadFile(file, options = {}) {
+  const { onProgress } = options
+  if (!file) throw new Error('Select a file to upload.')
+  const { extractOcrFromImage, extractOcrFromPdf, extractTextFromPdf } = await import('./pdfTextExtraction.js')
+
+  if (file.type?.startsWith('image/')) {
+    onProgress?.('Reading image with OCR...')
+    const ocr = await extractOcrFromImage(file, options)
+    const parsed = extractScannedBisTrackFields(ocr.rawText)
+    return {
+      intake: recoveryIntakeFromParsedQuote({
+        fileName: file.name,
+        fileType: file.type,
+        parsed,
+        ocrConfidence: ocr.confidence,
+        usedOcr: true,
+      }),
+      parsed,
+      rawText: ocr.rawText,
+      usedOcr: true,
+    }
+  }
+
+  if (file.type && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    throw new Error('Upload a PDF or image file.')
+  }
+
+  onProgress?.('Reading PDF text...')
+  const extracted = await extractTextFromPdf(file)
+  if (!extracted.embeddedTextLikelyMissing) {
+    const parsed = parseBisTrackText(extracted.rawText)
+    return {
+      intake: recoveryIntakeFromParsedQuote({
+        fileName: file.name,
+        fileType: file.type,
+        parsed,
+        usedOcr: false,
+      }),
+      parsed,
+      rawText: extracted.rawText,
+      usedOcr: false,
+    }
+  }
+
+  onProgress?.('Scanned PDF detected. Running OCR...')
+  const ocr = await extractOcrFromPdf(file, options)
+  const parsed = extractScannedBisTrackFields(ocr.rawText)
+  const avgConfidence = Math.round(
+    ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
+  )
+  return {
+    intake: recoveryIntakeFromParsedQuote({
+      fileName: file.name,
+      fileType: file.type,
+      parsed,
+      ocrConfidence: avgConfidence,
+      usedOcr: true,
+    }),
+    parsed,
+    rawText: ocr.rawText,
+    usedOcr: true,
+  }
+}

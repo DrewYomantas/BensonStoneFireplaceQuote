@@ -118,3 +118,30 @@ export async function extractOcrFromPdf(file, options = {}) {
     extractionSource: 'ocr',
   }
 }
+
+export async function extractOcrFromImage(file, options = {}) {
+  const { onProgress, signal } = options
+  throwIfAborted(signal)
+  onProgress?.({ stage: 'ocr', pageNumber: 1, pageCount: 1 })
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('eng')
+  const objectUrl = URL.createObjectURL(file)
+
+  try {
+    throwIfAborted(signal)
+    const result = await worker.recognize(objectUrl)
+    throwIfAborted(signal)
+    const confidence = Math.round(result.data?.confidence || 0)
+    const rawText = result.data?.text || ''
+    return {
+      pages: [{ pageNumber: 1, text: rawText, confidence }],
+      rawText,
+      pageCount: 1,
+      confidence,
+      extractionSource: 'ocr',
+    }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+    await worker.terminate()
+  }
+}

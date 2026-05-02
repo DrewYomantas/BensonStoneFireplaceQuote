@@ -232,3 +232,73 @@ test('source metadata is stored safely without raw OCR text', () => {
   const serialized = JSON.stringify(opportunity)
   assert.equal(/RAW OCR|rawOcr/i.test(serialized), false)
 })
+
+test('uploaded opportunity stores source trail and reviewed flag internally', () => {
+  const opportunity = createOldQuoteOpportunity(intake({
+    sourceType: 'scan',
+    sourceFileNote: 'old-scan.pdf',
+    sourceTrailNote: 'Source file: old-scan.pdf | Intake type: scan',
+    sourceWarnings: ['Review extracted text before follow-up.'],
+    reviewedForFollowUp: false,
+  }), now)
+
+  assert.equal(opportunity.sourceType, 'scan')
+  assert.equal(opportunity.sourceFileName, 'old-scan.pdf')
+  assert.equal(opportunity.reviewedForFollowUp, 'false')
+  assert.match(opportunity.sourceTrailNote, /old-scan\.pdf/)
+  assert.ok(opportunity.warnings.some((warning) => /review extracted text/i.test(warning)))
+})
+
+test('reviewedForFollowUp gates uploaded draft generation', () => {
+  const opportunity = createOldQuoteOpportunity(intake({
+    sourceType: 'scan',
+    sourceFileNote: 'old-scan.pdf',
+    reviewedForFollowUp: false,
+  }), now)
+  const rec = deriveRecoveryRecommendation(opportunity)
+  const draft = getRecoveryFollowUpDraft(opportunity, { tone: 'reactivation', channel: 'email' })
+
+  assert.equal(rec.nextAction, 'review-uploaded-source')
+  assert.equal(rec.safe, false)
+  assert.equal(draft.unsafeToSend, true)
+  assert.equal(draft.body, '')
+})
+
+test('reviewed uploaded opportunity can use existing recovery recommendation path', () => {
+  const opportunity = createOldQuoteOpportunity(intake({
+    sourceType: 'pdf',
+    sourceFileNote: 'old-quote.pdf',
+    reviewedForFollowUp: true,
+  }), now)
+  const rec = deriveRecoveryRecommendation(opportunity)
+
+  assert.equal(opportunity.reviewedForFollowUp, 'true')
+  assert.equal(rec.nextAction, 'draft-follow-up-email')
+  assert.equal(rec.safe, true)
+})
+
+test('uploaded opportunity appears in same recovery queue model as manual opportunity', () => {
+  const manual = createOldQuoteOpportunity(intake({ quoteNumber: 'M-1' }), now)
+  const uploaded = createOldQuoteOpportunity(intake({
+    quoteNumber: 'U-1',
+    sourceType: 'image',
+    sourceFileNote: 'photo.jpg',
+    reviewedForFollowUp: true,
+  }), now)
+
+  assert.equal(manual.recoverySource, 'true')
+  assert.equal(uploaded.recoverySource, 'true')
+  assert.ok([manual, uploaded].every((item) => item.id && item.status))
+})
+
+test('source trail is internal and does not alter customer-facing draft copy', () => {
+  const opportunity = createOldQuoteOpportunity(intake({
+    sourceType: 'scan',
+    sourceTrailNote: 'Source file: private-folder/old.pdf | Intake type: scan',
+    reviewedForFollowUp: true,
+  }), now)
+  const draft = getRecoveryFollowUpDraft(opportunity, { tone: 'reactivation', channel: 'email' })
+  const combined = `${draft.subject} ${draft.body}`
+
+  assert.equal(/private-folder|source file|intake type/i.test(combined), false)
+})
