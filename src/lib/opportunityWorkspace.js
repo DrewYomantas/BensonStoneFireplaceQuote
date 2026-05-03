@@ -1,5 +1,11 @@
 export function opportunityToQuoteFields(opportunity) {
   return {
+    CUSTOMER_NAME: opportunity.customerName || '',
+    CUSTOMER_PHONE: opportunity.customerPhone || '',
+    CUSTOMER_EMAIL: opportunity.customerEmail || '',
+    QUOTE_NO: opportunity.quoteNumber || '',
+    QUOTE_DATE: opportunity.quoteDate || '',
+    TOTAL_AMOUNT: opportunity.originalQuoteAmount || opportunity.quotationTotal || '',
     PROJECT_TITLE: opportunity.projectTitle || '',
     PROJECT_SCOPE_SUMMARY: opportunity.productsNotes || '',
     PROJECT_NOTES: opportunity.desiredOutcome || '',
