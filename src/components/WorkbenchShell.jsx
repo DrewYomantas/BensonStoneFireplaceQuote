@@ -14,6 +14,17 @@ import { buildQuotePolishQueueDraft, mergeQuotePolishOpportunity } from '../lib/
 import { listOpportunities, saveOpportunity, updateOpportunity } from '../lib/opportunities.js'
 import CustomerProposal from './CustomerProposal.jsx'
 import OldQuoteRecovery from './OldQuoteRecovery.jsx'
+import IssueResolutionPanel from './IssueResolutionPanel.jsx'
+import ShowroomVisitStart from './ShowroomVisitStart.jsx'
+import TakeHomeChecklist from './TakeHomeChecklist.jsx'
+import {
+  customerFileFromOpportunity,
+  getCustomerFileByOpportunity,
+  listCustomerFiles,
+  saveCustomerFile,
+  updateCustomerFile,
+} from '../lib/customerFile.js'
+import { deriveQuoteStatus, getStatusLabel } from '../lib/quoteStatusEngine.js'
 import { deriveShowroomDisplayContext, listDisplayRecords } from '../lib/showroomDisplayRegister.js'
 import { listVendors, matchVendorToQuote } from '../lib/vendorPriceBooks.js'
 import { opportunityToQuoteFields } from '../lib/opportunityWorkspace.js'
@@ -207,8 +218,10 @@ function ReferenceDrawer({ item, onClose }) {
           )}
 
           <div style={{ padding: '14px 14px', background: C.paper, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.mid}`, fontSize: 12, color: C.inkMid, lineHeight: 1.65 }}>
-            Reference viewer will open this document in-app once the local reference service is connected.
-            The document is already indexed and will be instantly available when the viewer launches.
+            Open this file from the Fireplace Department drive under:<br />
+            <span style={{ fontFamily: '"Courier New",monospace', fontSize: 11 }}>01 - Price Lists / CURRENT (2024-2026) / FP Central Price List</span>
+            <br /><br />
+            Internal reference only — never copy file paths or dealer cost to customer output.
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, color: C.parchment, opacity: 0.85 }}>
@@ -310,7 +323,7 @@ function ScaledProposalPreview({ fields, parseContext, lineItems, proposalMode, 
 }
 
 // ─── Header ───────────────────────────────────────────────────────
-function WbHeader({ busy, onUpload, onRecovery, fileInputRef, searchQuery, onSearchChange }) {
+function WbHeader({ busy, onUpload, onRecovery, onStartVisit, fileInputRef, searchQuery, onSearchChange }) {
   return (
     <header style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '13px 24px', background: C.forest, color: C.parchment, borderBottom: `3px solid ${C.copper}`, flexShrink: 0 }}>
       <Logo />
@@ -327,6 +340,7 @@ function WbHeader({ busy, onUpload, onRecovery, fileInputRef, searchQuery, onSea
         {busy ? 'Reading…' : '↑ Drop BisTrack PDF'}
         <input ref={fileInputRef} type="file" accept="application/pdf,.pdf" onChange={onUpload} disabled={busy} hidden />
       </label>
+      <button className="wb-btn" onClick={onStartVisit} style={{ flexShrink: 0, border: '1px solid rgba(243,234,214,0.3)', background: 'transparent', color: C.parchment }}>+ Start Visit</button>
       <button className="wb-btn wb-btn--copper" onClick={onRecovery} style={{ flexShrink: 0 }}>+ Recover Old Quote</button>
       <div style={{ width: 30, height: 30, borderRadius: 15, background: C.copper, color: C.forest, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>LM</div>
     </header>
@@ -466,7 +480,7 @@ function RefRow({ icon, title, sub, badge, danger, onOpen }) {
         <div style={{ fontSize: 9.5, color: C.inkMid, marginTop: 1 }}>{sub}</div>
       </div>
       {badge && <span className={`wb-pill wb-pill--${badge === 'Current' || badge === 'Live' ? 'gold' : 'green'}`}>{badge}</span>}
-      <button className="wb-btn wb-btn--primary" style={{ fontSize: 10, padding: '4px 9px', flexShrink: 0 }} onClick={onOpen}>Open in App</button>
+      <button className="wb-btn" style={{ fontSize: 10, padding: '4px 9px', flexShrink: 0 }} onClick={onOpen}>Details →</button>
     </div>
   )
 }
@@ -502,7 +516,7 @@ function WbRightRail({ matchedVendors, displayContext, hasActiveQuote, onOpenRef
                       key={v.id}
                       icon="📕"
                       title={`${v.name} — ${v.priceListDate}`}
-                      sub={v.dealerCostOnly ? 'Internal only · never customer-facing' : v.category}
+                      sub={v.dealerCostOnly ? 'Internal only · never customer-facing' : (v.matchReason || v.category)}
                       badge={v.dealerCostOnly ? undefined : 'Current'}
                       danger={v.dealerCostOnly}
                       onOpen={() => onOpenRef({
@@ -597,7 +611,7 @@ function FieldInput({ field, value, onChange }) {
   )
 }
 
-function MissingInfoCard({ warning, index, resolved, onResolve }) {
+function MissingInfoCard({ warning, index, resolved, resolveOptions }) {
   if (resolved) {
     return (
       <div style={{ background: 'rgba(45,74,54,0.06)', padding: '8px 12px', border: `1px solid rgba(45,74,54,0.18)`, borderLeft: `3px solid ${C.mid}`, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -614,19 +628,50 @@ function MissingInfoCard({ warning, index, resolved, onResolve }) {
         <div style={{ fontSize: 11.5, fontWeight: 600, color: C.ink, flex: 1 }}>{warning}</div>
         <span style={{ ...mono, fontSize: 9, color: C.inkLight, flexShrink: 0 }}>#{index + 1}</span>
       </div>
-      <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-        <button className="wb-btn wb-btn--primary" style={{ padding: '4px 9px', fontSize: 10 }} onClick={onResolve}>
-          Resolve →
-        </button>
-      </div>
+      {resolveOptions && resolveOptions.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {resolveOptions.map(opt => (
+            <button key={opt.label} className={`wb-btn ${opt.primary ? 'wb-btn--primary' : ''}`} style={{ padding: '4px 9px', fontSize: 10 }} onClick={opt.action}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
+}
+
+function buildResolveOptions(warning, { onResolveWarning, onLineItemAttachChange }) {
+  const w = warning.toLowerCase()
+  if (w.includes('line items need category')) {
+    return [
+      { label: 'Confirm categories OK', primary: true, action: () => onResolveWarning(warning) },
+    ]
+  }
+  if (w.includes('estimate basis') && w.includes('fallback')) {
+    return [
+      { label: 'Confirm line-item quote attached', primary: true, action: () => { onLineItemAttachChange(true); onResolveWarning(warning) } },
+    ]
+  }
+  if (w.includes('current setup') || w.includes('goal details')) {
+    return [
+      { label: 'Confirmed internally', primary: true, action: () => onResolveWarning(warning) },
+    ]
+  }
+  if (w.includes('older than 90 days') || w.includes('confirm pricing')) {
+    return [
+      { label: 'Pricing confirmed current', primary: true, action: () => onResolveWarning(warning) },
+    ]
+  }
+  return [
+    { label: 'Mark resolved', primary: true, action: () => onResolveWarning(warning) },
+  ]
 }
 
 function UploadWorkspace({
   fields, lineItems, parseContext, proposalMode, reviewState, lineItemQuoteAttached,
   saveStatus, pendingDuplicate, status, stageIdx, warnings, resolvedWarnings,
-  onFieldChange, onReviewChange, onProposalModeChange, onLineItemAttachChange,
+  onFieldChange, onReviewChange, onLineItemAttachChange,
   onSave, onSaveDraft, onResolveWarning, onUpdateDuplicate, onSaveSeparate, onCancelDuplicate,
 }) {
   const [showProposalModal, setShowProposalModal] = useState(false)
@@ -636,6 +681,7 @@ function UploadWorkspace({
 
   const unresolvedWarnings = warnings.filter(w => !resolvedWarnings.has(w))
   const resolvedList = warnings.filter(w => resolvedWarnings.has(w))
+  const [showPreview, setShowPreview] = useState(() => unresolvedWarnings.length === 0)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, background: C.parchment }}>
@@ -683,7 +729,7 @@ function UploadWorkspace({
       </div>
 
       {/* Body: working surface + proposal preview */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 390px', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: showPreview ? '1fr 390px' : '1fr', minHeight: 0 }}>
         {/* Working surface */}
         <div style={{ padding: '16px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {status && (
@@ -715,7 +761,7 @@ function UploadWorkspace({
                     warning={w}
                     index={i}
                     resolved={resolvedWarnings.has(w)}
-                    onResolve={() => onResolveWarning(w)}
+                    resolveOptions={buildResolveOptions(w, { onResolveWarning, onLineItemAttachChange })}
                   />
                 ))}
               </div>
@@ -742,12 +788,9 @@ function UploadWorkspace({
           <div style={{ background: C.paper, border: `1px solid ${C.border}`, padding: 14 }}>
             <div style={{ ...eyebrow, color: C.copper, marginBottom: 8, fontSize: 8.5 }}>Proposal format</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className={`wb-btn ${proposalMode === 'detailed' ? 'wb-btn--primary' : ''}`} onClick={() => onProposalModeChange('detailed')} style={{ fontSize: 11 }}>Detailed Investment Breakdown</button>
-              <button className={`wb-btn ${proposalMode === 'summary' ? 'wb-btn--primary' : ''}`} onClick={() => onProposalModeChange('summary')} style={{ fontSize: 11 }}>Warm Summary</button>
+              <div style={{ background: 'rgba(45,74,54,0.08)', border: `1px solid rgba(45,74,54,0.2)`, padding: '6px 11px', fontSize: 11, fontWeight: 600, color: C.mid }}>✓ Detailed Investment Breakdown</div>
+              <div style={{ fontSize: 10.5, color: C.inkLight }}>Warm Summary is page 3 supporting content only</div>
             </div>
-            {proposalMode === 'summary' && (
-              <div style={{ marginTop: 8, fontSize: 10.5, color: C.inkMid, fontStyle: 'italic' }}>Warm Summary is for Page 3 supporting content only. Detailed Breakdown is the default main format.</div>
-            )}
           </div>
 
           {/* Customer packet */}
@@ -769,6 +812,13 @@ function UploadWorkspace({
                 <label>Original BisTrack line-item quote attached</label>
               </li>
             </ul>
+          </div>
+
+          {/* Preview toggle */}
+          <div>
+            <button className="wb-btn" onClick={() => setShowPreview(p => !p)} style={{ fontSize: 11 }}>
+              {showPreview ? 'Hide proposal preview' : 'Show proposal preview'}
+            </button>
           </div>
 
           {/* Save */}
@@ -794,24 +844,34 @@ function UploadWorkspace({
         </div>
 
         {/* Proposal preview */}
-        <ScaledProposalPreview
-          fields={fields}
-          parseContext={parseContext}
-          lineItems={lineItems}
-          proposalMode={proposalMode}
-          lineItemQuoteAttached={lineItemQuoteAttached}
-          onExpand={() => setShowProposalModal(true)}
-        />
+        {showPreview && (
+          <ScaledProposalPreview
+            fields={fields}
+            parseContext={parseContext}
+            lineItems={lineItems}
+            proposalMode={proposalMode}
+            lineItemQuoteAttached={lineItemQuoteAttached}
+            onExpand={() => setShowProposalModal(true)}
+          />
+        )}
       </div>
     </div>
   )
 }
 
 // ─── Ticket Workspace (center for saved opportunity) ──────────────
-function TicketWorkspace({ ticket, onSaveDraft }) {
-  const [showProposalPreview, setShowProposalPreview] = useState(true)
+function buildFollowUpText(ticket) {
+  const name = ticket.customerName || 'there'
+  const project = ticket.projectType || ticket.projectTitle || 'your fireplace project'
+  const nextAction = ticket.nextAction || ''
+  return `Hi ${name},\n\nFollowing up on ${project}. ${nextAction}\n\nPlease let me know if you have any questions.\n\nThanks,\nBenson Stone Fireplace Department`
+}
+
+function TicketWorkspace({ ticket, customerFile, onSaveDraft, onStatusChange, onCustomerFileChange, onMarkPacketGenerated, onMarkPacketSent }) {
+  const [showProposalPreview, setShowProposalPreview] = useState(false)
   const [showProposalModal, setShowProposalModal] = useState(false)
   const [ticketMsg, setTicketMsg] = useState('')
+  const [copyLabel, setCopyLabel] = useState('Copy follow-up text')
 
   const fields = useMemo(() => {
     const base = opportunityToQuoteFields(ticket)
@@ -824,11 +884,11 @@ function TicketWorkspace({ ticket, onSaveDraft }) {
   const statusContent = {
     'follow-up-needed': {
       title: 'Queue follow-up to customer',
-      sub: 'Send questions before polishing the proposal.',
+      sub: 'Copy follow-up text, send externally, then mark waiting on customer.',
     },
     'ready-for-proposal': {
       title: 'Ready to polish the proposal',
-      sub: 'All clear. Detailed Investment Breakdown is loaded. Save to queue or send.',
+      sub: 'Print or save PDF, attach BisTrack line-item quote, then send.',
     },
     'needs-review': {
       title: 'Resolve missing info before sending',
@@ -849,6 +909,25 @@ function TicketWorkspace({ ticket, onSaveDraft }) {
   function showMsg(msg) {
     setTicketMsg(msg)
     setTimeout(() => setTicketMsg(''), 4000)
+  }
+
+  function handleCopyFollowUp() {
+    const text = buildFollowUpText(ticket)
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyLabel('Copied ✓')
+      setTimeout(() => setCopyLabel('Copy follow-up text'), 2500)
+    })
+  }
+
+  function handleMarkWaiting() {
+    onStatusChange(ticket.id, 'waiting-on-customer')
+    showMsg('Status updated to Waiting on Customer.')
+  }
+
+  function handleSnooze() {
+    const snoozedUntil = new Date(Date.now() + 86400000).toISOString()
+    onStatusChange(ticket.id, ticket.status, { snoozedUntil })
+    showMsg('Snoozed 1 day — comes back tomorrow.')
   }
 
   return (
@@ -937,8 +1016,36 @@ function TicketWorkspace({ ticket, onSaveDraft }) {
             </div>
           </div>
 
-          {/* Warnings */}
-          {warnings.length > 0 && (
+          {/* Lifecycle status + readiness — derived from customer file data */}
+          {customerFile && (() => {
+            const qs = deriveQuoteStatus(customerFile)
+            return (
+              <div style={{ background: C.paper, border: `1px solid ${C.border}`, borderLeft: `3px solid ${qs.readiness.ready ? C.mid : C.copper}`, padding: '11px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ ...eyebrow, color: C.copper, fontSize: 8.5 }}>Customer File Status</div>
+                  <div style={{ ...serif, fontSize: 14, fontWeight: 700, color: C.ink }}>{getStatusLabel(qs.status)}</div>
+                  {qs.unresolvedCount > 0 && <span className="wb-pill wb-pill--rust">{qs.unresolvedCount} to resolve</span>}
+                  {qs.readiness.ready && <span className="wb-pill wb-pill--green">Ready</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: C.inkMid, marginTop: 4 }}>
+                  Next: {qs.readiness.nextRecommendedAction}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Issue resolution — replaces flag-only resolves */}
+          {customerFile && (
+            <IssueResolutionPanel file={customerFile} onChange={onCustomerFileChange} title="Resolve Before Send" />
+          )}
+
+          {/* Take-home checklist */}
+          {customerFile && (
+            <TakeHomeChecklist file={customerFile} onChange={onCustomerFileChange} />
+          )}
+
+          {/* Legacy warnings still shown if present and no customer file (back-compat) */}
+          {!customerFile && warnings.length > 0 && (
             <div>
               <div style={{ ...eyebrow, color: C.copper, marginBottom: 8, fontSize: 8.5 }}>Items to review ({warnings.length})</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -954,40 +1061,58 @@ function TicketWorkspace({ ticket, onSaveDraft }) {
           {/* Status-specific actions */}
           {ticket.status === 'ready-for-proposal' && (
             <div style={{ background: C.paper, border: `1px solid ${C.border}`, padding: 14 }}>
-              <div style={{ ...eyebrow, color: C.copper, marginBottom: 10, fontSize: 8.5 }}>Pre-send checklist</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-                {['Detailed Investment Breakdown selected', 'BisTrack line-item quote on file', 'No outstanding missing info', 'Ready to send'].map(item => (
+              <div style={{ ...eyebrow, color: C.copper, marginBottom: 10, fontSize: 8.5 }}>Send checklist</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                {[
+                  'Detailed Investment Breakdown format confirmed',
+                  'BisTrack line-item quote attached to packet',
+                  'No outstanding missing info warnings',
+                ].map(item => (
                   <div key={item} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11.5 }}>
                     <div style={{ width: 16, height: 16, borderRadius: 8, background: C.mid, color: C.parchment, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>✓</div>
                     {item}
                   </div>
                 ))}
               </div>
-              <button
-                className="wb-btn wb-btn--copper"
-                style={{ marginTop: 12, fontSize: 12 }}
-                onClick={() => showMsg('Email integration not yet connected — print / save as PDF and send manually.')}
-              >
-                Save & email proposal →
-              </button>
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                <button
+                  className="wb-btn wb-btn--copper"
+                  style={{ fontSize: 12 }}
+                  onClick={() => { if (onMarkPacketGenerated) onMarkPacketGenerated(); window.print() }}
+                >
+                  Print / Save PDF →
+                </button>
+                {onMarkPacketSent && (
+                  <button className="wb-btn wb-btn--primary" style={{ fontSize: 12 }} onClick={() => onMarkPacketSent('email')}>
+                    Mark sent (email)
+                  </button>
+                )}
+                {onMarkPacketSent && (
+                  <button className="wb-btn" style={{ fontSize: 12 }} onClick={() => onMarkPacketSent('print')}>
+                    Mark sent (print)
+                  </button>
+                )}
+                <button className="wb-btn" style={{ fontSize: 12 }} onClick={handleMarkWaiting}>
+                  Mark Waiting on Customer
+                </button>
+              </div>
             </div>
           )}
 
-          {ticket.status === 'follow-up-needed' && ticket.nextAction && (
+          {ticket.status === 'follow-up-needed' && (
             <div style={{ background: C.paper, border: `1px solid ${C.border}`, padding: 14 }}>
-              <div style={{ ...eyebrow, color: C.copper, marginBottom: 6, fontSize: 8.5 }}>Next action</div>
-              <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5 }}>{ticket.nextAction}</div>
-              <div style={{ marginTop: 10, display: 'flex', gap: 7 }}>
-                <button
-                  className="wb-btn wb-btn--primary"
-                  onClick={() => showMsg('Email / follow-up integration not yet connected. Draft your follow-up externally and log it here when sent.')}
-                >
-                  Send follow-up →
+              <div style={{ ...eyebrow, color: C.copper, marginBottom: 6, fontSize: 8.5 }}>Follow-up</div>
+              {ticket.nextAction && (
+                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 10 }}>{ticket.nextAction}</div>
+              )}
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                <button className="wb-btn wb-btn--primary" onClick={handleCopyFollowUp}>
+                  {copyLabel}
                 </button>
-                <button
-                  className="wb-btn wb-btn--ghost"
-                  onClick={() => showMsg('Snoozed — this ticket will stay in Follow-Up Needed until you mark it sent or resolved.')}
-                >
+                <button className="wb-btn" onClick={handleMarkWaiting}>
+                  Mark Waiting on Customer
+                </button>
+                <button className="wb-btn wb-btn--ghost" onClick={handleSnooze}>
                   Snooze 1 day
                 </button>
               </div>
@@ -1032,18 +1157,18 @@ function TicketWorkspace({ ticket, onSaveDraft }) {
 
 // ─── Next Best Action bar ─────────────────────────────────────────
 const NBA_MAP = {
-  empty:    { copy: 'Pick a ticket on the left, or drop a BisTrack PDF to start a new one.', cta: 'Open today\'s top ticket →' },
-  recovery: { copy: 'Review OCR results — queue high-confidence rows, fix low-confidence ones.', cta: 'Queue selected →' },
-  upload_unresolved: { copy: 'Resolve warnings above, then mark the quote as reviewed.', cta: 'Scroll to warnings ↑' },
-  upload_follow_up:  { copy: 'Send follow-up questions — ticket auto-advances when the customer replies.', cta: 'Mark as Follow-Up ✓' },
-  upload_reviewed:   { copy: 'All clear. Save the proposal to the queue and email the customer.', cta: 'Save & email proposal →' },
-  ticket_ready:      { copy: 'All clear. Attach the BisTrack line-item, then send the proposal.', cta: 'Save & email proposal →' },
-  ticket_followup:   { copy: 'Send follow-up questions to the customer before polishing the proposal.', cta: 'Send follow-up →' },
-  ticket_review:     { copy: 'Resolve missing info or open the right-rail reference for context.', cta: 'Resolve items →' },
-  ticket_other:      { copy: 'Review the ticket and determine the next step for this job.', cta: 'Update ticket →' },
+  empty:             { copy: 'Pick a ticket on the left, or drop a BisTrack PDF to start a new one.', cta: null },
+  recovery:          { copy: 'Review OCR results — queue high-confidence rows, fix low-confidence ones.', cta: null },
+  upload_unresolved: { copy: 'Resolve all warnings above, then mark the quote as reviewed before saving.', cta: null },
+  upload_follow_up:  { copy: 'Mark this quote as Follow-Up Needed and save it to the queue.', cta: 'Mark as Follow-Up ✓' },
+  upload_reviewed:   { copy: 'All clear. Save to the opportunity queue.', cta: 'Save to Queue →' },
+  ticket_ready:      { copy: 'All clear. Print or save PDF, attach BisTrack line-item quote, then send.', cta: 'Print / Save PDF →' },
+  ticket_followup:   { copy: 'Copy follow-up text, send via email, then mark waiting on customer.', cta: 'Copy follow-up text' },
+  ticket_review:     { copy: 'Resolve missing info items in the ticket panel before sending.', cta: null },
+  ticket_other:      { copy: 'Review the ticket and determine the next step for this job.', cta: null },
 }
 
-function NextBestAction({ mode, reviewState, ticketStatus, onSave, onSnooze, onCta }) {
+function NextBestAction({ mode, reviewState, ticketStatus, onSave, onCta, onCopyFollowUp }) {
   let key = 'empty'
   if (mode === 'recovery') key = 'recovery'
   else if (mode === 'upload') key = `upload_${reviewState}`
@@ -1056,8 +1181,10 @@ function NextBestAction({ mode, reviewState, ticketStatus, onSave, onSnooze, onC
   const v = NBA_MAP[key] || NBA_MAP.empty
 
   function handleCta() {
-    if (mode === 'upload' && reviewState === 'reviewed') { onSave(); return }
-    if (onCta) onCta(key)
+    if (key === 'upload_reviewed') { onSave(); return }
+    if (key === 'upload_follow_up') { onCta('upload_follow_up'); return }
+    if (key === 'ticket_ready') { window.print(); return }
+    if (key === 'ticket_followup') { onCopyFollowUp(); return }
   }
 
   return (
@@ -1067,10 +1194,60 @@ function NextBestAction({ mode, reviewState, ticketStatus, onSave, onSnooze, onC
         <div style={{ ...eyebrow, color: C.gold, fontSize: 8 }}>Next Best Action</div>
         <div style={{ ...serif, fontSize: 14, fontWeight: 600, marginTop: 2 }}>{v.copy}</div>
       </div>
-      <button className="wb-btn" style={{ background: 'transparent', color: C.parchment, borderColor: 'rgba(243,234,214,0.3)', flexShrink: 0 }} onClick={onSnooze}>
-        Snooze
-      </button>
-      <button className="wb-btn wb-btn--copper" onClick={handleCta} style={{ flexShrink: 0 }}>{v.cta}</button>
+      {v.cta && (
+        <button className="wb-btn wb-btn--copper" onClick={handleCta} style={{ flexShrink: 0 }}>{v.cta}</button>
+      )}
+    </div>
+  )
+}
+
+// ─── Customer File Workspace (visit started, no quote imported yet) ─
+function CustomerFileWorkspace({ file, onCustomerFileChange, onUploadClick, onBack }) {
+  const qs = deriveQuoteStatus(file)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, background: C.parchment }}>
+      <div style={{ background: C.paper, borderBottom: `1px solid ${C.border}`, padding: '13px 24px 15px', position: 'relative', flexShrink: 0 }}>
+        <div style={{ position: 'absolute', top: -10, left: 24, padding: '3px 12px', background: C.copper, color: '#fff', ...eyebrow, fontSize: 9 }}>
+          CUSTOMER FILE
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 9.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, padding: '3px 8px', borderRadius: 2, background: C.mid, color: C.parchment }}>
+            {getStatusLabel(qs.status)}
+          </span>
+          {qs.unresolvedCount > 0 && <span className="wb-pill wb-pill--rust">{qs.unresolvedCount} to resolve</span>}
+          {qs.readiness.ready && <span className="wb-pill wb-pill--green">Packet ready</span>}
+          <div style={{ flex: 1 }} />
+          <button className="wb-btn" onClick={onBack} style={{ fontSize: 11 }}>← Back</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 8 }}>
+          <div>
+            <div style={{ ...serif, fontSize: 22, fontWeight: 700, lineHeight: 1.1, color: C.ink }}>{file.customerName || 'Unnamed Visit'}</div>
+            <div style={{ fontSize: 11, color: C.inkMid, marginTop: 3 }}>
+              {[file.customerPhone, file.customerEmail].filter(Boolean).join(' · ') || 'No contact channel yet'}
+            </div>
+          </div>
+          <button className="wb-btn wb-btn--copper" onClick={onUploadClick} style={{ fontSize: 12 }}>
+            ↑ Import BizTrack quote
+          </button>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ background: C.paper, border: `1px solid ${C.border}`, borderLeft: `3px solid ${qs.readiness.ready ? C.mid : C.copper}`, padding: '11px 14px' }}>
+          <div style={{ ...eyebrow, color: C.copper, fontSize: 8.5 }}>Right now</div>
+          <div style={{ ...serif, fontSize: 16, fontWeight: 700, color: C.ink, marginTop: 3 }}>
+            {qs.readiness.nextRecommendedAction}
+          </div>
+          {file.customerGoal && (
+            <div style={{ fontSize: 12, color: C.inkMid, marginTop: 6, lineHeight: 1.5 }}>
+              <strong>Goal:</strong> {file.customerGoal}
+            </div>
+          )}
+        </div>
+
+        <IssueResolutionPanel file={file} onChange={onCustomerFileChange} title="Visit Checklist" />
+        <TakeHomeChecklist file={file} onChange={onCustomerFileChange} />
+      </div>
     </div>
   )
 }
@@ -1083,12 +1260,14 @@ export default function WorkbenchShell() {
   const [mode, setMode] = useState('empty')
   const [activeTicketId, setActiveTicketId] = useState(null)
   const [oppList, setOppList] = useState(() => listOpportunities())
+  const [customerFiles, setCustomerFiles] = useState(() => listCustomerFiles())
+  const [activeCustomerFileId, setActiveCustomerFileId] = useState(null)
 
   // Upload / quote polish state
   const [fields, setFields] = useState(emptyFields)
   const [parseContext, setParseContext] = useState(emptyContext)
   const [lineItems, setLineItems] = useState([])
-  const [proposalMode, setProposalMode] = useState('detailed')
+  const proposalMode = 'detailed'
   const [reviewState, setReviewState] = useState('unresolved')
   const [lineItemQuoteAttached, setLineItemQuoteAttached] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
@@ -1117,6 +1296,72 @@ export default function WorkbenchShell() {
   }
 
   const activeTicket = useMemo(() => oppList.find(o => o.id === activeTicketId) || null, [oppList, activeTicketId])
+
+  // Active customer file: explicit visit-mode selection OR auto-hydrated from active ticket.
+  const activeCustomerFile = useMemo(() => {
+    if (activeCustomerFileId) {
+      return customerFiles.find(f => f.id === activeCustomerFileId) || null
+    }
+    if (activeTicket) {
+      const linked = customerFiles.find(f => f.opportunityId === activeTicket.id)
+      if (linked) return linked
+    }
+    return null
+  }, [activeCustomerFileId, customerFiles, activeTicket])
+
+  function refreshCustomerFiles() {
+    setCustomerFiles(listCustomerFiles())
+  }
+
+  function handleCustomerFileChange(updated) {
+    if (updated) {
+      setCustomerFiles(listCustomerFiles())
+    }
+  }
+
+  function handleStartVisit() {
+    setMode('visit')
+    setActiveTicketId(null)
+    setActiveCustomerFileId(null)
+  }
+
+  function handleVisitCreated(file) {
+    refreshCustomerFiles()
+    setActiveCustomerFileId(file.id)
+    setMode('customer-file')
+  }
+
+  function ensureCustomerFileForTicket(ticketId) {
+    const ticket = listOpportunities().find(o => o.id === ticketId)
+    if (!ticket) return null
+    const existing = getCustomerFileByOpportunity(ticketId)
+    if (existing) return existing
+    const file = customerFileFromOpportunity(ticket)
+    saveCustomerFile(file)
+    refreshCustomerFiles()
+    return file
+  }
+
+  function handleMarkPacketGenerated() {
+    if (!activeTicket) return
+    const file = ensureCustomerFileForTicket(activeTicket.id)
+    if (!file) return
+    updateCustomerFile(file.id, { packetGeneratedAt: new Date().toISOString() })
+    refreshCustomerFiles()
+  }
+
+  function handleMarkPacketSent(channel) {
+    if (!activeTicket) return
+    const file = ensureCustomerFileForTicket(activeTicket.id)
+    if (!file) return
+    const patch = {
+      packetSentAt: new Date().toISOString(),
+      packetSendChannel: channel || 'email',
+    }
+    if (!file.packetGeneratedAt) patch.packetGeneratedAt = new Date().toISOString()
+    updateCustomerFile(file.id, patch)
+    refreshCustomerFiles()
+  }
   const setupGuidance = useMemo(() => evaluateCurrentSetup({ fields, parseContext }), [fields, parseContext])
   const warnings = useMemo(
     () => mode === 'upload' ? buildSendReadinessWarnings({ fields, lineItems, proposalMode, setupGuidance }) : [],
@@ -1217,6 +1462,12 @@ export default function WorkbenchShell() {
     setPendingDuplicate(null)
     setSaveStatus('Saved to the opportunity queue.')
     setOppList(listOpportunities())
+    // Auto-link or create a customer file for the saved opportunity.
+    const linked = getCustomerFileByOpportunity(draft.opportunity.id)
+    if (!linked) {
+      saveCustomerFile(customerFileFromOpportunity(draft.opportunity))
+      refreshCustomerFiles()
+    }
   }
 
   function handleSaveDraft(ticketOrUndefined) {
@@ -1266,7 +1517,9 @@ export default function WorkbenchShell() {
 
   function handleSelectTicket(id) {
     setActiveTicketId(id)
+    setActiveCustomerFileId(null)
     setMode('ticket')
+    ensureCustomerFileForTicket(id)
   }
 
   function handleResolveWarning(w) {
@@ -1277,23 +1530,22 @@ export default function WorkbenchShell() {
     })
   }
 
+  function handleTicketStatusChange(id, newStatus, extra = {}) {
+    updateOpportunity(id, { status: newStatus, updatedAt: new Date().toISOString(), ...extra })
+    setOppList(listOpportunities())
+  }
+
   const handleNbaCta = useCallback((key) => {
-    if (key === 'upload_unresolved') {
-      // Scroll to warnings — since we can't scroll programmatically easily, show a toast
-      showPlaceholder('Scroll up to the "Items to resolve" section and click Resolve on each warning.')
-    } else if (key === 'upload_follow_up') {
+    if (key === 'upload_follow_up') {
       setReviewState('follow-up')
-      showPlaceholder('Review state set to Follow-Up Needed.')
-    } else if (key === 'ticket_followup' || key === 'ticket_review' || key === 'ticket_other') {
-      showPlaceholder('Open the ticket in the center panel and address the items listed there.')
-    } else if (key === 'ticket_ready') {
-      showPlaceholder('Email integration not yet connected — print / save as PDF and send manually.')
-    } else if (key === 'recovery') {
-      showPlaceholder('Select rows in the recovery panel and click Queue Selected to add them.')
-    } else {
-      showPlaceholder('Select a ticket in the left rail to get started.')
     }
   }, [])
+
+  function handleNbaCopyFollowUp() {
+    if (!activeTicket) return
+    const text = buildFollowUpText(activeTicket)
+    navigator.clipboard.writeText(text)
+  }
 
   const hasActiveQuote = mode === 'upload' || mode === 'ticket'
 
@@ -1306,6 +1558,7 @@ export default function WorkbenchShell() {
         busy={busy}
         onUpload={handleFile}
         onRecovery={() => setMode('recovery')}
+        onStartVisit={handleStartVisit}
         fileInputRef={fileInputRef}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -1341,7 +1594,7 @@ export default function WorkbenchShell() {
               resolvedWarnings={resolvedWarnings}
               onFieldChange={setField}
               onReviewChange={v => { setReviewState(v); setSaveStatus(''); setPendingDuplicate(null) }}
-              onProposalModeChange={setProposalMode}
+
               onLineItemAttachChange={v => { setLineItemQuoteAttached(v); setSaveStatus('') }}
               onSave={handleSaveToQueue}
               onSaveDraft={handleSaveDraft}
@@ -1354,12 +1607,30 @@ export default function WorkbenchShell() {
           {mode === 'ticket' && activeTicket && (
             <TicketWorkspace
               ticket={activeTicket}
+              customerFile={activeCustomerFile}
               onSaveDraft={handleSaveDraft}
-              onPlaceholder={showPlaceholder}
+              onStatusChange={handleTicketStatusChange}
+              onCustomerFileChange={handleCustomerFileChange}
+              onMarkPacketGenerated={handleMarkPacketGenerated}
+              onMarkPacketSent={handleMarkPacketSent}
             />
           )}
           {mode === 'ticket' && !activeTicket && (
             <EmptyHero onUpload={handleFile} onRecovery={() => setMode('recovery')} fileInputRef={heroFileInputRef} />
+          )}
+          {mode === 'visit' && (
+            <ShowroomVisitStart
+              onCreated={handleVisitCreated}
+              onCancel={() => setMode('empty')}
+            />
+          )}
+          {mode === 'customer-file' && activeCustomerFile && (
+            <CustomerFileWorkspace
+              file={activeCustomerFile}
+              onCustomerFileChange={handleCustomerFileChange}
+              onUploadClick={() => fileInputRef.current?.click()}
+              onBack={() => { setMode('empty'); setActiveCustomerFileId(null) }}
+            />
           )}
           {mode === 'recovery' && <OldQuoteRecovery />}
         </div>
@@ -1377,8 +1648,8 @@ export default function WorkbenchShell() {
         reviewState={reviewState}
         ticketStatus={activeTicket?.status}
         onSave={handleSaveToQueue}
-        onSnooze={() => showPlaceholder('Snoozed — this ticket stays in the queue. Come back to it when ready.')}
         onCta={handleNbaCta}
+        onCopyFollowUp={handleNbaCopyFollowUp}
       />
     </div>
   )
