@@ -7,8 +7,9 @@ import {
 } from '../lib/fieldContract.js'
 import { parseBisTrackText } from '../lib/biztrackPdfParser.js'
 import { evaluateCurrentSetup } from '../lib/currentSetup.js'
-import { extractOcrFromPdf, extractTextFromPdf } from '../lib/pdfTextExtraction.js'
+import { extractOcrFromPdf, extractOcrFromPdfForBisTrackScan, extractTextFromPdf } from '../lib/pdfTextExtraction.js'
 import { extractScannedBisTrackFields } from '../lib/scannedPacketParser.js'
+import { detectScannedBisTrack, parseBisTrackScannedQuote, parseBisTrackScannedQuoteFromZones } from '../lib/bisTrackScanParser.js'
 import { getEstimateBasisSummary, hasUnclassifiedLineItems } from '../lib/proposalDetail.js'
 import { buildQuotePolishQueueDraft, mergeQuotePolishOpportunity } from '../lib/quotePolishOpportunity.js'
 import { listOpportunities, removeOpportunity, saveOpportunity, updateOpportunity } from '../lib/opportunities.js'
@@ -1910,6 +1911,66 @@ export default function WorkbenchShell() {
     setResolvedWarnings(new Set())
   }
 
+  // For scanned BisTrack quotes the zone-OCR scanResult overrides whatever
+  // parseBisTrackText fished from the noisy combined OCR text. Without this,
+  // store-address strings ("Co Rockford, Illinois 61104") stick in the
+  // customer slot and block the cleaner zone value from landing.
+  function mergeScanResultIntoParsed(parsed, scanResult) {
+    if (!scanResult) return
+    const scanWins = Boolean(scanResult.isScannedBisTrack)
+
+    // Scrub store-address values out of customer/invoice slots before applying
+    // scan results — Tesseract often pulls "Co Rockford, Illinois 61104" from
+    // the store header into the invoice slot.
+    const STORE_VALUE = /(benson\s*stone|^co\b.*rockford|rockford.*\b61104\b|\b61104\b)/i
+    if (scanWins) {
+      for (const f of ['INVOICE_CITY_STATE_ZIP', 'PROJECT_CITY_STATE_ZIP', 'INVOICE_ADDRESS_LINE_1', 'PROJECT_ADDRESS_LINE_1', 'CUSTOMER_NAME']) {
+        if (parsed.fields[f] && STORE_VALUE.test(parsed.fields[f])) {
+          parsed.fields[f] = ''
+        }
+      }
+    }
+
+    const setField = (field, value) => {
+      if (!value) return
+      if (scanWins || !parsed.fields[field]) {
+        parsed.fields[field] = value
+        parsed.sources = parsed.sources || {}
+        parsed.sources[field] = 'bistrack-scan'
+      }
+    }
+    const fmt = n => (n !== null && n !== undefined ? `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}` : '')
+
+    const h = scanResult.header || {}
+    setField('QUOTE_NO', h.quoteNo)
+    setField('QUOTE_DATE', h.quoteDate)
+    setField('CUSTOMER_ID', h.customerId)
+    setField('PAYMENT_TERMS', h.terms)
+    setField('PO_NUMBER', h.poNumber)
+    setField('TAKEN_BY', h.takenBy)
+    setField('SALES_REP', h.salesRep)
+
+    const invoice = scanResult.addresses?.invoice || {}
+    const delivery = scanResult.addresses?.delivery || {}
+    setField('CUSTOMER_NAME', invoice.name)
+    setField('INVOICE_ADDRESS_LINE_1', invoice.addressLine1)
+    setField('INVOICE_CITY_STATE_ZIP', invoice.cityStateZip)
+    setField('CUSTOMER_PHONE', invoice.phone)
+    setField('PROJECT_ADDRESS_LINE_1', delivery.addressLine1 || invoice.addressLine1)
+    setField('PROJECT_CITY_STATE_ZIP', delivery.cityStateZip || invoice.cityStateZip)
+
+    const totals = scanResult.totals || {}
+    setField('TOTAL_AMOUNT', fmt(totals.totalAmount))
+    setField('IR_TAX', fmt(totals.salesTax))
+    setField('QUOTATION_TOTAL', fmt(totals.quotationTotal))
+    setField('BALANCE_DUE', fmt(totals.balanceDue))
+
+    const scanItems = (scanResult.lineItems || []).filter(i => !i.isNote)
+    if (scanItems.length > 0 && !(parsed.lineItems || []).length) {
+      parsed.lineItems = scanItems
+    }
+  }
+
   async function handleFile(event) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -1926,19 +1987,33 @@ export default function WorkbenchShell() {
         const lineCount = parsed.lineItems?.length || 0
         setStatus(`Loaded ${file.name} — ${parsed.documentType?.toUpperCase() || 'QUOTE'}${parsed.fields.QUOTE_NO ? ` #${parsed.fields.QUOTE_NO}` : ''} (${lineCount} line item${lineCount === 1 ? '' : 's'}). Review and fill any blanks below.`)
       } else {
-        setStatus(`Scanned PDF detected. Running OCR on ${extracted.pageCount} page${extracted.pageCount === 1 ? '' : 's'}…`)
-        const ocr = await extractOcrFromPdf(file, {
-          onProgress: p => {
-            const action = p.stage === 'rendering' ? 'Rendering' : 'Reading'
-            setStatus(`${action} page ${p.pageNumber} of ${p.pageCount}…`)
-          },
-        })
-        const combinedText = ocr.pages.map(p => p.text).join('\n\n')
+        setStatus(`Scanned BisTrack PDF detected. Running zone OCR on page 1…`)
+        const onProgress = p => {
+          const action = p.stage === 'rendering' ? 'Rendering' : 'Reading'
+          setStatus(`${action} page ${p.pageNumber} of ${p.pageCount}…`)
+        }
+        let ocr
+        try {
+          ocr = await extractOcrFromPdfForBisTrackScan(file, { onProgress })
+        } catch {
+          ocr = await extractOcrFromPdf(file, { onProgress })
+        }
+        const combinedText = ocr.rawText || ocr.pages.map(p => p.text).join('\n\n')
+        const detection = detectScannedBisTrack(extracted.rawText, ocr.fullPageText || combinedText, file.name)
+        const scanResult = ocr.zoneText
+          ? parseBisTrackScannedQuoteFromZones(ocr.zoneText, ocr.fullPageText || combinedText)
+          : parseBisTrackScannedQuote(combinedText)
+        if (detection.likelyBisTrackScan) scanResult.isScannedBisTrack = true
+
         const parsed = extractScannedBisTrackFields(combinedText)
-        const avgConf = Math.round(ocr.pages.reduce((s, p) => s + (p.confidence || 0), 0) / Math.max(ocr.pages.length, 1))
-        loadParsed({ ...parsed, context: { ...parsed.context, extractionSource: 'ocr', sourceFileName: file.name, sourceImportedAt: new Date().toISOString(), sourceConfidence: avgConf } })
+        mergeScanResultIntoParsed(parsed, scanResult)
+
+        const avgConf = ocr.fullPageConfidence ?? Math.round(ocr.pages.reduce((s, p) => s + (p.confidence || 0), 0) / Math.max(ocr.pages.length, 1))
+        loadParsed({ ...parsed, context: { ...parsed.context, extractionSource: ocr.extractionSource || 'ocr', sourceFileName: file.name, sourceImportedAt: new Date().toISOString(), sourceConfidence: avgConf, isScannedBisTrack: scanResult.isScannedBisTrack } })
         setRawText(combinedText)
-        setStatus(`OCR complete (avg confidence ${avgConf}%). Review every field — scanned text often needs cleanup.`)
+        setStatus(scanResult.isScannedBisTrack
+          ? `Scanned BisTrack quote detected (avg ${avgConf}% OCR). Review customer, totals, and line items against the original scan.`
+          : `OCR complete (avg confidence ${avgConf}%). Review every field — scanned text often needs cleanup.`)
       }
     } catch (err) {
       setStatus(`Could not read PDF: ${err.message || err}`)

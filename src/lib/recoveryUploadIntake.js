@@ -222,6 +222,19 @@ function mergeAllScannedFieldsToFields(parsed, scanResult) {
   if (!scanResult) return
 
   const scanWins = Boolean(scanResult.isScannedBisTrack)
+
+  // Scrub store-address bleed-through (e.g. "Co Rockford, Illinois 61104")
+  // before applying scan-derived values so a blank zone result doesn't leave
+  // the wrong store data in the customer slot.
+  const STORE_VALUE = /(benson\s*stone|^co\b.*rockford|rockford.*\b61104\b|\b61104\b)/i
+  if (scanWins) {
+    for (const f of ['INVOICE_CITY_STATE_ZIP', 'PROJECT_CITY_STATE_ZIP', 'INVOICE_ADDRESS_LINE_1', 'PROJECT_ADDRESS_LINE_1', 'CUSTOMER_NAME']) {
+      if (parsed.fields[f] && STORE_VALUE.test(parsed.fields[f])) {
+        parsed.fields[f] = ''
+      }
+    }
+  }
+
   const setField = (field, value) => {
     if (!value) return
     if (scanWins || !parsed.fields[field]) {

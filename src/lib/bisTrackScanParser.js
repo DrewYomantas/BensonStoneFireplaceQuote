@@ -126,7 +126,10 @@ export function parseBisTrackHeaderFields(text) {
   }
 }
 
-const STORE_HINT = /1100\s+eleventh|bensonstone/i
+// Store address fragments — these must never land in the customer/invoice slot.
+// Real OCR drops the "Benson Stone" prefix and leaves variants like "Co Rockford"
+// or "Stone Co. Rockford". Match the unique store ZIP and the city/state combo.
+const STORE_HINT = /1100\s+eleventh|bensonstone|benson\s+stone|\b61104\b|rockford,?\s*(il|illinois|llinois)\b|^co\b\s+rockford/i
 const PHONE_RE = /(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/
 
 // Parse an address block from arbitrary text — no anchor label required.
