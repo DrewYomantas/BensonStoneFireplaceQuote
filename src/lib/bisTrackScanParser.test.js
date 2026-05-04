@@ -406,6 +406,80 @@ describe('parseBisTrackScannedQuote', () => {
   })
 })
 
+// Real-Tesseract-flavoured OCR — colons after labels, broken spacing, and
+// the two address columns bleeding into a single line. Models the kind of
+// imperfect output we actually see from the live scanned Benson quote.
+const REAL_TESSERACT_FLAVOR_OCR = `
+BENSON STONE Co
+Quotation
+Quote No: 57535        Quote Date: 06/08/2024 3:06 PM
+Customer ID: 22054     Terms: PrePaid
+PO# INST - Lopi Northfield
+Taken By: Liam Milanos     Sales Rep: Liam Milanos
+
+Invoice Address                Delivery Address
+Teresa Geiger    1125 A Inlet
+1125 A Inlet     Amboy, Illinois 61310
+Amboy, Illinois 61310
+
+Line Product Code Description Qty Price Per Discount Total
+1 99600086 LOPI Northfield Radiant MV New Iron Painted Gas Stove 1 EA 3036.00 EA 0.00 3036.00
+2 46DVA48B D V 4x6 DVP 48 Length Black Chimney 1 EA 196.23 EA 0.00 196.23
+3 Installation Fireplace Install Lopi Northfield - AMBOY 1 EA 0.00 0.00 1585.00
+Note: Gas/Electric NOT Included
+
+Total Amount: $6,191.77
+Sales Tax: $403.09
+Quotation Total: $6,594.86
+Balance Due: $6,594.86
+`.trim()
+
+describe('real-tesseract-flavoured rough OCR (Quote 57535)', () => {
+  it('recovers quote header fields despite colons on labels', () => {
+    const h = parseBisTrackHeaderFields(REAL_TESSERACT_FLAVOR_OCR)
+    assert.equal(h.quoteNo, '57535')
+    assert.equal(h.quoteDate, '06/08/2024 3:06 PM')
+    assert.equal(h.customerId, '22054')
+    assert.equal(h.terms, 'PrePaid')
+    assert.match(h.salesRep || '', /Liam\s+Milanos/i)
+  })
+
+  it('recovers totals despite colon-suffixed labels', () => {
+    const t = parseBisTrackTotals(REAL_TESSERACT_FLAVOR_OCR)
+    assert.equal(t.totalAmount, 6191.77)
+    assert.equal(t.salesTax, 403.09)
+    assert.equal(t.quotationTotal, 6594.86)
+    assert.equal(t.balanceDue, 6594.86)
+  })
+
+  it('recovers customer name + street + city when address columns bleed together', () => {
+    const block = `Teresa Geiger    1125 A Inlet
+1125 A Inlet    Amboy, Illinois 61310
+Amboy, Illinois 61310`
+    const result = parseAddressFromBlock(block)
+    assert.equal(result.name, 'Teresa Geiger')
+    assert.equal(result.addressLine1, '1125 A Inlet')
+    assert.match(result.cityStateZip, /Amboy.*61310/i)
+  })
+
+  it('full orchestrator extracts header + totals + at least 3 line items from rough OCR', () => {
+    const result = parseBisTrackScannedQuote(REAL_TESSERACT_FLAVOR_OCR)
+    assert.equal(result.header.quoteNo, '57535')
+    assert.equal(result.totals.totalAmount, 6191.77)
+    assert.equal(result.totals.quotationTotal, 6594.86)
+    assert.equal(result.totals.balanceDue, 6594.86)
+    const realItems = result.lineItems.filter((i) => !i.isNote)
+    assert.ok(realItems.length >= 3, `expected 3+ line items, got ${realItems.length}`)
+  })
+
+  it('detects scanned BisTrack from filename hint alone when OCR is empty', () => {
+    const result = detectScannedBisTrack('', '', 'Receipt - Benson Stone Company - Jun 8, 2024.pdf')
+    assert.equal(result.isImageOnly, true)
+    assert.equal(result.likelyBisTrackScan, true)
+    assert.equal(result.fileHint, true)
+  })
+})
+
 // --- parseBisTrackScannedQuoteFromZones ---
 
 describe('parseBisTrackScannedQuoteFromZones', () => {

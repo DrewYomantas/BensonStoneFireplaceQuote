@@ -296,15 +296,16 @@ function RecoveryUploadReview({ onSave, onCancel }) {
   const [error, setError] = useState('')
   const [hasUpload, setHasUpload] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [ocrDebug, setOcrDebug] = useState(null)
+  const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [lastFile, setLastFile] = useState(null)
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
     setError('')
   }
 
-  async function handleFile(event) {
-    const file = event.target.files?.[0]
-    if (!file) return
+  async function processFile(file) {
     setBusy(true)
     setError('')
     try {
@@ -318,8 +319,12 @@ function RecoveryUploadReview({ onSave, onCancel }) {
         },
       })
       setForm({ ...emptyIntake, ...result.intake, reviewedForFollowUp: false })
+      setOcrDebug(result.ocrDebug || null)
+      setLastFile(file)
       setHasUpload(true)
-      setStatus('Review extracted quote fields before saving to the recovery queue.')
+      setStatus(result.intake?.isScannedBisTrack
+        ? 'Scanned BisTrack quote parsed. Review every field against the original scan before saving.'
+        : 'Review extracted quote fields before saving to the recovery queue.')
     } catch (err) {
       setError(err.message || String(err))
       setStatus('Upload failed. Try a PDF or image with readable quote content.')
@@ -327,6 +332,18 @@ function RecoveryUploadReview({ onSave, onCancel }) {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await processFile(file)
+  }
+
+  async function handleReprocess() {
+    if (!lastFile || busy) return
+    setStatus('Re-running scanned OCR rescue on the same file...')
+    await processFile(lastFile)
   }
 
   function handleSubmit() {
@@ -374,16 +391,57 @@ function RecoveryUploadReview({ onSave, onCancel }) {
 
       {form.isScannedBisTrack ? (
         <div className="bs-upload-warning bs-upload-warning--scan">
-          <p className="bs-recovery__section-label">Scanned Quote Detected</p>
+          <p className="bs-recovery__section-label">Scanned BisTrack Quote Detected</p>
           {form.scannedBisTrackNote
             ? form.scannedBisTrackNote.split('\n').map((line, i) => (
               <p key={i} className={i === 0 ? 'bs-upload-warning__lead' : 'bs-upload-warning__detail'}>{line}</p>
             ))
             : <p>Fields were extracted from the page image. Review all fields against the original scan before sending.</p>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+            {lastFile ? (
+              <button
+                type="button"
+                className="bs-lens__copy"
+                onClick={handleReprocess}
+                disabled={busy}
+                title="Re-render the page and re-run zone OCR on the same file"
+              >
+                {busy ? 'Re-running...' : 'Re-run scanned OCR rescue'}
+              </button>
+            ) : null}
+            {ocrDebug ? (
+              <button
+                type="button"
+                className="bs-lens__copy"
+                onClick={() => setShowDiagnostics((v) => !v)}
+              >
+                {showDiagnostics ? 'Hide' : 'Show'} OCR diagnostics
+              </button>
+            ) : null}
+          </div>
+          {showDiagnostics && ocrDebug ? (
+            <div className="bs-upload-warning__detail" style={{ marginTop: 8, fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: 'rgba(94,73,51,0.06)', padding: 8, borderRadius: 4 }}>
+              <div>embeddedTextLength: {ocrDebug.embeddedTextLength}</div>
+              <div>fullPageOcrConfidence: {ocrDebug.fullPageOcrConfidence}%</div>
+              <div>extractionSource: {ocrDebug.extractionSource}</div>
+              {ocrDebug.markerHits !== null ? <div>markerHits: {ocrDebug.markerHits}</div> : null}
+              {ocrDebug.detectionReason ? <div>detection: {ocrDebug.detectionReason}</div> : null}
+              <div style={{ marginTop: 6 }}>fullPage sample: {ocrDebug.fullPageOcrTextSample || '(empty)'}</div>
+              {ocrDebug.zones ? (
+                <div style={{ marginTop: 6 }}>
+                  {Object.entries(ocrDebug.zones).map(([name, zone]) => zone ? (
+                    <div key={name} style={{ marginTop: 4 }}>
+                      <strong>{name}</strong> ({zone.confidence}%): {zone.textSample || '(empty)'}
+                    </div>
+                  ) : null)}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {form.sourceWarnings?.length ? (
+      {!form.isScannedBisTrack && form.sourceWarnings?.length ? (
         <div className="bs-upload-warning">
           <p className="bs-recovery__section-label">OCR Review Required</p>
           <ul className="bs-lens-list bs-lens-list--warning">

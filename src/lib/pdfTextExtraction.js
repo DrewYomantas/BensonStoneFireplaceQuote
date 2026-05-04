@@ -170,12 +170,38 @@ export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
   const zones = {}
   const zoneText = {}
 
+  // Per-zone Tesseract hints. Whitelist on totals helps the dollar column.
+  // Address/metadata zones use sparse-text PSM (11) when supported. We swallow
+  // any setParameters errors so an older tesseract.js still works.
+  const ZONE_TESSERACT_PARAMS = {
+    metadata: { preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' },
+    invoiceAddress: { preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' },
+    deliveryAddress: { preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' },
+    table: { preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' },
+    totals: {
+      preserve_interword_spaces: '1',
+      tessedit_pageseg_mode: '6',
+      tessedit_char_whitelist: '$0123456789,.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /:',
+    },
+  }
+
+  async function safeSetParams(params) {
+    try {
+      await worker.setParameters(params)
+    } catch {
+      // Older tesseract.js builds may not accept some keys. Try them one at a time.
+      for (const [k, v] of Object.entries(params)) {
+        try { await worker.setParameters({ [k]: v }) } catch { /* ignore */ }
+      }
+    }
+  }
+
   try {
-    // OCR each zone; preserve_interword_spaces helps with sparse layouts.
+    // OCR each zone with its own parameter set.
     for (const [name, dataUrl] of Object.entries(zoneDataUrls)) {
       throwIfAborted(signal)
       try {
-        await worker.setParameters({ preserve_interword_spaces: '1' })
+        await safeSetParams(ZONE_TESSERACT_PARAMS[name] || { preserve_interword_spaces: '1' })
         const result = await worker.recognize(dataUrl)
         const text = result.data?.text || ''
         const confidence = Math.round(result.data?.confidence || 0)
@@ -187,8 +213,10 @@ export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
       }
     }
 
-    // Full-page OCR as fallback / cross-check.
+    // Full-page OCR as fallback / cross-check. Reset whitelist first so the
+    // full-page pass can read every character.
     throwIfAborted(signal)
+    await safeSetParams({ preserve_interword_spaces: '1', tessedit_char_whitelist: '' })
     const fullResult = await worker.recognize(fullDataUrl)
     const fullText = fullResult.data?.text || ''
     const fullConfidence = Math.round(fullResult.data?.confidence || 0)

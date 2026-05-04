@@ -177,16 +177,22 @@ export async function parseRecoveryUploadFile(file, options = {}) {
     ocr = await extractOcrFromPdf(file, options)
   }
 
+  const detection = detectScannedBisTrack(extracted.rawText, ocr.fullPageText || ocr.rawText, file.name)
+
   // Use zone-aware parser when zone text is available, otherwise full-page.
   const scanResult = ocr.zoneText
     ? parseBisTrackScannedQuoteFromZones(ocr.zoneText, ocr.fullPageText || ocr.rawText)
     : parseBisTrackScannedQuote(ocr.rawText)
 
+  // If the file name + sparse OCR clearly says "scanned BisTrack quote", make
+  // sure the scan-wins precedence kicks in even when marker count was low.
+  if (detection.likelyBisTrackScan) scanResult.isScannedBisTrack = true
+
   const parsed = extractScannedBisTrackFields(ocr.rawText)
   mergeAllScannedFieldsToFields(parsed, scanResult)
 
   const embeddedLength = (extracted.rawText || '').replace(/\s+/g, '').length
-  const ocrDebug = buildOcrDebug({ embeddedTextLength: embeddedLength, ocr })
+  const ocrDebug = buildOcrDebug({ embeddedTextLength: embeddedLength, ocr, detection })
 
   const avgConfidence = Math.round(
     ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
@@ -208,17 +214,22 @@ export async function parseRecoveryUploadFile(file, options = {}) {
   }
 }
 
-// Writes every field extracted by the scan parser into parsed.fields,
-// using setIfBlank so the text-based scannedPacketParser results win when present.
+// Writes every field extracted by the scan parser into parsed.fields.
+// For scanned BisTrack quotes, zone-OCR values WIN over the text-parser's
+// fallback fishing, because parseBisTrackText running on combined OCR text
+// frequently picks up garbage that then blocks the cleaner zone-OCR value.
 function mergeAllScannedFieldsToFields(parsed, scanResult) {
   if (!scanResult) return
 
-  const setIfBlank = (field, value) => {
-    if (value && !parsed.fields[field]) {
+  const scanWins = Boolean(scanResult.isScannedBisTrack)
+  const setField = (field, value) => {
+    if (!value) return
+    if (scanWins || !parsed.fields[field]) {
       parsed.fields[field] = value
       parsed.sources[field] = 'bistrack-scan'
     }
   }
+  const setIfBlank = setField
 
   const fmt = (n) => (n !== null && n !== undefined ? `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}` : '')
 
@@ -271,7 +282,7 @@ function mergeAllScannedFieldsToFields(parsed, scanResult) {
   }
 }
 
-function buildOcrDebug({ embeddedTextLength, ocr }) {
+function buildOcrDebug({ embeddedTextLength, ocr, detection = null }) {
   const zones = ocr.zones || {}
   const sample = (text) => (text || '').slice(0, 200).replace(/\n+/g, ' ').trim()
   return {
@@ -279,6 +290,9 @@ function buildOcrDebug({ embeddedTextLength, ocr }) {
     fullPageOcrTextSample: sample(ocr.fullPageText || ocr.rawText),
     fullPageOcrConfidence: ocr.fullPageConfidence ?? (ocr.pages?.[0]?.confidence ?? 0),
     extractionSource: ocr.extractionSource || 'ocr',
+    markerHits: detection?.markerHits ?? null,
+    fileHint: detection?.fileHint ?? null,
+    detectionReason: detection?.reason || '',
     zones: {
       metadata: zones.metadata ? { textSample: sample(zones.metadata.text), confidence: zones.metadata.confidence } : null,
       invoiceAddress: zones.invoiceAddress ? { textSample: sample(zones.invoiceAddress.text), confidence: zones.invoiceAddress.confidence } : null,

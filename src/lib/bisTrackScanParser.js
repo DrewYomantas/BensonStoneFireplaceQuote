@@ -11,33 +11,42 @@ const BISTRACK_SCAN_MARKERS = [
   /total\s+amount/i,
   /quotation\s+total/i,
   /balance\s+due/i,
+  /sales\s+tax/i,
+  /customer\s*id/i,
+  /taken\s*by/i,
 ]
 
 function matchCount(text, patterns) {
   return patterns.filter((p) => p.test(text)).length
 }
 
-export function detectScannedBisTrack(embeddedText, ocrText = '') {
+export function detectScannedBisTrack(embeddedText, ocrText = '', fileName = '') {
   const embeddedLength = (embeddedText || '').replace(/\s+/g, '').length
   const isImageOnly = embeddedLength < 50
   const checkText = isImageOnly ? (ocrText || '') : (embeddedText || '')
   const markerHits = matchCount(checkText, BISTRACK_SCAN_MARKERS)
+  const fileHint = /benson\s*stone|bistrack|quote\b|quotation/i.test(String(fileName || ''))
 
-  // For image-only PDFs be very forgiving — even 1 marker hit is enough.
-  // Weak OCR from a real scan often misses several labels; gate only on the
-  // "no embedded text" fact plus minimal OCR evidence.
-  const likelyBisTrackScan = isImageOnly ? markerHits >= 1 : markerHits >= 4
+  // For image-only PDFs be very forgiving — file-name hint OR even 1 marker hit
+  // is enough. Weak OCR from a real scan often misses several labels.
+  const likelyBisTrackScan = isImageOnly
+    ? (markerHits >= 1 || fileHint)
+    : markerHits >= 4
 
   if (isImageOnly && likelyBisTrackScan) {
+    const reasons = []
+    if (markerHits >= 1) reasons.push(`${markerHits} OCR marker${markerHits === 1 ? '' : 's'}`)
+    if (fileHint) reasons.push('file name hint')
     return {
       isImageOnly: true,
       likelyBisTrackScan: true,
-      reason: `No embedded text; OCR markers match Benson/BisTrack quotation (${markerHits} markers)`,
+      reason: `No embedded text; ${reasons.join(' + ') || 'image-only PDF'}`,
       markerHits,
+      fileHint,
     }
   }
   if (isImageOnly) {
-    return { isImageOnly: true, likelyBisTrackScan: false, reason: 'No embedded text; document type unclear from OCR', markerHits }
+    return { isImageOnly: true, likelyBisTrackScan: false, reason: 'No embedded text; document type unclear from OCR', markerHits, fileHint }
   }
   if (likelyBisTrackScan) {
     return {
@@ -45,9 +54,10 @@ export function detectScannedBisTrack(embeddedText, ocrText = '') {
       likelyBisTrackScan: true,
       reason: `BisTrack markers detected in sparse text (${markerHits} markers)`,
       markerHits,
+      fileHint,
     }
   }
-  return { isImageOnly: false, likelyBisTrackScan: false, reason: 'Embedded text found; standard parse', markerHits }
+  return { isImageOnly: false, likelyBisTrackScan: false, reason: 'Embedded text found; standard parse', markerHits, fileHint }
 }
 
 export function normalizeBisTrackOcrText(text) {
@@ -83,27 +93,36 @@ function firstMatch(text, patterns) {
 
 export function parseBisTrackHeaderFields(text) {
   const f = flatLine(text)
+  // Real Tesseract output frequently includes colons after labels (e.g. "Customer ID: 22054")
+  // and replaces "0" with "O", "1" with "I", etc. Patterns below tolerate optional ":" "." "—".
   return {
     quoteNo: firstMatch(f, [
-      /quote\s*no\.?\s*[:#]?\s*(\d{4,7})/i,
-      /quotation\s+(\d{4,7})/i,
+      /quote\s*no\.?\s*[:#-]?\s*(\d{4,7})/i,
+      /quotation\s*[:#]?\s*(\d{4,7})/i,
       /quote\s*#\s*(\d{4,7})/i,
     ]),
     quoteDate: firstMatch(f, [
-      /quote\s*date\s+(\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)/i,
-      /date\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+      /quote\s*date\s*[:-]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)/i,
+      /date\s*[:-]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)/i,
     ]),
-    customerId: firstMatch(f, [/customer\s*id\s*([A-Za-z0-9_]{3,20})/i]),
-    terms: firstMatch(f, [/terms\s+(Pre\s*Paid|PrePaid|Cash|COD|Net\s*\d+|On\s*Account|Paid)/i]),
+    customerId: firstMatch(f, [
+      /customer\s*id\s*[:#-]?\s*([A-Za-z0-9_]{3,20})/i,
+      /\bcust\s*id\s*[:#-]?\s*([A-Za-z0-9_]{3,20})/i,
+    ]),
+    terms: firstMatch(f, [
+      /terms\s*[:-]?\s*(Pre\s*Paid|PrePaid|Cash|COD|Net\s*\d+|On\s*Account|Paid)/i,
+    ]),
     poNumber: firstMatch(f, [
-      /PO#?\s*(INST\s*-\s*[^\n]{2,60}?)(?=\s*(?:Delivery|Taken By|Sales Rep|Tel\.?|Line\b|Special Instructions|\n|$))/i,
-      /PO#?\s*([A-Za-z0-9][^\n]{2,60}?)(?=\s*(?:Delivery By|Taken By|Sales Rep|Tel\.?|Line\b|\n|$))/i,
+      /PO\s*#?\s*[:-]?\s*(INST\s*[-—]\s*[^\n]{2,60}?)(?=\s*(?:Delivery|Taken By|Sales Rep|Tel\.?|Line\b|Special Instructions|\n|$))/i,
+      /PO\s*#?\s*[:-]?\s*([A-Za-z0-9][^\n]{2,60}?)(?=\s*(?:Delivery By|Taken By|Sales Rep|Tel\.?|Line\b|\n|$))/i,
     ]),
     takenBy: firstMatch(f, [
-      /taken\s*by\s+([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i,
-      /took\s*by\s+([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i,
+      /taken\s*by\s*[:-]?\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i,
+      /took\s*by\s*[:-]?\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i,
     ]),
-    salesRep: firstMatch(f, [/sales\s*rep\s+([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i]),
+    salesRep: firstMatch(f, [
+      /sales\s*rep\s*[:-]?\s*([A-Z][A-Za-z]+\s+[A-Z][A-Za-z]+)/i,
+    ]),
   }
 }
 
@@ -111,14 +130,30 @@ const STORE_HINT = /1100\s+eleventh|bensonstone/i
 const PHONE_RE = /(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/
 
 // Parse an address block from arbitrary text — no anchor label required.
-// Used for zone-OCR'd address crops and as fallback.
+// Used for zone-OCR'd address crops and as fallback. Real Tesseract output
+// frequently bleeds two side-by-side address columns into one wide line, so we
+// also split on multi-space gaps when a line looks like "Name<gap>StreetNumber".
 export function parseAddressFromBlock(text) {
-  const lines = text
+  const rawLines = text
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)
-    .filter((l) => !/^(?:invoice|delivery)\s+address/i.test(l))
+    .filter((l) => !/^(?:invoice|delivery)\s+address\s*$/i.test(l))
     .filter((l) => !STORE_HINT.test(l))
+
+  // Split column-bleed lines like "Teresa Geiger    1125 A Inlet" into two.
+  const lines = []
+  for (const line of rawLines) {
+    const m = line.match(/^([A-Z][A-Za-z .'-]{2,40})\s{2,}(\d+\s+\S.*)$/)
+    if (m) {
+      lines.push(m[1].trim())
+      lines.push(m[2].trim())
+      continue
+    }
+    // Strip leading "Invoice Address" / "Delivery Address" if it sits inline.
+    const stripped = line.replace(/^(?:invoice|delivery)\s+address\s*[:-]?\s*/i, '').trim()
+    if (stripped) lines.push(stripped)
+  }
 
   let name = ''
   let addressLine1 = ''
@@ -225,16 +260,17 @@ export function parseBisTrackTotals(text) {
   const f = flatLine(text)
 
   function extractMoney(labelPattern) {
-    const m = f.match(new RegExp(`(?:${labelPattern})[^$0-9-]{0,30}\\$?\\s*([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})`, 'i'))
+    // Tolerate colons, dashes, and stray non-numeric OCR noise between label and value.
+    const m = f.match(new RegExp(`(?:${labelPattern})\\s*[:\\-]?[^$0-9-]{0,40}\\$?\\s*([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})`, 'i'))
     return m ? normalizeBisTrackMoney(m[1]) : null
   }
 
   return {
-    totalAmount: extractMoney('Total Amount|Sub Total|Merchandise Total'),
-    salesTax: extractMoney('Sales Tax|IR Tax'),
+    totalAmount: extractMoney('Total Amount|Sub\\s*Total|Merchandise Total'),
+    salesTax: extractMoney('Sales\\s*Tax|IR\\s*Tax'),
     quotationTotal: extractMoney('Quotation Total|Order Total|Invoice Total|Grand Total|Total Due'),
-    amountPaid: extractMoney('Amount Paid|Amount Pald'),
-    balanceDue: extractMoney('Balance Due'),
+    amountPaid: extractMoney('Amount\\s*Pa[il]d'),
+    balanceDue: extractMoney('Balance\\s*Due'),
   }
 }
 
