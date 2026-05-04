@@ -98,3 +98,22 @@ DEPOSIT_TERMS  = 50% down at time of signing
 - Bring back one lane at a time from parked modules.
 - Attach features to the stripped quote-polish flow — do not rebuild the old command-board shell.
 - Private files in `src/data/bistrack-snapshot/` and `Fireplace Department/` stay local, never commit.
+
+## Two Scanned-PDF Intake Paths — Keep Them in Sync
+
+Image-only / scanned BisTrack PDFs flow through **two** separate code paths. Any change to OCR, scan classification, or scan→fields merging must touch both:
+
+1. `src/components/WorkbenchShell.jsx` `handleFile` — top-bar "Drop BisTrack PDF" button
+2. `src/lib/recoveryUploadIntake.js` `parseRecoveryUploadFile` — Old Quote Recovery upload
+
+Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuoteFromZones`, then overlay onto `parsed.fields` with **scan-wins** semantics for scanned BisTrack quotes. `setIfBlank` is wrong here: `extractScannedBisTrackFields` runs `parseBisTrackText` first and fills slots with garbage that blocks the cleaner zone-OCR value.
+
+## OCR / Tesseract Notes
+
+- The Benson Stone store address ("Rockford, IL 61104", "Co Rockford", etc.) frequently bleeds into customer slots — `STORE_HINT` in `bisTrackScanParser.js` and the `STORE_VALUE` scrub in the merge helpers must catch the variants Tesseract actually produces, not just clean strings.
+- Per-zone Tesseract `setParameters` may throw on unknown keys in older builds — wrap in try/catch and degrade per-key.
+- Real-world scan PDFs are gitignored (private customer data). Validation = `npm test` + `npm run build` + targeted `eslint <changed files>`. No browser preview against real fixtures.
+
+## Pre-existing Lint Debt
+
+`src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter that ESLint flags. Leave it alone in unrelated work — fixing it would change a public function signature.
