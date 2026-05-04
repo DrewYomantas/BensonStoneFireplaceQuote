@@ -5,6 +5,9 @@ import {
   derivePacketReadiness,
   deriveLifecycleStage,
   deriveQuoteStatus,
+  deriveQueueBucket,
+  deriveNextBestAction,
+  deriveHandoffReadiness,
   getCurrentStageIndex,
   getNextStage,
   getStatusLabel,
@@ -16,6 +19,7 @@ function richFile(overrides = {}) {
     customerPhone: '5551212',
     customerGoal: 'Convert wood insert to gas',
     opportunityId: 'quote-1',
+    lineItemQuoteIncluded: 'true',
   })
   return { ...base, ...overrides }
 }
@@ -51,7 +55,7 @@ describe('quoteStatusEngine', () => {
     const walked = { ...visit, displaysShown: [{ id: 'd1', label: 'Mendota DXV' }] }
     assert.equal(deriveQuoteStatus(walked).status, 'awaiting-quote-import')
 
-    const imported = { ...walked, opportunityId: 'q-1', customerPhone: '1', customerGoal: 'g' }
+    const imported = { ...walked, opportunityId: 'q-1', customerPhone: '1', customerGoal: 'g', lineItemQuoteIncluded: 'true' }
     assert.equal(deriveQuoteStatus(imported).status, 'ready-to-generate-packet')
 
     const generated = { ...imported, packetGeneratedAt: new Date().toISOString() }
@@ -69,6 +73,19 @@ describe('quoteStatusEngine', () => {
     const idx = getCurrentStageIndex(file)
     assert.ok(idx >= 3, `expected at least quote-imported, got ${idx}`)
     assert.ok(getNextStage(file))
+  })
+
+
+  it('derives expanded queue bucket, next action, and handoff readiness', () => {
+    const file = richFile({
+      likelyPath: 'Gas insert path',
+      photos: [{ id: 'p1' }],
+      measurements: [{ id: 'm1' }],
+      existingApplianceType: 'fireplace',
+    })
+    assert.equal(deriveQueueBucket(file), 'ready-to-generate-packet')
+    assert.equal(deriveHandoffReadiness(file).state, 'ready_to_create')
+    assert.equal(deriveNextBestAction({ ...file, packetGeneratedAt: new Date().toISOString(), packetSentAt: new Date().toISOString() }), 'Create scheduler/home-measure handoff')
   })
 
   it('exports human labels for status', () => {

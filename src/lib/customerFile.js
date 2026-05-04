@@ -27,6 +27,7 @@ const stringKeys = [
   'createdAt',
   'updatedAt',
   'visitedAt',
+  'archivedAt',
   // Contact
   'customerName',
   'customerEmail',
@@ -41,18 +42,40 @@ const stringKeys = [
   'customerGoal',
   'goalNotes',
   'budgetBand',
-  // Model tag (when a specific display unit was tagged)
+  'customerPainPoints',
+  'heatExpectation',
+  'likelyPath',
+  'nextBestQuestion',
+  'guidedPathNotes',
+  'guidedPathCustomerSummary',
+  // Model tag / appliance verification
   'taggedModel',
   'taggedVendor',
+  'modelTagReceived',
   // Packet status
   'lineItemQuoteIncluded',     // 'true' | 'false' | ''
+  'lineItemQuoteExcludedReason',
+  'detailedInvestmentBreakdownIncluded',
+  'scopeResponsibilityNotesIncluded',
+  'brochuresSamplesSummaryIncluded',
+  'brochuresSamplesSummary',
   'packetGeneratedAt',
+  'packetPrintedAt',
+  'packetEmailDraftStatus',
   'packetSentAt',
   'packetSendChannel',         // sendChannels
   // Handoff
   'handoffType',
+  'handoffState',
   'handoffScheduledFor',
+  'handoffCreatedAt',
+  'handoffSentAt',
+  'handoffMeasureCompletedAt',
+  'handoffMissingVerification',
+  'handoffConcerns',
+  'handoffSchedulerExpectation',
   'handoffNotes',
+  'handoffSummary',
   // Pricing
   'pricingConfirmedAt',
 ]
@@ -63,6 +86,7 @@ const arrayKeys = [
   'displaysShown',             // [{ id, displayId, label, shownAt }]
   'brochuresGiven',            // [{ id, label, vendor, givenAt }]
   'samplesGiven',              // [{ id, label, givenAt }]
+  'pinnedReferences',         // [{ id, referenceId, label, sourceLabel, pinnedAt }]
   'followUpTasks',             // [{ id, label, dueAt, doneAt }]
   'notes',                     // [{ id, body, createdAt }]
 ]
@@ -163,6 +187,22 @@ export function removeCustomerFile(id, storage) {
   const remaining = listCustomerFiles(storage).filter((f) => f.id !== id)
   writeAll(remaining, storage)
   return remaining
+}
+
+export function mergeCustomerFileWithOpportunity(file = {}, opportunity = {}, now = new Date()) {
+  const current = sanitizeCustomerFile(file)
+  return sanitizeCustomerFile({
+    ...current,
+    opportunityId: opportunity.id || current.opportunityId,
+    customerName: current.customerName || opportunity.customerName || '',
+    customerEmail: current.customerEmail || opportunity.customerEmail || '',
+    customerPhone: current.customerPhone || opportunity.customerPhone || '',
+    projectAddress: current.projectAddress || opportunity.projectAddress || '',
+    existingNotes: current.existingNotes || opportunity.existingSetup || '',
+    customerGoal: current.customerGoal || opportunity.desiredOutcome || '',
+    lineItemQuoteIncluded: current.lineItemQuoteIncluded || (opportunity.lineItemQuoteAttached === 'true' ? 'true' : ''),
+    updatedAt: nowIso(now),
+  })
 }
 
 // --- Adapter: hydrate a customer file from a parsed BizTrack opportunity ---

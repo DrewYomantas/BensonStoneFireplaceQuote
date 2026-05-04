@@ -37,9 +37,10 @@ This app is a presentation layer on top of Epicor BisTrack. BisTrack creates the
 
 ## Architecture
 
-React + Vite + Tailwind. No component library. No TypeScript.
+React + Vite + plain CSS (`src/App.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — active shell (PDF upload → field review → proposal preview → print)
+- `src/App.jsx` — entry point; delegates entirely to `src/components/WorkbenchShell.jsx`
+- `src/components/WorkbenchShell.jsx` — main orchestrator; owns all state, the PDF parse pipeline, opportunity queue, and proposal/export flow
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit

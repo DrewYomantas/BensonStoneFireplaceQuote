@@ -8,6 +8,7 @@ import {
   getCustomerFileByOpportunity,
   listCustomerFiles,
   makeCustomerFileId,
+  mergeCustomerFileWithOpportunity,
   saveCustomerFile,
   updateCustomerFile,
   removeCustomerFile,
@@ -103,4 +104,33 @@ describe('customerFile model', () => {
     assert.deepEqual(dirty.photos, [])
     assert.equal(dirty.randomKey, undefined)
   })
+
+  it('merges a saved showroom visit with a newly imported quote without erasing visit context', () => {
+    const visit = createEmptyCustomerFile({
+      customerName: 'Showroom Customer',
+      customerPhone: '555-0000',
+      customerGoal: 'Wants less mess from existing fireplace',
+      likelyPath: 'Gas logs or gas insert discussion',
+      photos: [{ id: 'p1', label: 'Phone photo' }],
+    })
+    const merged = mergeCustomerFileWithOpportunity(visit, {
+      id: 'quote-77',
+      customerName: 'Different Parsed Name',
+      customerEmail: 'parsed@example.com',
+      customerPhone: '',
+      desiredOutcome: 'Parsed goal should not replace visit notes',
+      lineItemQuoteAttached: 'true',
+    }, new Date('2026-05-03T12:00:00.000Z'))
+
+    assert.equal(merged.id, visit.id)
+    assert.equal(merged.opportunityId, 'quote-77')
+    assert.equal(merged.customerName, 'Showroom Customer')
+    assert.equal(merged.customerPhone, '555-0000')
+    assert.equal(merged.customerEmail, 'parsed@example.com')
+    assert.equal(merged.customerGoal, 'Wants less mess from existing fireplace')
+    assert.equal(merged.likelyPath, 'Gas logs or gas insert discussion')
+    assert.equal(merged.photos.length, 1)
+    assert.equal(merged.lineItemQuoteIncluded, 'true')
+  })
+
 })

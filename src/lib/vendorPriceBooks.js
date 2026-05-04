@@ -77,19 +77,18 @@ export function getPriceBookPath(vendor) {
 }
 
 export function matchVendorToQuote(vendors = [], { fields = {}, lineItems = [] } = {}) {
-  const quoteText = normalizeText(
-    [
-      fields.PROJECT_TITLE,
-      fields.PROJECT_SCOPE_SUMMARY,
-      fields.PROJECT_NOTES,
-      fields.INSTALLATION_SCOPE,
-      ...lineItems.map(
-        (item) =>
-          `${item.sku || item.code || item.productCode || ''} ${item.description || item.name || ''}`,
-      ),
-    ].join(' '),
+  const fieldText = normalizeText(
+    [fields.PROJECT_TITLE, fields.PROJECT_SCOPE_SUMMARY, fields.PROJECT_NOTES, fields.INSTALLATION_SCOPE].join(' '),
   )
 
+  const lineItemEntries = lineItems.map((item) => ({
+    normalized: normalizeText(
+      `${item.sku || item.code || item.productCode || ''} ${item.description || item.name || ''}`,
+    ),
+    label: (item.description || item.name || item.sku || item.code || '').slice(0, 60),
+  }))
+
+  const quoteText = [fieldText, ...lineItemEntries.map((l) => l.normalized)].join(' ')
   if (!quoteText.trim()) return []
 
   const seen = new Set()
@@ -100,9 +99,15 @@ export function matchVendorToQuote(vendors = [], { fields = {}, lineItems = [] }
     if (seen.has(familyKey)) continue
     for (const alias of vendor.aliases || []) {
       const normalized = normalizeText(alias)
-      if (normalized && quoteText.includes(normalized)) {
+      if (!normalized) continue
+      if (quoteText.includes(normalized)) {
         seen.add(familyKey)
-        matched.push(vendor)
+        let matchReason = 'Matched from project notes'
+        if (!fieldText.includes(normalized)) {
+          const hit = lineItemEntries.find((l) => l.normalized.includes(normalized))
+          if (hit) matchReason = `Matched from line item: ${hit.label}`
+        }
+        matched.push({ ...vendor, matchReason })
         break
       }
     }
