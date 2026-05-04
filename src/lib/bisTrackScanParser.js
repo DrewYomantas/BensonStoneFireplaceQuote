@@ -22,29 +22,34 @@ export function detectScannedBisTrack(embeddedText, ocrText = '') {
   const isImageOnly = embeddedLength < 50
   const checkText = isImageOnly ? (ocrText || '') : (embeddedText || '')
   const markerHits = matchCount(checkText, BISTRACK_SCAN_MARKERS)
-  const likelyBisTrackScan = markerHits >= 4
+
+  // For image-only PDFs be very forgiving — even 1 marker hit is enough.
+  // Weak OCR from a real scan often misses several labels; gate only on the
+  // "no embedded text" fact plus minimal OCR evidence.
+  const likelyBisTrackScan = isImageOnly ? markerHits >= 1 : markerHits >= 4
 
   if (isImageOnly && likelyBisTrackScan) {
     return {
       isImageOnly: true,
       likelyBisTrackScan: true,
       reason: `No embedded text; OCR markers match Benson/BisTrack quotation (${markerHits} markers)`,
+      markerHits,
     }
   }
   if (isImageOnly) {
-    return { isImageOnly: true, likelyBisTrackScan: false, reason: 'No embedded text; document type unclear from OCR' }
+    return { isImageOnly: true, likelyBisTrackScan: false, reason: 'No embedded text; document type unclear from OCR', markerHits }
   }
   if (likelyBisTrackScan) {
     return {
       isImageOnly: false,
       likelyBisTrackScan: true,
       reason: `BisTrack markers detected in sparse text (${markerHits} markers)`,
+      markerHits,
     }
   }
-  return { isImageOnly: false, likelyBisTrackScan: false, reason: 'Embedded text found; standard parse' }
+  return { isImageOnly: false, likelyBisTrackScan: false, reason: 'Embedded text found; standard parse', markerHits }
 }
 
-// Fix common OCR character confusions only where safe in BisTrack context.
 export function normalizeBisTrackOcrText(text) {
   return String(text || '')
     .replace(/\r/g, '')
@@ -104,17 +109,79 @@ export function parseBisTrackHeaderFields(text) {
 
 const STORE_HINT = /1100\s+eleventh|bensonstone/i
 const PHONE_RE = /(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/
+
+// Parse an address block from arbitrary text — no anchor label required.
+// Used for zone-OCR'd address crops and as fallback.
+export function parseAddressFromBlock(text) {
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !/^(?:invoice|delivery)\s+address/i.test(l))
+    .filter((l) => !STORE_HINT.test(l))
+
+  let name = ''
+  let addressLine1 = ''
+  let cityStateZip = ''
+  let phone = ''
+
+  for (const line of lines) {
+    const stripped = line.replace(/\bTel\.?\s*\d?\s*[-:]?\s*/gi, '').trim()
+    const phoneM = stripped.match(PHONE_RE)
+    if (phoneM && stripped.replace(PHONE_RE, '').replace(/[\s.-]+/g, '').length < 5) {
+      phone = phone || phoneM[1]
+      continue
+    }
+    if (!addressLine1 && /^\d+\s+\S/.test(line)) {
+      addressLine1 = line
+      continue
+    }
+    if (!cityStateZip && /\d{5}/.test(line) && !/^\d+\s+\S/.test(line)) {
+      cityStateZip = line
+      continue
+    }
+    if (!name && /^[A-Z]/.test(line) && !/^\d/.test(line) && line.length < 60) {
+      name = line
+    }
+  }
+
+  return { name, addressLine1, cityStateZip, phone }
+}
+
 const BLOCK_STOP = /^(?:delivery\s+address|invoice\s+address|quote\s*no|customer\s*id|terms|po#|line\s+product|total\s+amount|sales\s+tax|quotation\s+total|balance\s+due)/i
 
 export function parseBisTrackAddressBlocks(text) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
 
-  function extractBlock(anchorLabel) {
-    const anchorIdx = lines.findIndex((l) => new RegExp(`^${anchorLabel}$`, 'i').test(l))
-    if (anchorIdx === -1) return { name: '', addressLine1: '', cityStateZip: '', phone: '' }
+  function findAnchor(label) {
+    const labelRe = new RegExp(`\\b${label}\\b`, 'i')
+    const exactRe = new RegExp(`^${label}$`, 'i')
+
+    // Prefer exact standalone match
+    let idx = lines.findIndex((l) => exactRe.test(l))
+    if (idx !== -1) return { idx, inlineAfter: '' }
+
+    // Fall back to substring match (e.g. "Invoice Address Delivery Address")
+    idx = lines.findIndex((l) => labelRe.test(l))
+    if (idx !== -1) {
+      const after = lines[idx].replace(labelRe, '').trim()
+      return { idx, inlineAfter: after }
+    }
+    return null
+  }
+
+  function extractBlock(label) {
+    const anchor = findAnchor(label)
+    if (!anchor) return { name: '', addressLine1: '', cityStateZip: '', phone: '' }
 
     const block = []
-    for (let i = anchorIdx + 1; i < lines.length && block.length < 8; i++) {
+
+    // If the anchor line had content after the label, include it as the first line
+    if (anchor.inlineAfter && !BLOCK_STOP.test(anchor.inlineAfter)) {
+      block.push(anchor.inlineAfter)
+    }
+
+    for (let i = anchor.idx + 1; i < lines.length && block.length < 8; i++) {
       if (BLOCK_STOP.test(lines[i])) break
       if (STORE_HINT.test(lines[i])) continue
       block.push(lines[i])
@@ -198,9 +265,10 @@ export function parseBisTrackLineItems(text) {
   const FULL_ROW = /^(\d{1,3})\s+(\S+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(EA|FT|LF|EACH|PC|PCS|PR|BX|BG|SET|SF|SY|YD|HR)\s+([\d,]+\.\d{2})\s+(?:EA\s+)?[\d,]+\.\d{2}\s+([\d,]+\.\d{2})\s*$/i
 
   // Installation row: lineNo "Installation Xxx" description ... total
+  // Must be checked before FULL_ROW so "Installation Fireplace" isn't split by \S+
   const INSTALL_ROW = /^(\d{1,3})\s+(Installation\s+\w+)\s+(.+?)\s+(?:\d+\s+)?(?:(?:EA|FT|LF)\s+)?(?:[\d,]+\.\d{2}\s+){0,2}([\d,]+\.\d{2})\s*$/i
 
-  // Short row: lineNo code description total (minimal columns after scan noise)
+  // Short row: lineNo code description total (degraded columns)
   const SHORT_ROW = /^(\d{1,3})\s+([A-Za-z0-9_.\-/]+)\s+(.+?)\s+([\d,]+\.\d{2})\s*$/
 
   const NOTE_LINE = /^note:?\s+(.+)/i
@@ -214,8 +282,6 @@ export function parseBisTrackLineItems(text) {
       continue
     }
 
-    // Check installation-style two-word codes before the generic FULL_ROW
-    // so that "Installation Fireplace" isn't split by \S+.
     const installM = line.match(INSTALL_ROW)
     if (installM) {
       const [, lineNo, code, desc, total] = installM
@@ -354,6 +420,44 @@ export function parseBisTrackScannedQuote(text) {
     score,
     issues,
     extractionSource: 'bistrack-scan',
+    extractionConfidence: score.overall,
+    isScannedBisTrack: true,
+  }
+}
+
+// Zone-aware orchestrator: each zone text is fed to the parser that matches its content.
+// Falls back to full-page text for any zone that is empty.
+export function parseBisTrackScannedQuoteFromZones(zoneTexts, fullPageText = '') {
+  const n = (t) => normalizeBisTrackOcrText(t || fullPageText || '')
+
+  const metaText = n(zoneTexts.metadata)
+  const invoiceText = n(zoneTexts.invoiceAddress)
+  const deliveryText = n(zoneTexts.deliveryAddress)
+  const tableText = n(zoneTexts.table)
+  const totalsText = n(zoneTexts.totals)
+  const fallback = n(fullPageText)
+
+  const header = parseBisTrackHeaderFields(metaText || fallback)
+
+  // Parse addresses directly from zone blocks (no anchor search needed for zone text)
+  const invoice = invoiceText ? parseAddressFromBlock(invoiceText) : (parseBisTrackAddressBlocks(fallback).invoice)
+  const delivery = deliveryText ? parseAddressFromBlock(deliveryText) : (parseBisTrackAddressBlocks(fallback).delivery)
+  const addresses = { invoice, delivery }
+
+  const totals = parseBisTrackTotals(totalsText || fallback)
+  const lineItems = parseBisTrackLineItems(tableText || fallback)
+
+  const score = scoreBisTrackScanExtraction({ header, addresses, totals, lineItems })
+  const issues = buildScannedBisTrackIssues(score, header, addresses, totals)
+
+  return {
+    header,
+    addresses,
+    totals,
+    lineItems,
+    score,
+    issues,
+    extractionSource: 'bistrack-zone-ocr',
     extractionConfidence: score.overall,
     isScannedBisTrack: true,
   }

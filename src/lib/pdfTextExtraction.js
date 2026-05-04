@@ -119,44 +119,101 @@ export async function extractOcrFromPdf(file, options = {}) {
   }
 }
 
-// Renders the first page of a scanned BisTrack quote at higher resolution with
-// canvas preprocessing, then OCRs the result. Falls back to standard scale on error.
+// Portrait BisTrack quote zones as fractions of page dimensions.
+const BISTRACK_PORTRAIT_ZONES = {
+  metadata: { left: 0.60, top: 0.05, right: 0.98, bottom: 0.26 },
+  invoiceAddress: { left: 0.04, top: 0.13, right: 0.34, bottom: 0.29 },
+  deliveryAddress: { left: 0.34, top: 0.13, right: 0.62, bottom: 0.29 },
+  table: { left: 0.02, top: 0.34, right: 0.98, bottom: 0.79 },
+  totals: { left: 0.67, top: 0.79, right: 0.98, bottom: 0.96 },
+}
+
+// Renders the first page at 2.75× with canvas preprocessing, OCRs five fixed
+// zones separately, and also OCRs the full page as fallback. Returns zone texts
+// as structured objects so callers can route each zone to the right parser.
 export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
   const { onProgress, signal } = options
   throwIfAborted(signal)
 
-  const BISTRACK_SCAN_SCALE = 2.75
+  const SCALE = 2.75
   const pdf = await loadPdf(file)
   throwIfAborted(signal)
   onProgress?.({ stage: 'rendering', pageNumber: 1, pageCount: pdf.numPages })
 
   const page = await pdf.getPage(1)
-  const viewport = page.getViewport({ scale: BISTRACK_SCAN_SCALE })
+  const viewport = page.getViewport({ scale: SCALE })
   const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d', { willReadFrequently: true })
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   canvas.width = Math.floor(viewport.width)
   canvas.height = Math.floor(viewport.height)
-  await page.render({ canvasContext: context, viewport }).promise
+  await page.render({ canvasContext: ctx, viewport }).promise
   throwIfAborted(signal)
 
-  const { preprocessCanvasForOcr } = await import('./ocrImagePreprocess.js')
-  const processed = preprocessCanvasForOcr(canvas, { contrast: 40, border: 10 })
-  const dataUrl = processed.toDataURL('image/png')
+  const { addWhiteBorder, boostContrastCanvas, cropCanvasByPercent, grayscaleCanvas } = await import('./ocrImagePreprocess.js')
+
+  // Preprocess the full canvas in-place; zone crops inherit the preprocessing.
+  grayscaleCanvas(canvas)
+  boostContrastCanvas(canvas, 40)
+  const fullWithBorder = addWhiteBorder(canvas, 10)
+  const fullDataUrl = fullWithBorder.toDataURL('image/png')
+
+  // Crop each zone from the preprocessed canvas.
+  const zoneDataUrls = {}
+  for (const [name, zone] of Object.entries(BISTRACK_PORTRAIT_ZONES)) {
+    const crop = cropCanvasByPercent(canvas, zone)
+    zoneDataUrls[name] = addWhiteBorder(crop, 8).toDataURL('image/png')
+  }
 
   onProgress?.({ stage: 'ocr', pageNumber: 1, pageCount: 1 })
   const { createWorker } = await import('tesseract.js')
   const worker = await createWorker('eng')
+  const zones = {}
+  const zoneText = {}
+
   try {
+    // OCR each zone; preserve_interword_spaces helps with sparse layouts.
+    for (const [name, dataUrl] of Object.entries(zoneDataUrls)) {
+      throwIfAborted(signal)
+      try {
+        await worker.setParameters({ preserve_interword_spaces: '1' })
+        const result = await worker.recognize(dataUrl)
+        const text = result.data?.text || ''
+        const confidence = Math.round(result.data?.confidence || 0)
+        zones[name] = { text, confidence }
+        zoneText[name] = text
+      } catch {
+        zones[name] = { text: '', confidence: 0 }
+        zoneText[name] = ''
+      }
+    }
+
+    // Full-page OCR as fallback / cross-check.
     throwIfAborted(signal)
-    const result = await worker.recognize(dataUrl)
-    throwIfAborted(signal)
-    const text = result.data?.text || ''
-    const confidence = Math.round(result.data?.confidence || 0)
+    const fullResult = await worker.recognize(fullDataUrl)
+    const fullText = fullResult.data?.text || ''
+    const fullConfidence = Math.round(fullResult.data?.confidence || 0)
+    zones.fullPage = { text: fullText, confidence: fullConfidence }
+    zoneText.full = fullText
+
+    // Build combined text with section headers for parsers that accept raw text.
+    const combined = [
+      zones.metadata?.text ? `--- METADATA ZONE ---\n${zones.metadata.text}` : '',
+      zones.invoiceAddress?.text ? `--- INVOICE ADDRESS ZONE ---\n${zones.invoiceAddress.text}` : '',
+      zones.deliveryAddress?.text ? `--- DELIVERY ADDRESS ZONE ---\n${zones.deliveryAddress.text}` : '',
+      zones.table?.text ? `--- TABLE ZONE ---\n${zones.table.text}` : '',
+      zones.totals?.text ? `--- TOTALS ZONE ---\n${zones.totals.text}` : '',
+      fullText ? `--- FULL PAGE FALLBACK ---\n${fullText}` : '',
+    ].filter(Boolean).join('\n\n')
+
     return {
-      pages: [{ pageNumber: 1, text, confidence, imageDataUrl: dataUrl }],
-      rawText: text,
+      pages: [{ pageNumber: 1, text: combined, confidence: fullConfidence, imageDataUrl: fullDataUrl }],
+      rawText: combined,
+      fullPageText: fullText,
+      fullPageConfidence: fullConfidence,
       pageCount: 1,
-      extractionSource: 'bistrack-scan-ocr',
+      extractionSource: 'bistrack-zone-ocr',
+      zones,
+      zoneText,
     }
   } finally {
     await worker.terminate()

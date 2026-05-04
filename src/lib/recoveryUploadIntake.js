@@ -1,5 +1,5 @@
 import { parseBisTrackText } from './biztrackPdfParser.js'
-import { detectScannedBisTrack, parseBisTrackScannedQuote } from './bisTrackScanParser.js'
+import { detectScannedBisTrack, parseBisTrackScannedQuote, parseBisTrackScannedQuoteFromZones } from './bisTrackScanParser.js'
 import { evaluateCurrentSetup } from './currentSetup.js'
 import { extractScannedBisTrackFields } from './scannedPacketParser.js'
 
@@ -125,10 +125,11 @@ export async function parseRecoveryUploadFile(file, options = {}) {
   if (file.type?.startsWith('image/')) {
     onProgress?.('Reading image with OCR...')
     const ocr = await extractOcrFromImage(file, options)
-    const detection = detectScannedBisTrack('', ocr.rawText)
-    const scanResult = detection.likelyBisTrackScan ? parseBisTrackScannedQuote(ocr.rawText) : null
+    // Image files are always image-only; always attempt BisTrack scan parse.
+    const scanResult = parseBisTrackScannedQuote(ocr.rawText)
     const parsed = extractScannedBisTrackFields(ocr.rawText)
-    if (scanResult) mergeScannedLineItemsToFields(parsed, scanResult)
+    mergeAllScannedFieldsToFields(parsed, scanResult)
+    const ocrDebug = buildOcrDebug({ embeddedTextLength: 0, ocr })
     return {
       intake: recoveryIntakeFromParsedQuote({
         fileName: file.name,
@@ -142,6 +143,7 @@ export async function parseRecoveryUploadFile(file, options = {}) {
       rawText: ocr.rawText,
       usedOcr: true,
       scanResult,
+      ocrDebug,
     }
   }
 
@@ -166,26 +168,25 @@ export async function parseRecoveryUploadFile(file, options = {}) {
     }
   }
 
-  // Scanned / image-only PDF: detect BisTrack format, use higher-res render if matched
-  onProgress?.('Scanned PDF detected. Running OCR...')
-  const detection = detectScannedBisTrack(extracted.rawText || '')
-
+  // Scanned / image-only PDF — always use the BisTrack high-res zone OCR path.
+  onProgress?.('Scanned PDF detected — running zone OCR at higher resolution...')
   let ocr
-  if (detection.likelyBisTrackScan || detection.isImageOnly) {
-    onProgress?.('BisTrack scan detected — rendering at higher resolution...')
-    try {
-      ocr = await extractOcrFromPdfForBisTrackScan(file, options)
-    } catch {
-      ocr = await extractOcrFromPdf(file, options)
-    }
-  } else {
+  try {
+    ocr = await extractOcrFromPdfForBisTrackScan(file, options)
+  } catch {
     ocr = await extractOcrFromPdf(file, options)
   }
 
-  const ocrDetection = detectScannedBisTrack('', ocr.rawText)
-  const scanResult = ocrDetection.likelyBisTrackScan ? parseBisTrackScannedQuote(ocr.rawText) : null
+  // Use zone-aware parser when zone text is available, otherwise full-page.
+  const scanResult = ocr.zoneText
+    ? parseBisTrackScannedQuoteFromZones(ocr.zoneText, ocr.fullPageText || ocr.rawText)
+    : parseBisTrackScannedQuote(ocr.rawText)
+
   const parsed = extractScannedBisTrackFields(ocr.rawText)
-  if (scanResult) mergeScannedLineItemsToFields(parsed, scanResult)
+  mergeAllScannedFieldsToFields(parsed, scanResult)
+
+  const embeddedLength = (extracted.rawText || '').replace(/\s+/g, '').length
+  const ocrDebug = buildOcrDebug({ embeddedTextLength: embeddedLength, ocr })
 
   const avgConfidence = Math.round(
     ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
@@ -203,36 +204,88 @@ export async function parseRecoveryUploadFile(file, options = {}) {
     rawText: ocr.rawText,
     usedOcr: true,
     scanResult,
+    ocrDebug,
   }
 }
 
-// If the structured scan parser found line items but the field-contract parser did not,
-// apply the scan items to the field slots.
-function mergeScannedLineItemsToFields(parsed, scanResult) {
-  const existingItems = parsed.lineItems || []
-  const scanItems = (scanResult.lineItems || []).filter((i) => !i.isNote)
-  if (existingItems.length > 0 || scanItems.length === 0) return
+// Writes every field extracted by the scan parser into parsed.fields,
+// using setIfBlank so the text-based scannedPacketParser results win when present.
+function mergeAllScannedFieldsToFields(parsed, scanResult) {
+  if (!scanResult) return
 
-  let detail = 1
-  let slot = 0
-  for (const item of scanItems) {
-    if (slot >= 9) {
-      if (detail === 2) break
-      detail = 2
-      slot = 0
+  const setIfBlank = (field, value) => {
+    if (value && !parsed.fields[field]) {
+      parsed.fields[field] = value
+      parsed.sources[field] = 'bistrack-scan'
     }
-    slot += 1
-    const label = [item.code, item.description].filter(Boolean).join(' - ').slice(0, 200)
-    parsed.fields[`DETAIL_${detail}_ITEM_${slot}`] = label
-    parsed.fields[`DETAIL_${detail}_QTY_${slot}`] = item.qty ? `${item.qty} ${item.unit}`.trim() : ''
-    parsed.fields[`DETAIL_${detail}_UNIT_PRICE_${slot}`] = item.unitPrice || ''
-    parsed.fields[`DETAIL_${detail}_TOTAL_${slot}`] = item.total || ''
-    parsed.sources[`DETAIL_${detail}_ITEM_${slot}`] = 'bistrack-scan'
   }
-  if (scanItems.length) {
+
+  const fmt = (n) => (n !== null && n !== undefined ? `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}` : '')
+
+  const h = scanResult.header || {}
+  setIfBlank('QUOTE_NO', h.quoteNo)
+  setIfBlank('QUOTE_DATE', h.quoteDate)
+  setIfBlank('CUSTOMER_ID', h.customerId)
+  setIfBlank('PAYMENT_TERMS', h.terms)
+  setIfBlank('PO_NUMBER', h.poNumber)
+  setIfBlank('TAKEN_BY', h.takenBy)
+  setIfBlank('SALES_REP', h.salesRep)
+
+  const invoice = scanResult.addresses?.invoice || {}
+  const delivery = scanResult.addresses?.delivery || {}
+  setIfBlank('CUSTOMER_NAME', invoice.name)
+  setIfBlank('INVOICE_ADDRESS_LINE_1', invoice.addressLine1)
+  setIfBlank('INVOICE_CITY_STATE_ZIP', invoice.cityStateZip)
+  setIfBlank('CUSTOMER_PHONE', invoice.phone)
+  setIfBlank('PROJECT_ADDRESS_LINE_1', delivery.addressLine1 || invoice.addressLine1)
+  setIfBlank('PROJECT_CITY_STATE_ZIP', delivery.cityStateZip || invoice.cityStateZip)
+
+  const totals = scanResult.totals || {}
+  setIfBlank('TOTAL_AMOUNT', fmt(totals.totalAmount))
+  setIfBlank('IR_TAX', fmt(totals.salesTax))
+  setIfBlank('QUOTATION_TOTAL', fmt(totals.quotationTotal))
+  setIfBlank('BALANCE_DUE', fmt(totals.balanceDue))
+
+  // Apply scan line items when field-contract parser found none.
+  const scanItems = (scanResult.lineItems || []).filter((i) => !i.isNote)
+  if (scanItems.length > 0 && !(parsed.lineItems || []).length) {
+    let detail = 1
+    let slot = 0
+    for (const item of scanItems) {
+      if (slot >= 9) {
+        if (detail === 2) break
+        detail = 2
+        slot = 0
+      }
+      slot += 1
+      const label = [item.code, item.description].filter(Boolean).join(' - ').slice(0, 200)
+      parsed.fields[`DETAIL_${detail}_ITEM_${slot}`] = label
+      parsed.fields[`DETAIL_${detail}_QTY_${slot}`] = item.qty ? `${item.qty} ${item.unit}`.trim() : ''
+      parsed.fields[`DETAIL_${detail}_UNIT_PRICE_${slot}`] = item.unitPrice || ''
+      parsed.fields[`DETAIL_${detail}_TOTAL_${slot}`] = item.total || ''
+      parsed.sources[`DETAIL_${detail}_ITEM_${slot}`] = 'bistrack-scan'
+    }
     parsed.fields.DETAIL_SECTION_1_TITLE = parsed.fields.DETAIL_SECTION_1_TITLE || 'Fireplace, venting, and materials'
     parsed.fields.DETAIL_SECTION_2_TITLE = parsed.fields.DETAIL_SECTION_2_TITLE || 'Additional materials and labor'
     parsed.lineItems = scanItems
+  }
+}
+
+function buildOcrDebug({ embeddedTextLength, ocr }) {
+  const zones = ocr.zones || {}
+  const sample = (text) => (text || '').slice(0, 200).replace(/\n+/g, ' ').trim()
+  return {
+    embeddedTextLength,
+    fullPageOcrTextSample: sample(ocr.fullPageText || ocr.rawText),
+    fullPageOcrConfidence: ocr.fullPageConfidence ?? (ocr.pages?.[0]?.confidence ?? 0),
+    extractionSource: ocr.extractionSource || 'ocr',
+    zones: {
+      metadata: zones.metadata ? { textSample: sample(zones.metadata.text), confidence: zones.metadata.confidence } : null,
+      invoiceAddress: zones.invoiceAddress ? { textSample: sample(zones.invoiceAddress.text), confidence: zones.invoiceAddress.confidence } : null,
+      deliveryAddress: zones.deliveryAddress ? { textSample: sample(zones.deliveryAddress.text), confidence: zones.deliveryAddress.confidence } : null,
+      table: zones.table ? { textSample: sample(zones.table.text), confidence: zones.table.confidence } : null,
+      totals: zones.totals ? { textSample: sample(zones.totals.text), confidence: zones.totals.confidence } : null,
+    },
   }
 }
 
