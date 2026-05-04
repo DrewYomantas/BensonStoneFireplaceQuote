@@ -119,6 +119,50 @@ export async function extractOcrFromPdf(file, options = {}) {
   }
 }
 
+// Renders the first page of a scanned BisTrack quote at higher resolution with
+// canvas preprocessing, then OCRs the result. Falls back to standard scale on error.
+export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
+  const { onProgress, signal } = options
+  throwIfAborted(signal)
+
+  const BISTRACK_SCAN_SCALE = 2.75
+  const pdf = await loadPdf(file)
+  throwIfAborted(signal)
+  onProgress?.({ stage: 'rendering', pageNumber: 1, pageCount: pdf.numPages })
+
+  const page = await pdf.getPage(1)
+  const viewport = page.getViewport({ scale: BISTRACK_SCAN_SCALE })
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  canvas.width = Math.floor(viewport.width)
+  canvas.height = Math.floor(viewport.height)
+  await page.render({ canvasContext: context, viewport }).promise
+  throwIfAborted(signal)
+
+  const { preprocessCanvasForOcr } = await import('./ocrImagePreprocess.js')
+  const processed = preprocessCanvasForOcr(canvas, { contrast: 40, border: 10 })
+  const dataUrl = processed.toDataURL('image/png')
+
+  onProgress?.({ stage: 'ocr', pageNumber: 1, pageCount: 1 })
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('eng')
+  try {
+    throwIfAborted(signal)
+    const result = await worker.recognize(dataUrl)
+    throwIfAborted(signal)
+    const text = result.data?.text || ''
+    const confidence = Math.round(result.data?.confidence || 0)
+    return {
+      pages: [{ pageNumber: 1, text, confidence, imageDataUrl: dataUrl }],
+      rawText: text,
+      pageCount: 1,
+      extractionSource: 'bistrack-scan-ocr',
+    }
+  } finally {
+    await worker.terminate()
+  }
+}
+
 export async function extractOcrFromImage(file, options = {}) {
   const { onProgress, signal } = options
   throwIfAborted(signal)

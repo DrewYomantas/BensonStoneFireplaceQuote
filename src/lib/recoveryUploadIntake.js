@@ -1,4 +1,5 @@
 import { parseBisTrackText } from './biztrackPdfParser.js'
+import { detectScannedBisTrack, parseBisTrackScannedQuote } from './bisTrackScanParser.js'
 import { evaluateCurrentSetup } from './currentSetup.js'
 import { extractScannedBisTrackFields } from './scannedPacketParser.js'
 
@@ -43,6 +44,7 @@ export function recoveryIntakeFromParsedQuote({
   parsed = {},
   ocrConfidence = '',
   usedOcr = false,
+  scanResult = null,
   now = new Date(),
 } = {}) {
   const fields = parsed.fields || {}
@@ -59,6 +61,11 @@ export function recoveryIntakeFromParsedQuote({
     `Intake type: ${sourceType}`,
     usedOcr ? 'OCR Review Required' : 'Embedded text parsed',
   ].filter(Boolean).join(' | ')
+
+  const isScannedBisTrack = Boolean(scanResult?.isScannedBisTrack)
+  const scannedBisTrackNote = isScannedBisTrack
+    ? buildScannedBisTrackNote(scanResult)
+    : ''
 
   return {
     customerName: clean(fields.CUSTOMER_NAME),
@@ -83,18 +90,45 @@ export function recoveryIntakeFromParsedQuote({
     recoveryClassification: classificationFromParsed(parsed, sourceWarnings),
     reviewedForFollowUp: false,
     setupReviewStatus: setupGuidance.blockers?.length ? 'follow-up-needed' : 'review-required',
+    isScannedBisTrack,
+    scannedBisTrackNote,
   }
+}
+
+function buildScannedBisTrackNote(scanResult) {
+  if (!scanResult) return ''
+  const { score } = scanResult
+  const lines = [
+    'Scanned BisTrack quote detected. Fields were extracted from the page image. Review customer, totals, and line items against the original scan before sending.',
+  ]
+  if (score) {
+    if (score.headerFields) lines.push(`Header fields extracted: ${score.headerFields.found} of 6`)
+    if (score.addressFields) lines.push(`Address extracted: ${score.addressFields.found} of 3`)
+    if (score.totalsFields) lines.push(`Totals extracted: ${score.totalsFields.found} of 4`)
+    if (score.lineItems) {
+      const li = score.lineItems
+      lines.push(
+        li.count > 0
+          ? `Line items: ${li.count} extracted${li.needsReview > 0 ? ` (${li.needsReview} need review)` : ''}${li.notes > 0 ? `, ${li.notes} note line(s)` : ''}`
+          : 'Line items: none extracted — enter manually',
+      )
+    }
+  }
+  return lines.join('\n')
 }
 
 export async function parseRecoveryUploadFile(file, options = {}) {
   const { onProgress } = options
   if (!file) throw new Error('Select a file to upload.')
-  const { extractOcrFromImage, extractOcrFromPdf, extractTextFromPdf } = await import('./pdfTextExtraction.js')
+  const { extractOcrFromImage, extractOcrFromPdf, extractOcrFromPdfForBisTrackScan, extractTextFromPdf } = await import('./pdfTextExtraction.js')
 
   if (file.type?.startsWith('image/')) {
     onProgress?.('Reading image with OCR...')
     const ocr = await extractOcrFromImage(file, options)
+    const detection = detectScannedBisTrack('', ocr.rawText)
+    const scanResult = detection.likelyBisTrackScan ? parseBisTrackScannedQuote(ocr.rawText) : null
     const parsed = extractScannedBisTrackFields(ocr.rawText)
+    if (scanResult) mergeScannedLineItemsToFields(parsed, scanResult)
     return {
       intake: recoveryIntakeFromParsedQuote({
         fileName: file.name,
@@ -102,10 +136,12 @@ export async function parseRecoveryUploadFile(file, options = {}) {
         parsed,
         ocrConfidence: ocr.confidence,
         usedOcr: true,
+        scanResult,
       }),
       parsed,
       rawText: ocr.rawText,
       usedOcr: true,
+      scanResult,
     }
   }
 
@@ -130,9 +166,27 @@ export async function parseRecoveryUploadFile(file, options = {}) {
     }
   }
 
+  // Scanned / image-only PDF: detect BisTrack format, use higher-res render if matched
   onProgress?.('Scanned PDF detected. Running OCR...')
-  const ocr = await extractOcrFromPdf(file, options)
+  const detection = detectScannedBisTrack(extracted.rawText || '')
+
+  let ocr
+  if (detection.likelyBisTrackScan || detection.isImageOnly) {
+    onProgress?.('BisTrack scan detected — rendering at higher resolution...')
+    try {
+      ocr = await extractOcrFromPdfForBisTrackScan(file, options)
+    } catch {
+      ocr = await extractOcrFromPdf(file, options)
+    }
+  } else {
+    ocr = await extractOcrFromPdf(file, options)
+  }
+
+  const ocrDetection = detectScannedBisTrack('', ocr.rawText)
+  const scanResult = ocrDetection.likelyBisTrackScan ? parseBisTrackScannedQuote(ocr.rawText) : null
   const parsed = extractScannedBisTrackFields(ocr.rawText)
+  if (scanResult) mergeScannedLineItemsToFields(parsed, scanResult)
+
   const avgConfidence = Math.round(
     ocr.pages.reduce((sum, page) => sum + (page.confidence || 0), 0) / Math.max(ocr.pages.length, 1),
   )
@@ -143,10 +197,42 @@ export async function parseRecoveryUploadFile(file, options = {}) {
       parsed,
       ocrConfidence: avgConfidence,
       usedOcr: true,
+      scanResult,
     }),
     parsed,
     rawText: ocr.rawText,
     usedOcr: true,
+    scanResult,
+  }
+}
+
+// If the structured scan parser found line items but the field-contract parser did not,
+// apply the scan items to the field slots.
+function mergeScannedLineItemsToFields(parsed, scanResult) {
+  const existingItems = parsed.lineItems || []
+  const scanItems = (scanResult.lineItems || []).filter((i) => !i.isNote)
+  if (existingItems.length > 0 || scanItems.length === 0) return
+
+  let detail = 1
+  let slot = 0
+  for (const item of scanItems) {
+    if (slot >= 9) {
+      if (detail === 2) break
+      detail = 2
+      slot = 0
+    }
+    slot += 1
+    const label = [item.code, item.description].filter(Boolean).join(' - ').slice(0, 200)
+    parsed.fields[`DETAIL_${detail}_ITEM_${slot}`] = label
+    parsed.fields[`DETAIL_${detail}_QTY_${slot}`] = item.qty ? `${item.qty} ${item.unit}`.trim() : ''
+    parsed.fields[`DETAIL_${detail}_UNIT_PRICE_${slot}`] = item.unitPrice || ''
+    parsed.fields[`DETAIL_${detail}_TOTAL_${slot}`] = item.total || ''
+    parsed.sources[`DETAIL_${detail}_ITEM_${slot}`] = 'bistrack-scan'
+  }
+  if (scanItems.length) {
+    parsed.fields.DETAIL_SECTION_1_TITLE = parsed.fields.DETAIL_SECTION_1_TITLE || 'Fireplace, venting, and materials'
+    parsed.fields.DETAIL_SECTION_2_TITLE = parsed.fields.DETAIL_SECTION_2_TITLE || 'Additional materials and labor'
+    parsed.lineItems = scanItems
   }
 }
 

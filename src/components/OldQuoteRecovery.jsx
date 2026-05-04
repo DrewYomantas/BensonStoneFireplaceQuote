@@ -372,6 +372,17 @@ function RecoveryUploadReview({ onSave, onCancel }) {
 
       <p className="bs-status" role="status">{status}</p>
 
+      {form.isScannedBisTrack ? (
+        <div className="bs-upload-warning bs-upload-warning--scan">
+          <p className="bs-recovery__section-label">Scanned Quote Detected</p>
+          {form.scannedBisTrackNote
+            ? form.scannedBisTrackNote.split('\n').map((line, i) => (
+              <p key={i} className={i === 0 ? 'bs-upload-warning__lead' : 'bs-upload-warning__detail'}>{line}</p>
+            ))
+            : <p>Fields were extracted from the page image. Review all fields against the original scan before sending.</p>}
+        </div>
+      ) : null}
+
       {form.sourceWarnings?.length ? (
         <div className="bs-upload-warning">
           <p className="bs-recovery__section-label">OCR Review Required</p>
