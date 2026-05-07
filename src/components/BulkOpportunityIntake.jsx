@@ -25,7 +25,7 @@ export default function BulkOpportunityIntake({
         <div>
           <p className="kicker">Bulk Intake</p>
           <h3>Draft opportunities</h3>
-          <p className="section-caption">Review scanned quote candidates before adding them to the Opportunity Queue. No customer-facing exports are created.</p>
+          <p className="section-caption">Review scanned quote candidates before adding them to the Opportunity Queue. No customer-facing exports are created. The old Customer Pipeline CSV can also be ingested here via <code>createOpportunityDraftsFromPipelineCsv</code>.</p>
         </div>
         <button type="button" className="primary-button" disabled={!safeDraftCount} onClick={onAddAllSafe}>
           Add selected safe drafts
