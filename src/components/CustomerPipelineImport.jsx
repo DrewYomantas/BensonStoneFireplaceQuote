@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import {
   buildImportSummary,
   createOpportunityDraftsFromPipelineCsv,
+  isLikelyCsvFile,
 } from '../lib/customerPipelineCsv.js'
 import {
   listOpportunities,
@@ -35,6 +36,14 @@ export default function CustomerPipelineImport({ onSave, onCancel }) {
     setAddedCount(0)
     setUpdatedCount(0)
     setSkipped(new Set())
+    if (!isLikelyCsvFile(file)) {
+      setError('Please choose the Customer Pipeline CSV file, not a PDF.')
+      setStatus('Wrong file type — pick the .csv export.')
+      setDrafts([])
+      setParseResult(null)
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
     try {
       const text = await file.text()
       if (!text.trim()) {

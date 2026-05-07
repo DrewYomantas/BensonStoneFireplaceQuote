@@ -24,6 +24,18 @@ function stripBom(value) {
   return value.replace(/^﻿/, '')
 }
 
+export function isLikelyCsvFile({ name = '', type = '' } = {}) {
+  if (type === 'text/csv') return true
+  if (/^application\/(pdf|x-pdf)$/i.test(type)) return false
+  if (/\.csv$/i.test(name)) return true
+  if (/\.pdf$/i.test(name)) return false
+  return !type || /^text\//i.test(type)
+}
+
+function looksLikePdfBytes(text) {
+  return typeof text === 'string' && text.startsWith('%PDF-')
+}
+
 export function parseCsv(text) {
   const cleaned = stripBom(String(text || ''))
   const rows = []
@@ -295,6 +307,16 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
 }
 
 export function createOpportunityDraftsFromPipelineCsv(text, { existingOpportunities = [], now = new Date() } = {}) {
+  if (looksLikePdfBytes(text)) {
+    return {
+      error: 'This looks like a PDF. Use Upload Old Quote for PDFs or choose the Customer Pipeline CSV.',
+      drafts: [],
+      summary: { ...summarizeDrafts([]), importedPackets: 0, rowsRead: 0, rowsWithWarnings: 0 },
+      skipped: 0,
+      rowsRead: 0,
+      importedPacketCount: 0,
+    }
+  }
   const parsed = parseCustomerPipelineCsv(text)
   if (parsed.error) {
     return {

@@ -7,7 +7,26 @@ import {
   buildPipelineDraft,
   createOpportunityDraftsFromPipelineCsv,
   buildImportSummary,
+  isLikelyCsvFile,
 } from './customerPipelineCsv.js'
+
+test('createOpportunityDraftsFromPipelineCsv rejects %PDF input with friendly error', () => {
+  const result = createOpportunityDraftsFromPipelineCsv('%PDF-1.4\n%bytes\nbinary garbage', {})
+  assert.equal(result.drafts.length, 0)
+  assert.match(result.error, /looks like a PDF/i)
+})
+
+test('isLikelyCsvFile accepts .csv extensions and text/csv MIME', () => {
+  assert.equal(isLikelyCsvFile({ name: 'foo.csv', type: '' }), true)
+  assert.equal(isLikelyCsvFile({ name: 'export', type: 'text/csv' }), true)
+  assert.equal(isLikelyCsvFile({ name: 'Customer Pipeline.CSV', type: '' }), true)
+})
+
+test('isLikelyCsvFile rejects PDFs by name or MIME', () => {
+  assert.equal(isLikelyCsvFile({ name: 'foo.pdf', type: 'application/pdf' }), false)
+  assert.equal(isLikelyCsvFile({ name: 'export.pdf', type: '' }), false)
+  assert.equal(isLikelyCsvFile({ name: 'mystery', type: 'application/x-pdf' }), false)
+})
 
 const HEADERS = 'Date Visited,Customer Name,Phone,Email,Source,Stage,Who Helped,Fireplace / Product Interest,Stone / Surround Interest,Quote Total,Next Action,Notes'
 

@@ -1974,6 +1974,15 @@ export default function WorkbenchShell() {
   async function handleFile(event) {
     const file = event.target.files?.[0]
     if (!file) return
+    const fileName = file.name || ''
+    const fileType = file.type || ''
+    const isPdf = fileType === 'application/pdf' || /\.pdf$/i.test(fileName)
+    if (!isPdf) {
+      setStatus(`That looks like ${fileName || 'a non-PDF file'}. Use "Import Customer Pipeline CSV" for CSVs — this button is for BisTrack PDFs.`)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (heroFileInputRef.current) heroFileInputRef.current.value = ''
+      return
+    }
     setBusy(true)
     setMode('upload')
     setActiveTicketId(null)
