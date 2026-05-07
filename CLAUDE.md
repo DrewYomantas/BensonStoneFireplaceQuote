@@ -4,7 +4,7 @@
 
 ```bash
 npm run dev       # Dev server
-npm run build     # Production build (base: /BensonStoneFireplaceQuote/)
+npm run build     # Production build (base: /BensonStoneFireplaceQuote/ — must match the GitHub repo name; update `vite.config.js` base if the repo is renamed)
 npm test          # Run all tests (node --test, co-located *.test.js files)
 npm run lint      # ESLint
 ```
@@ -52,6 +52,7 @@ Many components exist but are **parked** (preserved, not rendered in active shel
 **Active:**
 - `QuoteSetupLens.jsx` + `currentSetup.js` — Current Setup + Goal Lens
 - `OldQuoteRecovery.jsx` + `oldQuoteRecovery.js` — Quote Recovery lane (upload, review, queue)
+- `CustomerPipelineImport.jsx` + `customerPipelineCsv.js` — Customer Pipeline CSV import lane (rendered from OldQuoteRecovery as `pipeline-csv` view)
 - `ShowroomDisplayPanel.jsx` + `ShowroomDisplayRegister.jsx` — local Showroom Display Register
 - `VendorPriceBooks.jsx` + `vendorPriceBooks.js` — Vendors & Price Books tab (39-vendor index, localStorage notes, vendor chip in Quote Polish)
 - `CustomerProposal.jsx` — customer-facing proposal preview + print
@@ -90,6 +91,7 @@ DEPOSIT_TERMS  = 50% down at time of signing
 
 - JSON imports require `with { type: 'json' }`: `import data from '../data/foo.json' with { type: 'json' }` — Node 24 enforces this; Vite handles it fine.
 - Tests use `import { describe, it } from 'node:test'` + `import assert from 'node:assert/strict'` — no test framework, just Node built-ins.
+- `node --test` cannot parse JSX. Components are not unit-tested; their smoke coverage comes from `npm run build`. Test logic in `src/lib/`, not in `src/components/`.
 - localStorage modules follow the pattern in `src/lib/showroomDisplayRegister.js` — storage key constant, get/save/list/sanitize exports, optional storage param for testability.
 
 ## Reintegration Rules
@@ -117,3 +119,7 @@ Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuo
 ## Pre-existing Lint Debt
 
 `src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter that ESLint flags. Leave it alone in unrelated work — fixing it would change a public function signature.
+
+## CSV Parsing — Intentional Lenience
+
+`src/lib/customerPipelineCsv.js` `parseCsv` only enters quote mode when `"` appears at cell start. This is deliberate: Sheets exports unquoted cells with embedded inch marks (`36" DV`) which break strict RFC 4180 parsers. Don't "fix" this without checking the real Drive CSV.
