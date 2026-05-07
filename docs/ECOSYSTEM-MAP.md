@@ -29,6 +29,10 @@ One-page reference. The fireplace department is **not one app** — it's a small
 - Not the customer-facing tablet. That's Fireplace Consultation.
 - Not a price book. Vendor price books are referenced, not stored.
 
+## Related docs
+
+- [CUSTOMER-PIPELINE-IMPORT.md](CUSTOMER-PIPELINE-IMPORT.md) — how the old Customer Pipeline CSV gets ingested into the BSFQ Opportunity Queue.
+
 ## Data shared across the ecosystem (planned)
 
 A small JSON catalog — units, brochures, code flags — should eventually live in one place and be read by both BSFQ (proposals) and Fireplace Consultation (recommendations). Today the catalog is duplicated inline in `Fireplace Consultation.html` and BSFQ `productCatalog.js`. Reconciling them is a future merge step (see `APP-ECOSYSTEM-CANONICAL-AUDIT-2026-05-07.md` in `Benson Stone Fireplace Sales/`).

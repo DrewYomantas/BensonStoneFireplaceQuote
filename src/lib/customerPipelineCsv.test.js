@@ -6,6 +6,7 @@ import {
   normalizePipelineRow,
   buildPipelineDraft,
   createOpportunityDraftsFromPipelineCsv,
+  buildImportSummary,
 } from './customerPipelineCsv.js'
 
 const HEADERS = 'Date Visited,Customer Name,Phone,Email,Source,Stage,Who Helped,Fireplace / Product Interest,Stone / Surround Interest,Quote Total,Next Action,Notes'
@@ -182,6 +183,81 @@ test('createOpportunityDraftsFromPipelineCsv returns BulkOpportunityIntake-shape
   assert.ok(stages.includes('needs-review'))
   assert.ok(stages.includes('waiting-on-customer'))
   assert.ok(stages.includes('reference-only'))
+})
+
+test('column-shift heuristic recovers misplaced quote total and warns', () => {
+  const record = normalizePipelineRow({
+    'Date Visited': '4/27/26',
+    'Customer Name': 'Anna Test',
+    'Phone': '312-555-0199',
+    'Stage': 'Active - Quote Sent',
+    'Quote Total': '',
+    'Next Action': '$21067.54',
+    'Notes': 'Quote #74465',
+  })
+  assert.equal(record.quoteTotal, '$21067.54')
+  assert.equal(record.nextAction, '')
+  assert.ok(record.warnings.some((w) => /column shift/i.test(w)))
+})
+
+test('warns when contact info is missing but does not drop row', () => {
+  const record = normalizePipelineRow({
+    'Customer Name': 'Teresa No-Phone',
+    'Phone': '',
+    'Email': '',
+    'Stage': 'Dead / Needs Revival',
+  })
+  assert.ok(record)
+  assert.ok(record.warnings.some((w) => /no phone or email/i.test(w)))
+})
+
+test('warns when quote total missing without dropping row', () => {
+  const record = normalizePipelineRow({
+    'Customer Name': 'Doug Sample',
+    'Phone': '815-555-0100',
+    'Stage': 'Active - Quote Stage',
+    'Quote Total': '',
+  })
+  assert.ok(record.warnings.some((w) => /no quote total/i.test(w)))
+})
+
+test('row warnings flow into draft.opportunity.warnings and rowWarnings', () => {
+  const record = normalizePipelineRow({
+    'Customer Name': 'Anna Test',
+    'Phone': '312-555-0199',
+    'Stage': 'Active - Quote Sent',
+    'Quote Total': '',
+    'Next Action': '$21067.54',
+  })
+  const draft = buildPipelineDraft(record)
+  assert.ok(draft.rowWarnings.length >= 1)
+  assert.ok(draft.opportunity.warnings.some((w) => /column shift/i.test(w)))
+})
+
+test('createOpportunityDraftsFromPipelineCsv reports rowsRead and rowsWithWarnings', () => {
+  const result = createOpportunityDraftsFromPipelineCsv(SAMPLE_CSV, {
+    now: new Date('2026-05-07T12:00:00Z'),
+  })
+  assert.equal(result.summary.rowsRead, 3)
+  assert.equal(typeof result.summary.rowsWithWarnings, 'number')
+  assert.ok(result.summary.rowsWithWarnings >= 1)
+})
+
+test('buildImportSummary produces friendly multi-clause string', () => {
+  const result = createOpportunityDraftsFromPipelineCsv(SAMPLE_CSV, {
+    now: new Date('2026-05-07T12:00:00Z'),
+  })
+  const summary = buildImportSummary(result, 'Customer Pipeline.csv')
+  assert.match(summary, /Customer Pipeline.csv/)
+  assert.match(summary, /3 rows read/)
+  assert.match(summary, /3 drafts ready/)
+})
+
+test('buildImportSummary handles empty CSV and parser errors gracefully', () => {
+  const empty = createOpportunityDraftsFromPipelineCsv('Customer Name\n', {})
+  assert.match(buildImportSummary(empty, 'empty.csv'), /No rows found/)
+  const bad = createOpportunityDraftsFromPipelineCsv('Foo,Bar\n1,2\n', {})
+  assert.match(buildImportSummary(bad, 'bad.csv'), /Couldn't parse CSV/)
 })
 
 test('weird whitespace in headers and cells is tolerated', () => {

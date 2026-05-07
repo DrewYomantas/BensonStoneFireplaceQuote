@@ -22,6 +22,7 @@ import { listOpportunityActivities } from '../lib/opportunityActivity.js'
 import { parseRecoveryUploadFile, parseRecoveryUploadFiles, triageBulkDraft } from '../lib/recoveryUploadIntake.js'
 import { deriveShowroomDisplayContext, listDisplayRecords } from '../lib/showroomDisplayRegister.js'
 import OpportunityWorkspace from './OpportunityWorkspace.jsx'
+import CustomerPipelineImport from './CustomerPipelineImport.jsx'
 
 const emptyIntake = {
   customerName: '',
@@ -856,6 +857,21 @@ export default function OldQuoteRecovery() {
     )
   }
 
+  if (view === 'pipeline-csv') {
+    return (
+      <CustomerPipelineImport
+        onSave={() => {
+          refreshOpportunities()
+          setView('queue')
+        }}
+        onCancel={() => {
+          refreshOpportunities()
+          setView('queue')
+        }}
+      />
+    )
+  }
+
   if (view === 'detail' && selectedOpportunity) {
     return (
       <OpportunityWorkspace
@@ -903,6 +919,15 @@ export default function OldQuoteRecovery() {
           style={{ color: '#173321', borderColor: 'rgba(23,51,33,0.35)' }}
         >
           Bulk Upload
+        </button>
+
+        <button
+          type="button"
+          className="bs-button"
+          onClick={() => setView('pipeline-csv')}
+          style={{ color: '#173321', borderColor: 'rgba(23,51,33,0.35)' }}
+        >
+          Import Customer Pipeline CSV
         </button>
 
         <div className="bs-recovery__filters">

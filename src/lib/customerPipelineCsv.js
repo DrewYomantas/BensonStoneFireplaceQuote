@@ -121,7 +121,13 @@ function combineNotes(parts) {
   return parts.map((p) => String(p || '').trim()).filter(Boolean).join(' | ')
 }
 
-export function normalizePipelineRow(rawRow) {
+function looksLikeCurrency(value) {
+  const trimmed = String(value || '').trim().replace(/\s/g, '')
+  if (!trimmed) return false
+  return /^\$?[\d.,]+$/.test(trimmed) && /\d/.test(trimmed)
+}
+
+export function normalizePipelineRow(rawRow, rowNumber) {
   const name = cleanCustomerName(rawRow['Customer Name'])
   if (!name) return null
   const phone = extractFirstPhone(rawRow['Phone'])
@@ -131,12 +137,35 @@ export function normalizePipelineRow(rawRow) {
   const whoHelped = String(rawRow['Who Helped'] || '').trim()
   const fireplaceInterest = String(rawRow['Fireplace / Product Interest'] || '').trim()
   const stoneInterest = String(rawRow['Stone / Surround Interest'] || '').trim()
-  const total = parseCurrencyToString(rawRow['Quote Total'])
-  const nextAction = String(rawRow['Next Action'] || '').trim()
+  const rawTotalCell = String(rawRow['Quote Total'] || '').trim()
+  const rawNextActionCell = String(rawRow['Next Action'] || '').trim()
+  let total = parseCurrencyToString(rawTotalCell)
+  let nextAction = rawNextActionCell
   const notes = String(rawRow['Notes'] || '').trim()
   const dateVisited = parseDateLoose(rawRow['Date Visited'])
+  const warnings = []
+
+  if (!total && looksLikeCurrency(rawNextActionCell)) {
+    total = parseCurrencyToString(rawNextActionCell)
+    nextAction = ''
+    warnings.push('Suspected column shift: a currency value was found in Next Action and recovered into Quote Total. Verify against source row.')
+  }
+
+  if (!total && rawTotalCell) {
+    warnings.push('Quote Total cell present but not recognized as currency. Confirm before sending.')
+  }
+  if (!total && !rawTotalCell) {
+    warnings.push('No quote total on file.')
+  }
+  if (!phone && !email) {
+    warnings.push('No phone or email on file.')
+  }
+  if (!dateVisited) {
+    warnings.push('Date Visited missing or unrecognized.')
+  }
 
   return {
+    rowNumber: rowNumber ?? null,
     customerName: name,
     customerPhone: phone,
     customerEmail: email,
@@ -150,6 +179,7 @@ export function normalizePipelineRow(rawRow) {
     productsNotes: combineNotes([fireplaceInterest, stoneInterest]),
     quoteTotal: total,
     nextAction,
+    warnings,
     internalNotes: combineNotes([
       whoHelped ? `Helped by ${whoHelped}` : '',
       notes,
@@ -162,25 +192,25 @@ export function normalizePipelineRow(rawRow) {
 
 export function parseCustomerPipelineCsv(text) {
   const rows = parseCsv(text)
-  if (!rows.length) return { headers: [], records: [], skipped: 0 }
+  if (!rows.length) return { headers: [], records: [], skipped: 0, rowsRead: 0 }
   const headers = rows[0].map((h) => String(h || '').trim())
   const normalizedHeaders = headers.map(normalizeHeader)
   const missing = REQUIRED_HEADERS.filter(
     (req) => !normalizedHeaders.includes(normalizeHeader(req))
   )
   if (missing.length) {
-    return { headers, records: [], skipped: 0, error: `Missing required columns: ${missing.join(', ')}` }
+    return { headers, records: [], skipped: 0, rowsRead: rows.length - 1, error: `Missing required columns: ${missing.join(', ')}` }
   }
   const records = []
   let skipped = 0
   for (let i = 1; i < rows.length; i++) {
     const raw = {}
     headers.forEach((h, idx) => { raw[h] = rows[i][idx] ?? '' })
-    const normalized = normalizePipelineRow(raw)
+    const normalized = normalizePipelineRow(raw, i)
     if (!normalized) { skipped += 1; continue }
     records.push(normalized)
   }
-  return { headers, records, skipped }
+  return { headers, records, skipped, rowsRead: rows.length - 1 }
 }
 
 function statusOverrideOpportunity(opportunity, overrideStatus) {
@@ -225,6 +255,8 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
     now,
   })
   const withOverride = statusOverrideOpportunity(opportunity, record.status)
+  const recordWarnings = Array.isArray(record.warnings) ? record.warnings : []
+  const mergedWarnings = [...new Set([...(withOverride.warnings || []), ...recordWarnings])]
   const withRecord = sanitizeOpportunity({
     ...withOverride,
     projectType: record.projectType || withOverride.projectType,
@@ -235,6 +267,7 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
     internalNotes: record.internalNotes,
     sourceTrailNote: record.source,
     recoverySource: 'true',
+    warnings: mergedWarnings,
   })
   const duplicate = findOpportunityDuplicate(withRecord, existingOpportunities)
   const finalOpportunity = duplicate.isDuplicate && duplicate.confidence !== 'high'
@@ -242,7 +275,7 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
       ...withRecord,
       status: 'needs-review',
       proposalReadiness: 'blocked',
-      warnings: [...(withRecord.warnings || []), 'Possible duplicate requires review before adding to queue.'],
+      warnings: [...new Set([...(withRecord.warnings || []), 'Possible duplicate requires review before adding to queue.'])],
     })
     : withRecord
   return {
@@ -250,6 +283,9 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
     opportunity: finalOpportunity,
     duplicate,
     sourceLabel: parseContext.sourceLabel,
+    rowNumber: record.rowNumber,
+    rowWarnings: recordWarnings,
+    stage: record.stage,
     action: duplicate.isDuplicate && duplicate.confidence === 'high'
       ? 'update-existing'
       : finalOpportunity.status === 'needs-review'
@@ -260,16 +296,47 @@ export function buildPipelineDraft(record, { existingOpportunities = [], now = n
 
 export function createOpportunityDraftsFromPipelineCsv(text, { existingOpportunities = [], now = new Date() } = {}) {
   const parsed = parseCustomerPipelineCsv(text)
-  if (parsed.error) return { error: parsed.error, drafts: [], summary: summarizeDrafts([]), skipped: parsed.skipped }
+  if (parsed.error) {
+    return {
+      error: parsed.error,
+      drafts: [],
+      summary: { ...summarizeDrafts([]), importedPackets: 0, rowsRead: parsed.rowsRead || 0, rowsWithWarnings: 0 },
+      skipped: parsed.skipped || 0,
+      rowsRead: parsed.rowsRead || 0,
+      importedPacketCount: 0,
+    }
+  }
   const drafts = parsed.records.map((record) => buildPipelineDraft(record, { existingOpportunities, now }))
+  const rowsWithWarnings = drafts.filter((d) => (d.rowWarnings && d.rowWarnings.length) > 0).length
   return {
     skipped: parsed.skipped,
+    rowsRead: parsed.rowsRead,
     drafts,
-    summary: { ...summarizeDrafts(drafts), importedPackets: 1 },
+    summary: {
+      ...summarizeDrafts(drafts),
+      importedPackets: 1,
+      rowsRead: parsed.rowsRead,
+      rowsWithWarnings,
+    },
     importedPacketCount: 1,
   }
 }
 
 export function getPipelineDraftReadiness(drafts) {
   return drafts.filter((draft) => isSafeBulkAddDraft(draft)).length
+}
+
+export function buildImportSummary(result, fileName) {
+  const summary = result.summary || {}
+  const fileLine = fileName ? `${fileName}: ` : ''
+  if (result.error) return `${fileLine}Couldn't parse CSV — ${result.error}`
+  if (!result.drafts.length) return `${fileLine}No rows found.`
+  const parts = [
+    `${summary.rowsRead || result.drafts.length} ${summary.rowsRead === 1 ? 'row' : 'rows'} read`,
+    `${summary.draftCount || result.drafts.length} drafts ready`,
+  ]
+  if (result.skipped) parts.push(`${result.skipped} blank rows skipped`)
+  if (summary.duplicates) parts.push(`${summary.duplicates} possible duplicate${summary.duplicates === 1 ? '' : 's'}`)
+  if (summary.rowsWithWarnings) parts.push(`${summary.rowsWithWarnings} need review`)
+  return `${fileLine}${parts.join(' · ')}`
 }
