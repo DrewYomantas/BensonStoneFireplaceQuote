@@ -24,6 +24,7 @@ import SchedulerHandoffPanel from './SchedulerHandoffPanel.jsx'
 import FollowUpPlanPanel from './FollowUpPlanPanel.jsx'
 import SalesJourneyBoard from './SalesJourneyBoard.jsx'
 import ReferenceBinder from './ReferenceBinder.jsx'
+import HearthBoard from './HearthBoard.jsx'
 import {
   customerFileFromOpportunity,
   getCustomerFile,
@@ -466,6 +467,7 @@ function ScaledProposalPreview({ fields, parseContext, lineItems, proposalMode, 
 function WbModeSwitch({ activeMode, hasCustomerFile, onChange }) {
   const modes = [
     { id: 'today', label: "Today's Work" },
+    { id: 'hearth-board', label: 'Hearth Board' },
     { id: 'customer-file', label: 'Customer File', disabled: !hasCustomerFile },
     { id: 'file-room', label: 'File Room' },
   ]
@@ -1828,6 +1830,7 @@ export default function WorkbenchShell() {
 
   const activeWorkbenchMode = useMemo(() => {
     if (mode === 'organize') return 'file-room'
+    if (mode === 'hearth-board') return 'hearth-board'
     if (mode === 'customer-file' || mode === 'ticket' || mode === 'visit') return 'customer-file'
     return 'today'
   }, [mode])
@@ -2134,6 +2137,12 @@ export default function WorkbenchShell() {
       setActiveTicketId(null)
       return
     }
+    if (nextMode === 'hearth-board') {
+      setMode('hearth-board')
+      setActiveTicketId(null)
+      setActiveCustomerFileId(null)
+      return
+    }
     if (nextMode === 'customer-file' && activeCustomerFile) {
       setMode('customer-file')
     }
@@ -2315,6 +2324,12 @@ export default function WorkbenchShell() {
             />
           )}
           {mode === 'recovery' && <OldQuoteRecovery />}
+          {mode === 'hearth-board' && (
+            <HearthBoard
+              opportunities={oppList}
+              onOpen={(opp) => handleSelectTicket(opp.id)}
+            />
+          )}
         </div>
 
         {smartContextOpen && <WbRightRail
