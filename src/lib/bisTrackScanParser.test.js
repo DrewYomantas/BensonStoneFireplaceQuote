@@ -262,6 +262,31 @@ describe('parseBisTrackTotals', () => {
     assert.equal(t.totalAmount, null)
     assert.equal(t.quotationTotal, null)
   })
+
+  it('recovers OCR-mangled thousands (dot used as thousands separator)', () => {
+    const text = 'Total Amount $6.191.77\nSales Tax $403.09\nQuotation Total $6.594.86\nBalance Due $6.594.86'
+    const t = parseBisTrackTotals(text)
+    assert.equal(t.totalAmount, 6191.77)
+    assert.equal(t.salesTax, 403.09)
+    assert.equal(t.quotationTotal, 6594.86)
+    assert.equal(t.balanceDue, 6594.86)
+  })
+
+  it('recovers a single mangled total when other totals are clean', () => {
+    const text = 'Total Amount $6,191.77 Sales Tax $403.09 Quotation Total $6.594.86'
+    const t = parseBisTrackTotals(text)
+    assert.equal(t.totalAmount, 6191.77)
+    assert.equal(t.salesTax, 403.09)
+    assert.equal(t.quotationTotal, 6594.86)
+  })
+
+  it('does not invent totals from unrelated nearby digits', () => {
+    const text = 'Quote No 74465 Date 04/27/2026 Phone 815-555-0100\nNotes: customer requested follow up'
+    const t = parseBisTrackTotals(text)
+    assert.equal(t.quotationTotal, null)
+    assert.equal(t.totalAmount, null)
+    assert.equal(t.balanceDue, null)
+  })
 })
 
 // --- parseBisTrackLineItems ---

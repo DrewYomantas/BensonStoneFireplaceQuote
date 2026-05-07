@@ -1,6 +1,8 @@
 // Deterministic parser for scanned Benson Stone BisTrack quote documents.
 // Called when embedded PDF text is absent and OCR markers match BisTrack format.
 
+import { normalizeMoneyValue } from './moneyNormalizer.js'
+
 const BISTRACK_SCAN_MARKERS = [
   /benson\s+stone/i,
   /quotation/i,
@@ -264,8 +266,15 @@ export function parseBisTrackTotals(text) {
 
   function extractMoney(labelPattern) {
     // Tolerate colons, dashes, and stray non-numeric OCR noise between label and value.
-    const m = f.match(new RegExp(`(?:${labelPattern})\\s*[:\\-]?[^$0-9-]{0,40}\\$?\\s*([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})`, 'i'))
-    return m ? normalizeBisTrackMoney(m[1]) : null
+    // The trailing (?!\d|\.\d) guard ensures we don't truncate-match a mangled
+    // OCR token like "$6.594.86" into "6.59"; in that case the strict pattern
+    // fails and the fallback handles recovery.
+    const m = f.match(new RegExp(`(?:${labelPattern})\\s*[:\\-]?[^$0-9-]{0,40}\\$?\\s*([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})(?!\\d|\\.\\d)`, 'i'))
+    if (m) return normalizeBisTrackMoney(m[1])
+    // Fallback: OCR sometimes mangles thousands separators (e.g. "$7.542.00").
+    // Use a bounded loose pattern and route it through the OCR-tolerant normalizer.
+    const loose = f.match(new RegExp(`(?:${labelPattern})\\s*[:\\-]?[^$0-9-]{0,40}(\\$?\\s*[0-9][0-9.,]{1,15})`, 'i'))
+    return loose ? normalizeMoneyValue(loose[1]) : null
   }
 
   return {
