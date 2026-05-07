@@ -4,7 +4,7 @@
 
 ```bash
 npm run dev       # Dev server
-npm run build     # Production build (base: /FireplaceDepartmentEmailUpdate/)
+npm run build     # Production build (base: /BensonStoneFireplaceQuote/)
 npm test          # Run all tests (node --test, co-located *.test.js files)
 npm run lint      # ESLint
 ```

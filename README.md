@@ -130,9 +130,9 @@ npm run build
 
 ## GitHub Pages
 
-The GitHub remote is `https://github.com/DrewYomantas/FireplaceDepartmentEmailUpdate.git`.
+The GitHub remote is `https://github.com/DrewYomantas/BensonStoneFireplaceQuote.git`.
 
-The Vite base path is `/FireplaceDepartmentEmailUpdate/`.
+The Vite base path is `/BensonStoneFireplaceQuote/`.
 
 GitHub Pages deployment is configured in [.github/workflows/deploy.yml](C:/Users/beyon/OneDrive/Desktop/BensonStoneFireplaceQuote/.github/workflows/deploy.yml).
 
