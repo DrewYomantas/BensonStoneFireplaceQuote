@@ -120,6 +120,9 @@ The internal prep chain attached to each Customer File. All read-side projection
 - `src/lib/bisTrackHandoff.js` — `projectBisTrackHandoff(file)` returns the read-only handoff view model. `formatBisTrackHandoffAsText(view)` returns plain text only — no HTML, no Markdown tables, omits empty sections.
 - `src/screens/QuotePrepScreen.jsx` — workbench, GateCard editable, action buttons route via `onOpenLens` / `onOpenQuotePrep` or focus quote-type select via ref. No autofill, no auto-review.
 - `src/screens/BisTrackHandoffScreen.jsx` — read-only. Copy Handoff button uses `navigator.clipboard.writeText` with a clipboard-blocked fallback textarea.
+- `src/lib/customerProposalPreview.js` — `buildCustomerProposalPreview(rawFile)` returns a frozen, scrubbed customer-facing view model. Only lines with `reviewStatus: 'ready_for_bistrack' | 'reviewed_for_prep'` surface in the Detailed Investment Breakdown. Eight `BREAKDOWN_GROUPS` (fireplace-appliance → uncategorized), classified by keyword regex on category + name + description. Customer-safe scrub: banned phrases + extended sensitive terms stripped from every field.
+  - `goalSummary` rule: bare slug keys (e.g. `"replace-existing"`) match `/^[a-z0-9]+(-[a-z0-9]+)*$/` and are suppressed. `goalNotes` is also excluded — it carries an internal "Visit type:" prefix. Only free-form human text or a `DESIRED_OUTCOME_LABELS` match surfaces.
+- `src/screens/ProposalPreviewScreen.jsx` — read-only internal draft view. Gate warning renders above the proposal document; the document always renders regardless of gate status. No PDF/print/export/send. Entry points: "Preview Proposal" on `CustomerFileScreen` (QuotePrepStatusCard) and `QuotePrepScreen` (NextActionBar).
 
 Banned phrases — must never appear in any string surfaced through the gate, handoff, list, or Today signal. The helpers' `safe()` scrubs them defensively:
 - "ready to send"
@@ -131,12 +134,12 @@ Use **"Ready to build in BisTrack"** when the gate helper says so — never cust
 
 ## Architecture
 
-React + Vite + plain CSS (`src/App.css`). No Tailwind. No component library. No TypeScript.
+React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
 - `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
 - `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
-- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
