@@ -35,30 +35,65 @@ This app is a presentation layer on top of Epicor BisTrack. BisTrack creates the
 - Never expose cost, buy price, margin, supplier history, OCR uncertainty, BisTrack confidence language, or fuzzy-match wording in customer-facing output.
 - Raw extracted text and file bytes are never stored on opportunity records.
 
+## Current Product Direction (post May 7, 2026 reset)
+
+The active product is the **Benson Fireplace Sales OS** — Drew-only, tablet-first, local-only, Customer File centered, walk-in-first. The next shell is being designed; we are not extending the current `WorkbenchShell` UI. Read these BEFORE making product decisions:
+
+- `docs/BENSON-FIREPLACE-SALES-OS-SPINE.md` — product spine, surfaces, V1 non-negotiables
+- `docs/RESET-SALVAGE-MAP.md` — every component/lib classified as keep / reframe / park / delete-later
+
+Treat those docs as more authoritative than the older "Active vs. Parked Modules" inventory below.
+
 ## Architecture
 
 React + Vite + plain CSS (`src/App.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — entry point; delegates entirely to `src/components/WorkbenchShell.jsx`
+- `src/App.jsx` — mounts `WorkbenchShell` (legacy shell) + `SalesOsStorageStatus` (durable storage widget)
 - `src/components/WorkbenchShell.jsx` — main orchestrator; owns all state, the PDF parse pipeline, opportunity queue, and proposal/export flow
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
+- `src/lib/salesOs*.js` + `src/lib/customerFileDurable.js` — durable Sales OS storage layer (see "Sales OS Storage" below)
+
+## Sales OS Storage
+
+Durable local storage for the next shell lives in IndexedDB, namespace `benson-fireplace-sales-os`, schema version 1.
+
+Layout:
+- `src/lib/salesOsStorageSchema.js` — DB name, schema version, store names, sensitive-key scrub
+- `src/lib/salesOsStorage.js` — IndexedDB engine + in-memory engine (for tests) + `createSalesOsStorage({ engine })` wrapper. Result shape `{ ok, data } | { ok, error }`.
+- `src/lib/salesOsBackup.js` — JSON export/validate/import/summary; replace and merge modes; sensitive keys are scrubbed and rejected.
+- `src/lib/salesOsSaveState.js` — observable save state (idle/saving/saved/error) for the storage status widget.
+- `src/lib/salesOsMigration.js` — one-shot migrate of legacy localStorage keys; idempotent via `appMeta.salesOsMigration:v1`. Old localStorage keys are NOT deleted.
+- `src/lib/customerFileDurable.js` — async customer-file API for new shell code (`saveCustomerFileDurable`, `listCustomerFilesDurable`, etc.).
+- `src/components/SalesOsStorageStatus.jsx` — bottom-right widget: "Saved locally · HH:MM" + Backup + Restore buttons. Mounted in `App.jsx`.
+
+Stores: `customerFiles`, `visitSessions`, `quotePrepRecords`, `followUpRecords`, `activityTimeline`, `recoveryQueue`, `appMeta`.
+
+### Customer File dual-write (sync API → IDB mirror)
+
+The legacy synchronous `customerFile.js` API (`saveCustomerFile`, `updateCustomerFile`, `appendCustomerFileItem`, `removeCustomerFile`) writes to localStorage AND fire-and-forget mirrors to IndexedDB. The mirror is wired at boot by `SalesOsStorageStatus` via `setCustomerFileDurableMirror(storage)`. Default outside the browser is null (legacy tests stay deterministic).
+
+Rules:
+- New shell code must use `customerFileDurable.js` (async). Reads from there are the source of truth for backup/restore.
+- Don't bypass `customerFile.js` mutators in legacy components — the mirror only fires through the public API.
+- Tests that exercise the mirror await `_flushCustomerFileDurableMirror()` from `customerFile.js`.
+- Backup never includes raw OCR/PDF/cost/margin/buy price/supplier total/sales rank/BisTrack confidence — keys matching `SENSITIVE_KEY_PATTERN` in `salesOsStorageSchema.js` are stripped on export and rejected on validate.
+
+### Migration
+
+`migrateLegacyLocalStorage(storage)` runs once at first boot. It copies:
+- `benson-stone-customer-file-v1` → `customerFiles`
+- `benson-stone-opportunity-queue-v1` → `quotePrepRecords` (active) or `recoveryQueue` (recovery)
+- `benson-stone-opportunity-activities-v1` → `activityTimeline`
+
+`benson-smart-binder-page-index-v1` and `benson-stone-showroom-display-register-v1` are intentionally not migrated (backstage/reference).
 
 ## Active vs. Parked Modules
 
-Many components exist but are **parked** (preserved, not rendered in active shell). See `docs/workbench-reintegration.md` for the full inventory and reintegration order.
+Canonical inventory lives in `docs/RESET-SALVAGE-MAP.md` (post-reset). `docs/workbench-reintegration.md` is older and reflects pre-reset reintegration order. When the two disagree, the salvage map wins.
 
-**Active:**
-- `QuoteSetupLens.jsx` + `currentSetup.js` — Current Setup + Goal Lens
-- `OldQuoteRecovery.jsx` + `oldQuoteRecovery.js` — Quote Recovery lane (upload, review, queue)
-- `CustomerPipelineImport.jsx` + `customerPipelineCsv.js` — Customer Pipeline CSV import lane (rendered from OldQuoteRecovery as `pipeline-csv` view)
-- `ShowroomDisplayPanel.jsx` + `ShowroomDisplayRegister.jsx` — local Showroom Display Register
-- `VendorPriceBooks.jsx` + `vendorPriceBooks.js` — Vendors & Price Books tab (39-vendor index, localStorage notes, vendor chip in Quote Polish)
-- `CustomerProposal.jsx` — customer-facing proposal preview + print
-
-**Parked (do not remove, do not wire up without explicit intent):**
-`CommandCenter`, `IntakePanel`, `ScannedPacketWorkspace`, `BulkOpportunityIntake`, `ReviewStation`, `CurrentSetupPanel`, `ProposalPlaybooks`, `ProposalPackagePanel`, `ProposalBuilder`, `ExportPrep`, `OpportunityQueue`, `FollowUpComposer`, `ActivityTimeline` — and their matching `src/lib/` modules.
+Hard rule: do not delete parked components/modules in unrelated work. They are preserved inventory for the new shell, not cleanup debris.
 
 ## Document Type → Output Label
 
@@ -92,7 +127,8 @@ DEPOSIT_TERMS  = 50% down at time of signing
 - JSON imports require `with { type: 'json' }`: `import data from '../data/foo.json' with { type: 'json' }` — Node 24 enforces this; Vite handles it fine.
 - Tests use `import { describe, it } from 'node:test'` + `import assert from 'node:assert/strict'` — no test framework, just Node built-ins.
 - `node --test` cannot parse JSX. Components are not unit-tested; their smoke coverage comes from `npm run build`. Test logic in `src/lib/`, not in `src/components/`.
-- localStorage modules follow the pattern in `src/lib/showroomDisplayRegister.js` — storage key constant, get/save/list/sanitize exports, optional storage param for testability.
+- **New persistent state goes through Sales OS storage** (see "Sales OS Storage" section), not new localStorage keys. The legacy localStorage pattern (`src/lib/showroomDisplayRegister.js`) still applies to existing modules; do not introduce new localStorage keys for Sales OS data.
+- Async storage tests use `createMemoryEngine()` from `salesOsStorage.js` so tests stay in `node --test` without `fake-indexeddb`.
 
 ## Reintegration Rules
 
