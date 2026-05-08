@@ -5,6 +5,7 @@ import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { buildLensEngineInput } from '../lib/lensFieldRulesInput.js'
+import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
 import {
   ensureSalesOsBoot,
   getSalesOsStorage,
@@ -93,6 +94,35 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
       return { ...prev, constructionFlags: next }
     })
     setDirty(true); setSavedAt(null)
+  }
+
+  async function handleAcknowledgeZcAck() {
+    if (!fileId || submitting) return
+    setSubmitting(true); setErrorMsg('')
+    const saveState = getSalesOsSaveState()
+    try {
+      const storage = getSalesOsStorage()
+      const lensPatch = buildCustomerFilePatchFromLens(draft)
+      saveState.markSaving()
+      const updated = await acknowledgeZcGasInsertOnFile({
+        storage,
+        fileId,
+        actor: (file && file.customerName) || '',
+        extraPatch: lensPatch,
+      })
+      saveState.markSaved()
+      if (updated) {
+        setFile(projectCustomerFileForDisplay(updated))
+        setDraft(lensDraftFromCustomerFile(updated))
+      }
+      setDirty(false); setSavedAt(new Date().toISOString())
+      if (onSaved) onSaved(fileId)
+    } catch (err) {
+      saveState.markError(err.message || String(err))
+      setErrorMsg(err.message || String(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleSave(e) {
@@ -200,10 +230,14 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
             <ClarifyingQuestionsCard blockers={blockers} warnings={warnings} questions={questions} />
           </div>
           <div style={{ marginTop: 18 }}>
-            <FieldRulesCard result={lensFieldRulesResult} canAcknowledge={false} />
+            <FieldRulesCard
+              result={lensFieldRulesResult}
+              onAcknowledgeZcAck={handleAcknowledgeZcAck}
+              canAcknowledge={!submitting}
+            />
             {lensHasUnsavedChanges && (
               <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
-                Save the Lens to enable acknowledgement actions on the Customer File.
+                Acknowledging here also saves the Lens.
               </p>
             )}
           </div>

@@ -6,13 +6,11 @@ import ManagerReviewReasons from '../components/file/ManagerReviewReasons.jsx'
 import ProductsDiscussedCard from '../components/file/ProductsDiscussedCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
-import {
-  getCustomerFileDurable,
-  updateCustomerFileDurable,
-} from '../lib/customerFileDurable.js'
+import { getCustomerFileDurable } from '../lib/customerFileDurable.js'
 import { projectCustomerFileForDisplay, deriveFileWarnings } from '../lib/customerFileView.js'
 import { lensFactsForDisplay } from '../lib/setupGoalLens.js'
-import { evaluateFieldRules, buildZcGasInsertAckPatch } from '../lib/fieldRules.js'
+import { evaluateFieldRules } from '../lib/fieldRules.js'
+import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
 
 function FactsCard({ file }) {
   const lensFacts = lensFactsForDisplay(file)
@@ -99,8 +97,11 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
       const ready = await ensureSalesOsBoot()
       if (!ready.ok) return
       const storage = getSalesOsStorage()
-      const patch = buildZcGasInsertAckPatch(new Date(), display.customerName || '')
-      const updated = await updateCustomerFileDurable(storage, fileId, patch)
+      const updated = await acknowledgeZcGasInsertOnFile({
+        storage,
+        fileId,
+        actor: display.customerName || '',
+      })
       if (updated) setFile(projectCustomerFileForDisplay(updated))
     } catch {
       // Acknowledgement is internal-only — no customer-facing surface to notify.
