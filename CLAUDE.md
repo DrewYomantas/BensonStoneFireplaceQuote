@@ -1,4 +1,4 @@
-# Benson Stone Fireplace Quote Polish — CLAUDE.md
+# Benson Stone Fireplace Sales OS — CLAUDE.md
 
 ## Commands
 
@@ -10,6 +10,8 @@ npm run lint      # ESLint
 ```
 
 Run `npm run lint`, `npm test`, and `npm run build` after each pass.
+
+GitHub Pages deploy workflow was removed in `5d3e5a6` (account billing-locked over an unrelated $0.32 Copilot balance from Feb). Pushes succeed; deploy is dormant. When ready, prefer Netlify drag-deploy of `dist/` over re-adding the Action.
 
 ## Source of Truth — Fireplace Department Drive
 
@@ -44,12 +46,97 @@ The active product is the **Benson Fireplace Sales OS** — Drew-only, tablet-fi
 
 Treat those docs as more authoritative than the older "Active vs. Parked Modules" inventory below.
 
+## V1.1 Sales OS Shell (active mount)
+
+The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,BackstageScreen}.jsx`. Routing is a small `useState` in `App.jsx`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
+
+- `src/styles/tokens.css` — V1.1 design tokens (paper/stone/ember/state colors, Lora/Raleway/JetBrains type, spacing, radii, shadows, touch targets). No raw hex outside this file.
+- `src/styles/app.css` — base reset + shared primitives (cards, badges, source pills, fields, chips, shell, next-bar, save-status). Direction A/B/C utilities from the design canvas were intentionally not copied.
+- Fonts loaded once via `<link>` in root `index.html`; `tokens.css` does not `@import` Google Fonts.
+
+### Screens are real React components, not function calls
+
+Render screens as `<TodayScreen ... />`, never `TodayScreen({...})` from inside App. Calling a screen as a function inlines its hooks into App's hook list — switching routes changes hook count and violates rules-of-hooks. Each screen returns `<>{<div className="shell-content">...</div>}{<NextActionBar .../>}</>` so AppShell stays layout-only.
+
+### Storage boot singleton
+
+Sales OS storage is a process-wide singleton in `src/lib/salesOsStorageBoot.js`. Consume via `getSalesOsStorage()`, `getSalesOsSaveState()`, `ensureSalesOsBoot()`. Do not create a second `createSalesOsStorage` in another module — the customer-file mirror is wired here.
+
+### Customer File display projection
+
+Customer File reads must go through `projectCustomerFileForDisplay` (`src/lib/customerFileView.js`) before rendering. It strips sensitive keys (cost, margin, buyPrice, supplierTotal, rawOcr, rawPdf, bistrackConfidence, fuzzyMatchConfidence, ocrConfidence, salesRank, productRank) and whitelists safe customer-file fields. Never render a raw `getCustomerFileDurable` row directly.
+
+### Manager-review threshold is config, not UI
+
+`src/config/managerReview.js` owns the default threshold ($6,000) and reason templates. `<ManagerReviewReasons>` takes `config` as a prop; the threshold and reason set must never be hardcoded inside a screen or component. No reviewer name (e.g. "Liam") in defaults.
+
+### Auto-save on blur — React quirks
+
+- Synthetic `onBlur` listens for `focusout` (bubbles), not native `blur`. When smoke-testing forms via `preview_eval`, dispatch `new FocusEvent('focusout', {bubbles:true})` — `blur` does nothing.
+- Reading state from a closure inside `onBlur` runs before the React commit lands — values are stale by one keystroke. Pattern: keep a `valuesRef` updated via `useEffect(() => { valuesRef.current = values }, [values])` and schedule the persist with `Promise.resolve().then(() => persistDraft())`.
+- Setting `input.value` via `preview_eval` does not trigger React's onChange; use `preview_fill`, or use the native prototype setter (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, v)` then dispatch `input`).
+
+### Preview serves built dist
+
+`.claude/launch.json` runs `npm run preview`, which serves `dist/`. After any source change, `npm run build` before smoke-testing — there is no HMR. Vite dev (`npm run dev`) exists but isn't wired into the preview launch config.
+
+### Start Visit draft store
+
+A single record in IndexedDB store `visitSessions` with id `start-visit-draft` (constant `DRAFT_ID` in `src/lib/startVisitDraft.js`). Submit clears the draft and writes a real Customer File via `submitStartVisitDraft` → `saveCustomerFileDurable`. Do not introduce another draft key.
+
+### Field Rules safety layer
+
+Deterministic rule engine for the four May 2026 rules (Whisper Flex, ZC gas-insert ack, Rockford ignition, IRTAX install header). Pure logic; no AI inference.
+
+- `src/config/fieldRules.js` — rule definitions (label, severity, surfaces, internal explanation, customer-safe wording, version label "May 2026"). Single source of truth — never hardcode rule logic in a screen or component.
+- `src/lib/fieldRules.js` — `evaluateFieldRules(input)` engine + `projectFileForFieldRules` (sensitive-key strip + safe-input whitelist) + ack patch builders. Every finding has `status: 'triggered' | 'cleared' | 'satisfied' | 'soft-warning'`.
+- `src/components/file/FieldRulesCard.jsx` — shared card; mounted on Customer File and Setup + Goal Lens. Same engine output drives both.
+- `src/lib/lensFieldRulesInput.js` — overlays an in-progress Lens draft on top of the saved file so rules fire before save.
+- `src/lib/zcGasInsertAck.js` — shared helper for Rule 2 acknowledgement. From the Lens it merges the Lens patch into the same durable write so unsaved edits are preserved.
+- `src/lib/fieldRulesBadges.js` — projects findings → compact badge labels for Today action cards.
+- `src/components/backstage/FieldRulesAdmin.jsx` — read-only Backstage panel listing all four rules + version + source paths.
+
+Rules:
+- No customer-safe text may contain cost / margin / supplier / OCR / BisTrack confidence / fuzzy-match wording. The engine refuses to publish a string that violates this (`scrubCustomerSafe`) and tests assert it.
+- Acknowledgement state lives on the Customer File: `zcGasInsertAcknowledgedAt`, `zcGasInsertAcknowledgedBy`. Both whitelisted in `customerFileView.js` and `customerFile.js` `stringKeys`.
+- Quote Prep durable fields whitelisted on the Customer File (PR 8–10): `quotePrepLines` (array), `quotePrepNotes`, `quotePrepUpdatedAt`, `quotePrepQuoteType`, `quotePrepVerificationOwner`, `quotePrepUnverifiedItems`, `quotePrepNextStep`, `quotePrepGateUpdatedAt`. Add new keys to BOTH `customerFile.js` (stringKeys/arrayKeys) AND `customerFileView.js` SAFE_KEYS or display projection silently drops them.
+- New rules go in `src/config/fieldRules.js`; the engine + UI components stay generic.
+
+### Customer Files list + Today recent files
+
+`src/lib/customerFilesList.js` is the canonical projection for any "list of customer files" surface:
+- `projectCustomerFilesList(rawFiles)` — sorts most-recently-updated first (falls back through `lensUpdatedAt → visitedAt → createdAt`), strips sensitive keys defensively, builds a `searchHay` string for substring search.
+- `searchCustomerFilesList(rows, query)` — case-insensitive substring across name/phone/email/address/discussion.
+- `recentCustomerFiles(rawFiles, limit=4)` — same shape, capped to the top N. Used by `TodayScreen`'s "Recent Customer Files" section.
+
+Both `CustomerFilesListScreen` and `TodayScreen` consume from `listCustomerFilesDurable` → these helpers. Do not duplicate the projection elsewhere.
+
+### Quote Prep + Pre-BisTrack Gate + Handoff
+
+The internal prep chain attached to each Customer File. All read-side projections route through the same helpers — do not duplicate gate or readiness logic in JSX.
+
+- `src/lib/quotePrepDraft.js` — proposed line normalization, banned-key strip, source basis (7 values), review status (5 values), review flags (8 values, deduped). `summarizeQuotePrepReview` is the canonical count helper.
+- `src/lib/quotePrepGate.js` — `evaluateQuotePrepGate` returns `{ status, label, groups, counts, reasons, fields }`. `projectQuotePrepGateStatus` is the read-only projection used by Customer File status card, Customer Files list pill/filter, and Today recent rows. Reasons are `{ message, action: { label, target, field? } | null }`. Action targets in `REASON_ACTION_TARGETS`: `lens`, `quotePrepLine.add`, `quotePrepLine.review`, `quotePrepGateField`, `fieldRules`. Status `ready` requires customer name + contact + goal + non-unknown setup + chosen quote type + ≥1 `ready_for_bistrack` line + zero `do_not_use_yet` lines + zero triggered Field Rule blockers.
+- `src/lib/bisTrackHandoff.js` — `projectBisTrackHandoff(file)` returns the read-only handoff view model. `formatBisTrackHandoffAsText(view)` returns plain text only — no HTML, no Markdown tables, omits empty sections.
+- `src/screens/QuotePrepScreen.jsx` — workbench, GateCard editable, action buttons route via `onOpenLens` / `onOpenQuotePrep` or focus quote-type select via ref. No autofill, no auto-review.
+- `src/screens/BisTrackHandoffScreen.jsx` — read-only. Copy Handoff button uses `navigator.clipboard.writeText` with a clipboard-blocked fallback textarea.
+
+Banned phrases — must never appear in any string surfaced through the gate, handoff, list, or Today signal. The helpers' `safe()` scrubs them defensively:
+- "ready to send"
+- "proposal ready"
+- "customer ready"
+- "approved"
+
+Use **"Ready to build in BisTrack"** when the gate helper says so — never customer-readiness language. The list filter, Today signal, and handoff all consume `projectQuotePrepGateStatus` so wording stays consistent across surfaces.
+
 ## Architecture
 
 React + Vite + plain CSS (`src/App.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `WorkbenchShell` (legacy shell) + `SalesOsStorageStatus` (durable storage widget)
-- `src/components/WorkbenchShell.jsx` — main orchestrator; owns all state, the PDF parse pipeline, opportunity queue, and proposal/export flow
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
+- `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
@@ -72,7 +159,7 @@ Stores: `customerFiles`, `visitSessions`, `quotePrepRecords`, `followUpRecords`,
 
 ### Customer File dual-write (sync API → IDB mirror)
 
-The legacy synchronous `customerFile.js` API (`saveCustomerFile`, `updateCustomerFile`, `appendCustomerFileItem`, `removeCustomerFile`) writes to localStorage AND fire-and-forget mirrors to IndexedDB. The mirror is wired at boot by `SalesOsStorageStatus` via `setCustomerFileDurableMirror(storage)`. Default outside the browser is null (legacy tests stay deterministic).
+The legacy synchronous `customerFile.js` API (`saveCustomerFile`, `updateCustomerFile`, `appendCustomerFileItem`, `removeCustomerFile`) writes to localStorage AND fire-and-forget mirrors to IndexedDB. The mirror is wired at boot by `src/lib/salesOsStorageBoot.js` via `setCustomerFileDurableMirror(storage)`. Default outside the browser is null (legacy tests stay deterministic).
 
 Rules:
 - New shell code must use `customerFileDurable.js` (async). Reads from there are the source of truth for backup/restore.
@@ -154,7 +241,9 @@ Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuo
 
 ## Pre-existing Lint Debt
 
-`src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter that ESLint flags. Leave it alone in unrelated work — fixing it would change a public function signature.
+Two intentional violations exist; `npm run lint` reports both. Leave alone in unrelated work:
+- `src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter — fixing it would change a public function signature.
+- `src/lib/customerPipelineCsv.js` `parseCsv` line 24 has an irregular-whitespace character — see the "CSV Parsing — Intentional Lenience" section below for why.
 
 ## CSV Parsing — Intentional Lenience
 
