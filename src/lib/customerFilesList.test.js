@@ -1,0 +1,199 @@
+import { describe, it, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  projectCustomerFileForList,
+  projectCustomerFilesList,
+  searchCustomerFilesList,
+} from './customerFilesList.js'
+import { createMemoryEngine, createSalesOsStorage } from './salesOsStorage.js'
+import {
+  saveCustomerFileDurable,
+  listCustomerFilesDurable,
+} from './customerFileDurable.js'
+
+function makeStorage() {
+  return createSalesOsStorage({ engine: createMemoryEngine() })
+}
+
+describe('projectCustomerFilesList — sorting + projection', () => {
+  it('sorts most-recently-updated first', () => {
+    const rows = projectCustomerFilesList([
+      { id: 'cf-old', customerName: 'Old', updatedAt: '2026-04-10T10:00:00Z' },
+      { id: 'cf-new', customerName: 'New', updatedAt: '2026-05-08T10:00:00Z' },
+      { id: 'cf-mid', customerName: 'Mid', updatedAt: '2026-04-25T10:00:00Z' },
+    ])
+    assert.deepEqual(rows.map((r) => r.id), ['cf-new', 'cf-mid', 'cf-old'])
+  })
+
+  it('falls back to lensUpdatedAt / visitedAt / createdAt when updatedAt missing', () => {
+    const rows = projectCustomerFilesList([
+      { id: 'cf-1', customerName: 'A', createdAt: '2026-04-01T10:00:00Z' },
+      { id: 'cf-2', customerName: 'B', lensUpdatedAt: '2026-05-01T10:00:00Z' },
+    ])
+    assert.equal(rows[0].id, 'cf-2')
+  })
+
+  it('survives missing optional fields without crashing', () => {
+    const row = projectCustomerFileForList({ id: 'cf-x', customerName: 'Bare' })
+    assert.equal(row.customerName, 'Bare')
+    assert.equal(row.contact, '')
+    assert.equal(row.summary, '')
+    assert.equal(row.projectAddress, '')
+    assert.equal(row.lensSetupTypeLabel, '')
+  })
+
+  it('returns null when row has no id', () => {
+    assert.equal(projectCustomerFileForList({ customerName: 'Anon' }), null)
+  })
+
+  it('empty input returns an empty array', () => {
+    assert.deepEqual(projectCustomerFilesList([]), [])
+    assert.deepEqual(projectCustomerFilesList(null), [])
+  })
+
+  it('contact prefers phone over email', () => {
+    const r = projectCustomerFileForList({
+      id: 'cf-1',
+      customerName: 'X',
+      customerPhone: '555-0001',
+      customerEmail: 'x@y.com',
+    })
+    assert.equal(r.contact, '555-0001')
+  })
+
+  it('summary picks lens notes first, then existing notes, then goal', () => {
+    assert.equal(
+      projectCustomerFileForList({ id: 'cf-1', lensSalespersonNotes: 'Lens', existingNotes: 'Existing', customerGoal: 'Goal' }).summary,
+      'Lens'
+    )
+    assert.equal(
+      projectCustomerFileForList({ id: 'cf-2', existingNotes: 'Existing', customerGoal: 'Goal' }).summary,
+      'Existing'
+    )
+    assert.equal(
+      projectCustomerFileForList({ id: 'cf-3', customerGoal: 'Goal' }).summary,
+      'Goal'
+    )
+  })
+
+  it('lensSetupType is rendered to its human label', () => {
+    const row = projectCustomerFileForList({ id: 'cf-1', lensSetupType: 'zero-clearance-metal-fireplace' })
+    assert.equal(row.lensSetupTypeLabel, 'Zero-clearance metal fireplace')
+  })
+
+  it('does not surface sensitive keys on list rows', () => {
+    const row = projectCustomerFileForList({
+      id: 'cf-1',
+      customerName: 'Audit',
+      cost: 999,
+      margin: 0.4,
+      buyPrice: 50,
+      supplierTotal: 500,
+      rawOcr: 'redacted',
+      rawPdf: 'redacted',
+      bistrackConfidence: 0.7,
+      fuzzyMatchConfidence: 0.9,
+      ocrConfidence: 0.5,
+      salesRank: 1,
+      productRank: 2,
+    })
+    for (const k of [
+      'cost', 'margin', 'buyPrice', 'supplierTotal',
+      'rawOcr', 'rawPdf',
+      'bistrackConfidence', 'fuzzyMatchConfidence', 'ocrConfidence',
+      'salesRank', 'productRank',
+    ]) {
+      assert.equal(k in row, false, `${k} leaked into list row`)
+    }
+  })
+})
+
+describe('searchCustomerFilesList', () => {
+  const sampleRows = projectCustomerFilesList([
+    {
+      id: 'cf-anna',
+      customerName: 'Anna Orlinska',
+      customerPhone: '815-555-0119',
+      customerEmail: 'anna@example.com',
+      projectAddress: '14 Maple St, Rockford IL 61104',
+      existingNotes: 'Existing prefab fireplace, customer wants gas insert.',
+      lensSetupType: 'zero-clearance-metal-fireplace',
+      updatedAt: '2026-05-08T10:00:00Z',
+    },
+    {
+      id: 'cf-tom',
+      customerName: 'Tom Karpinski',
+      customerPhone: '815-555-2200',
+      projectAddress: 'Belvidere IL',
+      existingNotes: 'Empire vent-free logs.',
+      lensSetupType: 'masonry-fireplace',
+      updatedAt: '2026-05-07T10:00:00Z',
+    },
+    {
+      id: 'cf-rebecca',
+      customerName: 'Rebecca Powell',
+      customerEmail: 'rebecca@example.com',
+      projectAddress: 'Loves Park IL',
+      goalNotes: 'Wants ambience, not heat.',
+      updatedAt: '2026-05-05T10:00:00Z',
+    },
+  ])
+
+  it('matches by customer name', () => {
+    const out = searchCustomerFilesList(sampleRows, 'anna')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].id, 'cf-anna')
+  })
+
+  it('matches by phone number substring', () => {
+    const out = searchCustomerFilesList(sampleRows, '2200')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].id, 'cf-tom')
+  })
+
+  it('matches by email substring', () => {
+    const out = searchCustomerFilesList(sampleRows, 'rebecca@')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].id, 'cf-rebecca')
+  })
+
+  it('matches by city / address', () => {
+    const out = searchCustomerFilesList(sampleRows, 'Rockford')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].id, 'cf-anna')
+  })
+
+  it('matches setup / project / reason text', () => {
+    const out = searchCustomerFilesList(sampleRows, 'vent-free')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].id, 'cf-tom')
+  })
+
+  it('case-insensitive', () => {
+    assert.equal(searchCustomerFilesList(sampleRows, 'ROCKFORD').length, 1)
+  })
+
+  it('empty query returns the list unchanged', () => {
+    assert.equal(searchCustomerFilesList(sampleRows, '').length, sampleRows.length)
+    assert.equal(searchCustomerFilesList(sampleRows, '   ').length, sampleRows.length)
+  })
+
+  it('no matches → empty array', () => {
+    assert.deepEqual(searchCustomerFilesList(sampleRows, 'zzz-nothing'), [])
+  })
+})
+
+describe('listCustomerFilesDurable → projectCustomerFilesList round-trip', () => {
+  let storage
+  beforeEach(() => { storage = makeStorage() })
+
+  it('saving multiple files surfaces them on the list, sorted recent first', async () => {
+    await saveCustomerFileDurable(storage, { id: 'cf-1', customerName: 'A' }, new Date('2026-05-01T10:00:00Z'))
+    await saveCustomerFileDurable(storage, { id: 'cf-2', customerName: 'B' }, new Date('2026-05-08T10:00:00Z'))
+    await saveCustomerFileDurable(storage, { id: 'cf-3', customerName: 'C' }, new Date('2026-05-04T10:00:00Z'))
+    const raw = await listCustomerFilesDurable(storage)
+    const rows = projectCustomerFilesList(raw)
+    assert.deepEqual(rows.map((r) => r.id), ['cf-2', 'cf-3', 'cf-1'])
+    assert.deepEqual(rows.map((r) => r.customerName), ['B', 'C', 'A'])
+  })
+})

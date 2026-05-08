@@ -131,7 +131,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
       }
       secondary={
         onBack ? (
-          <button type="button" className="btn btn-quiet" onClick={onBack}>← Back to Today</button>
+          <button type="button" className="btn btn-quiet" onClick={onBack}>← Back to Customer files</button>
         ) : null
       }
     />

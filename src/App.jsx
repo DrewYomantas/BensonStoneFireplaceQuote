@@ -5,6 +5,7 @@ import AppShell from './components/shell/AppShell.jsx'
 import TodayScreen from './screens/TodayScreen.jsx'
 import StartVisitScreen from './screens/StartVisitScreen.jsx'
 import CustomerFileScreen from './screens/CustomerFileScreen.jsx'
+import CustomerFilesListScreen from './screens/CustomerFilesListScreen.jsx'
 import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
@@ -13,6 +14,7 @@ import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
 const TITLES = {
   today: 'Today at the desk',
   visit: 'Start a visit',
+  filesList: 'Customer files',
   files: 'Customer file',
   lens: 'Setup + Goal Lens',
   backstage: 'Backstage',
@@ -21,7 +23,8 @@ const TITLES = {
 const CRUMBS = {
   today: [],
   visit: ['New visit'],
-  files: ['Customer files'],
+  filesList: ['Customer files'],
+  files: ['Customer files', 'File'],
   lens: ['Customer files', 'Setup + Goal Lens'],
   backstage: ['Backstage'],
 }
@@ -35,12 +38,18 @@ export default function App() {
     if (screen === 'today' || screen === 'visit' || screen === 'backstage') {
       setRoute({ screen, fileId: null })
     } else if (screen === 'files') {
-      setRoute((prev) => ({ screen: 'files', fileId: prev.fileId }))
+      // Rail "Customer Files" goes to the list; the file detail screen is
+      // reached by clicking a row.
+      setRoute({ screen: 'filesList', fileId: null })
     }
   }
 
   function openFile(fileId) {
     setRoute({ screen: 'files', fileId })
+  }
+
+  function openFilesList() {
+    setRoute({ screen: 'filesList', fileId: null })
   }
 
   function openLens(fileId) {
@@ -53,7 +62,7 @@ export default function App() {
 
   return (
     <AppShell
-      active={route.screen === 'lens' ? 'files' : route.screen}
+      active={route.screen === 'lens' || route.screen === 'filesList' ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -65,10 +74,16 @@ export default function App() {
       {route.screen === 'visit' && (
         <StartVisitScreen onCustomerFileCreated={onCustomerFileCreated} />
       )}
+      {route.screen === 'filesList' && (
+        <CustomerFilesListScreen
+          onOpenFile={openFile}
+          onOpenStartVisit={() => navigate('visit')}
+        />
+      )}
       {route.screen === 'files' && (
         <CustomerFileScreen
           fileId={route.fileId}
-          onBack={() => navigate('today')}
+          onBack={openFilesList}
           onOpenLens={openLens}
         />
       )}
