@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 .claude/
+.playwright-mcp/
 
 # Real customer/vendor PDFs and internal reference docs — never commit
 *.pdf

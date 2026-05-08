@@ -234,6 +234,9 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
       const storage = getSalesOsStorage()
       const result = await commitBulkIntakeDrafts(toImport, storage)
       setImportResult(result)
+      if (result.imported.length > 0) {
+        setExistingFiles((prev) => [...prev, ...result.imported])
+      }
       setPhase('result')
     } catch (err) {
       setErrorMsg(err.message || String(err))
