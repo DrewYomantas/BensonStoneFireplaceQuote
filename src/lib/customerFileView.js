@@ -22,6 +22,9 @@ const SAFE_KEYS = new Set([
   'lensGasType', 'lensGasTypeSource',
   'lensVenting', 'lensVentingSource',
   'lensConstructionFlags', 'lensSalespersonNotes', 'lensUpdatedAt',
+  // Field Rules acknowledgements — internal-only facts that the Customer
+  // File needs to remember so the safety layer clears across reloads.
+  'zcGasInsertAcknowledgedAt', 'zcGasInsertAcknowledgedBy',
 ])
 
 export function projectCustomerFileForDisplay(file = {}) {

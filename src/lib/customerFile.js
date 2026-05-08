@@ -107,6 +107,12 @@ const stringKeys = [
   'lensVentingSource',
   'lensSalespersonNotes',
   'lensUpdatedAt',
+  // Field Rules — Liam's May 2026 Field Rules safety layer (PR 3).
+  // Acknowledgement state for Field Rule 2 (ZC / prefab fireplace + gas
+  // insert path). Persisted on the Customer File so the rule clears across
+  // reloads. No customer-facing surface — these are internal facts.
+  'zcGasInsertAcknowledgedAt',
+  'zcGasInsertAcknowledgedBy',
   // Model tag / appliance verification
   'taggedModel',
   'taggedVendor',

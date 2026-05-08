@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import CustomerFileHeader from '../components/file/CustomerFileHeader.jsx'
 import FactRow from '../components/file/FactRow.jsx'
+import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import ManagerReviewReasons from '../components/file/ManagerReviewReasons.jsx'
 import ProductsDiscussedCard from '../components/file/ProductsDiscussedCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
-import { getCustomerFileDurable } from '../lib/customerFileDurable.js'
+import {
+  getCustomerFileDurable,
+  updateCustomerFileDurable,
+} from '../lib/customerFileDurable.js'
 import { projectCustomerFileForDisplay, deriveFileWarnings } from '../lib/customerFileView.js'
 import { lensFactsForDisplay } from '../lib/setupGoalLens.js'
+import { evaluateFieldRules, buildZcGasInsertAckPatch } from '../lib/fieldRules.js'
 
 function FactsCard({ file }) {
   const lensFacts = lensFactsForDisplay(file)
@@ -78,16 +83,40 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
 
   const display = file
   const warnings = display ? deriveFileWarnings(display) : []
-  const status = display && warnings.length === 0
+  const fieldRulesResult = display ? evaluateFieldRules(display) : null
+  const fieldRulesBlocker = fieldRulesResult
+    ? fieldRulesResult.findings.find(
+        (f) => f.severity === 'blocker' && f.status === 'triggered'
+      )
+    : null
+  const status = display && warnings.length === 0 && !fieldRulesBlocker
     ? { kind: 'safe', label: 'Active' }
     : { kind: 'review', label: 'In review' }
+
+  async function acknowledgeZcGasInsert() {
+    if (!fileId || !display) return
+    try {
+      const ready = await ensureSalesOsBoot()
+      if (!ready.ok) return
+      const storage = getSalesOsStorage()
+      const patch = buildZcGasInsertAckPatch(new Date(), display.customerName || '')
+      const updated = await updateCustomerFileDurable(storage, fileId, patch)
+      if (updated) setFile(projectCustomerFileForDisplay(updated))
+    } catch {
+      // Acknowledgement is internal-only — no customer-facing surface to notify.
+    }
+  }
 
   const canOpenLens = Boolean(display && fileId && onOpenLens)
   const nextBar = (
     <NextActionBar
       action={display ? 'Open Setup + Goal Lens to verify what was captured.' : 'Pick a Customer File from Today or Start Visit.'}
       why="Setup + Goal Lens is where assumed facts become verified ones."
-      blocking={warnings.length ? warnings[0].message : null}
+      blocking={
+        fieldRulesBlocker
+          ? `${fieldRulesBlocker.label} — ${fieldRulesBlocker.action || 'review needed'}.`
+          : warnings.length ? warnings[0].message : null
+      }
       dontForget="The original BisTrack PDF is the canonical pricing document."
       primary={
         <button
@@ -141,6 +170,13 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
           <FactsCard file={display} />
           <ProductsDiscussedCard products={[]} />
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <FieldRulesCard
+            result={fieldRulesResult}
+            onAcknowledgeZcAck={acknowledgeZcGasInsert}
+            canAcknowledge={Boolean(fileId)}
+          />
         </div>
         <div style={{ marginTop: 18 }}>
           <ManagerReviewReasons />
