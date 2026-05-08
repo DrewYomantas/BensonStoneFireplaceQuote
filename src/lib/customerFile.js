@@ -1,8 +1,51 @@
 // Customer file: the operational record for a real Benson Stone showroom journey.
 // One file per customer/project — created at visit start OR on first BizTrack import.
 // Holds the lifecycle state that the quote shell can derive status from.
+//
+// Persistence:
+//   The legacy synchronous API below writes to localStorage so existing screens
+//   keep working without an async refactor. When the durable Sales OS storage
+//   is open, we ALSO mirror every mutation into IndexedDB so refresh-survival
+//   and backup/restore include customer files. The new async API lives in
+//   ./customerFileDurable.js.
 
 const STORAGE_KEY = 'benson-stone-customer-file-v1'
+
+// Opt-in mirror to the durable Sales OS storage. Wired from
+// SalesOsStorageStatus.jsx after the IndexedDB engine opens. Tests can swap in
+// an in-memory storage to verify mirror behavior. Default null = no mirror,
+// which keeps every existing legacy test deterministic.
+let durableMirror = null
+let lastMirrorPromise = Promise.resolve()
+const DURABLE_STORE = 'customerFiles'
+
+export function setCustomerFileDurableMirror(storage) {
+  durableMirror = storage || null
+}
+
+export function getCustomerFileDurableMirror() {
+  return durableMirror
+}
+
+// Test helper — await the most recent fire-and-forget mirror write before
+// asserting on durable storage state.
+export function _flushCustomerFileDurableMirror() {
+  return lastMirrorPromise
+}
+
+function mirrorPut(file) {
+  if (!durableMirror || !file || !file.id) return
+  lastMirrorPromise = Promise.resolve()
+    .then(() => durableMirror.putRecord(DURABLE_STORE, sanitizeCustomerFile(file)))
+    .catch(() => {})
+}
+
+function mirrorDelete(id) {
+  if (!durableMirror || !id) return
+  lastMirrorPromise = Promise.resolve()
+    .then(() => durableMirror.deleteRecord(DURABLE_STORE, id))
+    .catch(() => {})
+}
 
 export const lifecycleStages = [
   'visit-started',
@@ -163,6 +206,8 @@ export function saveCustomerFile(file, storage) {
     ? [clean, ...all]
     : all.map((f) => f.id === clean.id ? { ...f, ...clean, createdAt: f.createdAt || clean.createdAt } : f)
   writeAll(next, storage)
+  const persisted = next.find((f) => f.id === clean.id) || clean
+  mirrorPut(persisted)
   return clean
 }
 
@@ -172,7 +217,9 @@ export function updateCustomerFile(id, patch, storage) {
     f.id === id ? sanitizeCustomerFile({ ...f, ...patch, id, updatedAt: nowIso() }) : f
   )
   writeAll(next, storage)
-  return next.find((f) => f.id === id) || null
+  const updated = next.find((f) => f.id === id) || null
+  if (updated) mirrorPut(updated)
+  return updated
 }
 
 export function appendCustomerFileItem(id, key, item, storage) {
@@ -186,6 +233,7 @@ export function appendCustomerFileItem(id, key, item, storage) {
 export function removeCustomerFile(id, storage) {
   const remaining = listCustomerFiles(storage).filter((f) => f.id !== id)
   writeAll(remaining, storage)
+  mirrorDelete(id)
   return remaining
 }
 

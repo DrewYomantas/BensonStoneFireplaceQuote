@@ -3,6 +3,7 @@ import { createIndexedDbEngine, createSalesOsStorage } from '../lib/salesOsStora
 import { exportSalesOsBackup, importSalesOsBackup, summarizeBackup } from '../lib/salesOsBackup.js'
 import { createSaveState } from '../lib/salesOsSaveState.js'
 import { migrateLegacyLocalStorage } from '../lib/salesOsMigration.js'
+import { setCustomerFileDurableMirror } from '../lib/customerFile.js'
 
 const saveState = createSaveState()
 const storage = createSalesOsStorage({ engine: createIndexedDbEngine() })
@@ -17,6 +18,7 @@ function ensureInit() {
       saveState.setAvailability(false, opened.error.message)
       return { ok: false }
     }
+    setCustomerFileDurableMirror(storage)
     saveState.markSaved()
     const migration = await migrateLegacyLocalStorage(storage)
     if (!migration.ok) {
