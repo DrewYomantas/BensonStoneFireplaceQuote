@@ -508,6 +508,51 @@ describe('buildCustomerProposalPreview — backwards compatibility', () => {
   })
 })
 
+// ---- Print / customer-safe disclaimer (Milestone 18) ------------------------
+
+describe('buildCustomerProposalPreview — customer-safe disclaimer', () => {
+  it('first disclaimer does not mention BisTrack', () => {
+    const preview = buildCustomerProposalPreview(makeFile())
+    assert.ok(!preview.disclaimers[0].toLowerCase().includes('bistrack'),
+      `disclaimer should not mention BisTrack: "${preview.disclaimers[0]}"`)
+  })
+
+  it('first disclaimer references official Benson Stone quote process', () => {
+    const preview = buildCustomerProposalPreview(makeFile())
+    assert.ok(
+      preview.disclaimers[0].toLowerCase().includes('benson stone'),
+      `disclaimer should reference Benson Stone: "${preview.disclaimers[0]}"`,
+    )
+  })
+
+  it('disclaimers contain no banned phrases', () => {
+    const preview = buildCustomerProposalPreview(makeFile())
+    const banned = ['ready to send', 'proposal ready', 'customer ready', 'approved']
+    for (const d of preview.disclaimers) {
+      const lower = d.toLowerCase()
+      for (const p of banned) {
+        assert.ok(!lower.includes(p), `banned phrase "${p}" in disclaimer: "${d}"`)
+      }
+    }
+  })
+
+  it('disclaimers contain no sensitive internal terms', () => {
+    const preview = buildCustomerProposalPreview(makeFile())
+    const sensitive = ['ocr', 'fuzzy match', 'margin', 'buy price', 'supplier', 'cost', 'sales rank']
+    for (const d of preview.disclaimers) {
+      const lower = d.toLowerCase()
+      for (const t of sensitive) {
+        assert.ok(!lower.includes(t), `sensitive term "${t}" in disclaimer: "${d}"`)
+      }
+    }
+  })
+
+  it('second disclaimer is Benson Stone city line', () => {
+    const preview = buildCustomerProposalPreview(makeFile())
+    assert.ok(preview.disclaimers[1].includes('Benson Stone'))
+  })
+})
+
 // ---- goalSummary slug suppression -------------------------------------------
 
 describe('buildCustomerProposalPreview — goalSummary slug suppression', () => {

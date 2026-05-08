@@ -55,7 +55,7 @@ function ProposalHeader({ preview }) {
 
 function ProposalSection({ eyebrow, children, style }) {
   return (
-    <div style={{ marginBottom: 28, ...style }}>
+    <div className="proposal-print-section" style={{ marginBottom: 28, ...style }}>
       {eyebrow && (
         <p
           className="eyebrow eyebrow-ink"
@@ -82,6 +82,7 @@ function BreakdownGroup({ group }) {
         {group.lines.map((line) => (
           <div
             key={line.id}
+            className="proposal-line-item"
             style={{
               display: 'flex', alignItems: 'baseline', gap: 10,
               padding: '7px 0',
@@ -128,6 +129,7 @@ function BreakdownGroup({ group }) {
 function ProposalDocument({ preview }) {
   return (
     <div
+      className="proposal-print-doc"
       style={{
         background: 'var(--paper)',
         border: '1px solid var(--paper-edge)',
@@ -373,32 +375,49 @@ export default function ProposalPreviewScreen({
   } else {
     body = (
       <div
+        className="proposal-preview-content"
         style={{
           padding: '24px 28px 40px',
           background: 'var(--stone-75)',
           minHeight: '100%',
         }}
       >
-        {/* Internal header — not part of the proposal document */}
-        <div style={{ maxWidth: 720, margin: '0 auto 20px' }}>
-          <div className="hstack" style={{ flexWrap: 'wrap', gap: 10 }}>
+        {/* Internal header + print action — hidden in print */}
+        <div data-print-hide style={{ maxWidth: 720, margin: '0 auto 20px' }}>
+          <div className="hstack" style={{ flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
             <div>
               <p className="eyebrow eyebrow-ink" style={{ marginBottom: 2 }}>PROPOSAL PREVIEW · INTERNAL</p>
               <p className="body-sm" style={{ color: 'var(--slate)', margin: 0 }}>
                 Read-only draft view. Nothing is sent. Official quote stays in BisTrack.
               </p>
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => window.print()}
+              >
+                Print / Save PDF
+              </button>
+              {!preview.gateStatus.isReady && (
+                <p className="body-sm" style={{ color: 'var(--ember-dark)', margin: 0, textAlign: 'right' }}>
+                  Needs review before customer use.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Gate warning — above the document, not part of the proposal */}
-        <GateWarningPanel
-          gateStatus={preview.gateStatus}
-          onOpenQuotePrep={onOpenQuotePrep}
-          onOpenLens={onOpenLens}
-          fileId={fileId}
-          disabled={false}
-        />
+        {/* Gate warning — above the document, hidden in print */}
+        <div data-print-hide>
+          <GateWarningPanel
+            gateStatus={preview.gateStatus}
+            onOpenQuotePrep={onOpenQuotePrep}
+            onOpenLens={onOpenLens}
+            fileId={fileId}
+            disabled={false}
+          />
+        </div>
 
         {/* Customer-facing proposal document */}
         <ProposalDocument preview={preview} />

@@ -221,7 +221,7 @@ export function buildCustomerProposalPreview(rawFile, options = {}) {
     isEmpty: breakdownGroups.length === 0,
     reviewedLineCount,
     disclaimers: Object.freeze([
-      'This overview is based on our initial consultation. Final pricing and specifications are confirmed in the official BisTrack quote.',
+      'Final pricing, availability, installation details, and scheduling are confirmed through the official Benson Stone quote process.',
       'Benson Stone · Rockford, IL',
     ]),
   })

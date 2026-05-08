@@ -392,6 +392,63 @@ body {
 .product-row .product-name { font-family: var(--font-sans); font-weight: var(--fw-semi); color: var(--ink); }
 .product-row .product-fav  { color: var(--ember); margin-left: 8px; }
 
+/* ---------- print / save-as-pdf (Milestone 18) ---------- */
+@media print {
+  /* Unlock viewport constraints */
+  html, body, #root { height: auto !important; }
+
+  /* Switch shell from full-viewport grid to plain block */
+  .shell {
+    display: block !important;
+    height: auto !important;
+    background: white !important;
+  }
+
+  /* Hide rep-only shell chrome */
+  .shell-rail,
+  .shell-bar,
+  .next-bar,
+  .too-narrow { display: none !important; }
+
+  /* Remove overflow clipping so full document prints */
+  .shell-main,
+  .shell-content {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Hide any element tagged as internal / rep-only */
+  [data-print-hide] { display: none !important; }
+
+  /* Outer wrapper for Proposal Preview — clear background + padding */
+  .proposal-preview-content {
+    background: white !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+
+  /* Proposal document: full page width, no card chrome */
+  .proposal-print-doc {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 24px 32px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    border-radius: 0 !important;
+  }
+
+  /* Keep section headings with their content */
+  .proposal-print-section { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Keep individual line items intact */
+  .proposal-line-item { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Orphan control for headings and eyebrows */
+  h1, h2, h3, .eyebrow { page-break-after: avoid; break-after: avoid; }
+}
+
 /* ---------- responsive: portrait / narrow fallback ---------- */
 .too-narrow {
   display: none;
