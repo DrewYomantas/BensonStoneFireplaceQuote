@@ -8,6 +8,7 @@ import CustomerFileScreen from './screens/CustomerFileScreen.jsx'
 import CustomerFilesListScreen from './screens/CustomerFilesListScreen.jsx'
 import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
 import QuotePrepScreen from './screens/QuotePrepScreen.jsx'
+import BisTrackHandoffScreen from './screens/BisTrackHandoffScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
@@ -19,6 +20,7 @@ const TITLES = {
   files: 'Customer file',
   lens: 'Setup + Goal Lens',
   quotePrep: 'Quote / Prep',
+  handoff: 'Internal BisTrack Handoff',
   backstage: 'Backstage',
 }
 
@@ -29,6 +31,7 @@ const CRUMBS = {
   files: ['Customer files', 'File'],
   lens: ['Customer files', 'Setup + Goal Lens'],
   quotePrep: ['Customer files', 'Quote / Prep'],
+  handoff: ['Customer files', 'Internal BisTrack Handoff'],
   backstage: ['Backstage'],
 }
 
@@ -63,13 +66,17 @@ export default function App() {
     setRoute({ screen: 'quotePrep', fileId })
   }
 
+  function openHandoff(fileId) {
+    setRoute({ screen: 'handoff', fileId })
+  }
+
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
 
   return (
     <AppShell
-      active={route.screen === 'lens' || route.screen === 'filesList' || route.screen === 'quotePrep' ? 'files' : route.screen}
+      active={route.screen === 'lens' || route.screen === 'filesList' || route.screen === 'quotePrep' || route.screen === 'handoff' ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -97,6 +104,7 @@ export default function App() {
           onBack={openFilesList}
           onOpenLens={openLens}
           onOpenQuotePrep={openQuotePrep}
+          onOpenHandoff={openHandoff}
         />
       )}
       {route.screen === 'lens' && (
@@ -110,6 +118,15 @@ export default function App() {
           fileId={route.fileId}
           onBack={() => openFile(route.fileId)}
           onOpenLens={openLens}
+          onOpenHandoff={openHandoff}
+        />
+      )}
+      {route.screen === 'handoff' && (
+        <BisTrackHandoffScreen
+          fileId={route.fileId}
+          onBack={() => openFile(route.fileId)}
+          onOpenLens={openLens}
+          onOpenQuotePrep={openQuotePrep}
         />
       )}
       {route.screen === 'backstage' && (

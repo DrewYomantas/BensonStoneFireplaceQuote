@@ -56,7 +56,7 @@ function gateBadge(status) {
   return { label: 'DRAFT', cls: 'source source-manual' }
 }
 
-function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep }) {
+function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, onOpenHandoff }) {
   const status = projectQuotePrepGateStatus(file, { fieldRulesResult })
   const badge = gateBadge(status.status)
   const headline = status.hasLines ? status.label : 'Quote Prep not started'
@@ -92,7 +92,7 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep }
           ))}
         </ul>
       )}
-      <div style={{ marginTop: 10 }}>
+      <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button
           type="button"
           className="btn btn-primary"
@@ -101,12 +101,20 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep }
         >
           Open Quote / Prep
         </button>
+        <button
+          type="button"
+          className="btn btn-quiet"
+          disabled={!fileId || !onOpenHandoff}
+          onClick={() => onOpenHandoff && onOpenHandoff(fileId)}
+        >
+          Open BisTrack Handoff
+        </button>
       </div>
     </section>
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff }) {
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -248,6 +256,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             fieldRulesResult={fieldRulesResult}
             fileId={fileId}
             onOpenQuotePrep={onOpenQuotePrep}
+            onOpenHandoff={onOpenHandoff}
           />
 
           <PlaceholderCard

@@ -419,7 +419,7 @@ function GateCard({ result, gateDraft, onPatch, onReasonAction, disabled, quoteT
   )
 }
 
-export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
+export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHandoff }) {
   const [file, setFile] = useState(null)
   const [draft, setDraft] = useState(emptyQuotePrepDraft())
   const [loading, setLoading] = useState(true)
@@ -774,6 +774,12 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
     </button>
   ) : null
 
+  const handoffCta = onOpenHandoff && fileId ? (
+    <button type="button" className="btn btn-quiet" onClick={() => onOpenHandoff(fileId)}>
+      Open BisTrack Handoff
+    </button>
+  ) : null
+
   return (
     <>
       <div className="shell-content">{body}</div>
@@ -785,6 +791,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
         primary={primaryButton}
         secondary={
           <>
+            {handoffCta}
             {lensCta}
             {onBack ? (
               <button type="button" className="btn btn-quiet" onClick={onBack}>← Back to Customer File</button>
