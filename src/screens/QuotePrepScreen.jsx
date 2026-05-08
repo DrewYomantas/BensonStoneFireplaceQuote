@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
+import SourceContextPanel from '../components/quotePrep/SourceContextPanel.jsx'
 import {
   ensureSalesOsBoot,
   getSalesOsStorage,
@@ -30,7 +31,11 @@ import {
 } from '../lib/quotePrepDraft.js'
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
-import { appendActivityForFile } from '../lib/visitActivity.js'
+import {
+  appendActivityForFile,
+  listActivityForFile,
+  getFollowUpForFile,
+} from '../lib/visitActivity.js'
 import { SETUP_TYPE_LABELS } from '../lib/setupGoalLens.js'
 import {
   evaluateQuotePrepGate,
@@ -42,6 +47,7 @@ import {
   GATE_STATUS,
   REASON_ACTION_TARGETS,
 } from '../lib/quotePrepGate.js'
+import { buildQuotePrepContext } from '../lib/quotePrepContext.js'
 
 function VerifiedFromLensCard({ file }) {
   if (!file) return null
@@ -181,6 +187,17 @@ function LineRow({ line, onPatch, onRemove, disabled }) {
           value={line.internalPrepNote}
           onChange={(e) => onPatch(line.id, { internalPrepNote: e.target.value })}
           placeholder="Reminders for the shop. Not customer-facing."
+          disabled={disabled}
+        />
+      </label>
+      <label style={{ display: 'block', marginTop: 10 }}>
+        <span className="eyebrow eyebrow-ember" style={{ fontSize: 11 }}>EVIDENCE NOTE · REP-ONLY</span>
+        <textarea
+          className="field"
+          rows={2}
+          value={line.evidenceNote}
+          onChange={(e) => onPatch(line.id, { evidenceNote: e.target.value })}
+          placeholder="Why this line exists — e.g. per BisTrack quote 04-212, line 3; customer confirmed at May 2 visit."
           disabled={disabled}
         />
       </label>
@@ -432,6 +449,11 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
   const [submitting, setSubmitting] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [gateDraft, setGateDraft] = useState(quotePrepGateDraftFromCustomerFile(null))
+  // Source Context drawer state (Milestone 16)
+  const [showContext, setShowContext] = useState(false)
+  const [activityEvents, setActivityEvents] = useState([])
+  const [followUp, setFollowUp] = useState(null)
+  const [contextNoteAdded, setContextNoteAdded] = useState(false)
 
   const linesSectionRef = useRef(null)
   const fieldRulesSectionRef = useRef(null)
@@ -443,6 +465,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
       if (cancelled) return
       setLoading(true); setMissing(false); setErrorMsg('')
       setDirty(false); setSavedAt(null); setSaveError('')
+      setActivityEvents([]); setFollowUp(null); setContextNoteAdded(false)
       if (!fileId || fileId.startsWith('sample-')) {
         setMissing(true); setLoading(false)
         return
@@ -461,6 +484,18 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
         setFile(projectCustomerFileForDisplay(row))
         setDraft(quotePrepDraftFromCustomerFile(row))
         setGateDraft(quotePrepGateDraftFromCustomerFile(row))
+        // Load activity + follow-up for Source Context drawer. Best-effort:
+        // a failure here must not prevent Quote / Prep from loading.
+        try {
+          const [events, fu] = await Promise.all([
+            listActivityForFile(storage, fileId, { limit: 8 }),
+            getFollowUpForFile(storage, fileId),
+          ])
+          if (!cancelled) {
+            setActivityEvents(events || [])
+            setFollowUp(fu || null)
+          }
+        } catch { /* Source Context data is best-effort */ }
         setLoading(false)
       } catch (err) {
         if (!cancelled) { setErrorMsg(err.message || String(err)); setLoading(false) }
@@ -622,6 +657,28 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
     ? fieldRulesResult.findings.find((f) => f.severity === 'blocker' && f.status === 'triggered')
     : null
 
+  // Source Context view model — built from the saved file + pre-loaded activity/follow-up.
+  // Uses the saved file (not unsaved draft) so the context reflects what is durable.
+  const contextView = useMemo(() => {
+    if (!file) return null
+    // Merge saved file with unsaved draft lines so evidence notes in the
+    // active draft are visible in the drawer before saving.
+    const fileWithDraft = { ...file, quotePrepLines: draft.lines, quotePrepNotes: draft.notes }
+    return buildQuotePrepContext(fileWithDraft, activityEvents, followUp)
+  }, [file, draft, activityEvents, followUp])
+
+  function handleAddContextToPrepNotes(summary) {
+    if (!summary) return
+    const stamp = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    const note = `[Context · ${stamp}] ${summary}`
+    setDraft((prev) => {
+      const sep = prev.notes ? '\n' : ''
+      return { ...prev, notes: prev.notes + sep + note }
+    })
+    setDirty(true); setSavedAt(null)
+    setContextNoteAdded(true)
+  }
+
   let body
   if (loading) {
     body = <div style={{ padding: '24px 28px 28px' }}><p className="body-sm">Loading file…</p></div>
@@ -765,6 +822,44 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
             quoteTypeRef={quoteTypeRef}
             disabled={submitting}
           />
+
+          <div style={{ marginTop: 24, borderTop: '1px solid var(--stone-200)', paddingTop: 16 }}>
+            <div className="hstack" style={{ marginBottom: showContext ? 14 : 0 }}>
+              <span className="eyebrow eyebrow-ink">SOURCE CONTEXT</span>
+              <span className="spacer" />
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => {
+                  setShowContext((v) => {
+                    if (v) setContextNoteAdded(false)
+                    return !v
+                  })
+                }}
+                aria-expanded={showContext}
+              >
+                {showContext ? 'Close Source Context' : 'Open Source Context'}
+              </button>
+            </div>
+            {!showContext && (
+              <p className="body-sm" style={{ color: 'var(--slate-soft)', marginTop: 4 }}>
+                Internal evidence trail — customer context, field rule findings, gate status, recent activity, and line evidence notes.
+              </p>
+            )}
+            {showContext && contextView && (
+              <SourceContextPanel
+                ctx={contextView}
+                onAddToPrepNotes={handleAddContextToPrepNotes}
+                addedToPrepNotes={contextNoteAdded}
+                disabled={submitting}
+              />
+            )}
+            {showContext && !contextView && (
+              <p className="body-sm" style={{ color: 'var(--slate-soft)', marginTop: 4 }}>
+                Source context unavailable — open a real Customer File first.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     )

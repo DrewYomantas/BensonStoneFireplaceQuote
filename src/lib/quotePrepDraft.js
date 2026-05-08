@@ -30,6 +30,9 @@ export const LINE_SAFE_KEYS = Object.freeze([
   'reviewFlags',
   'reviewedAt',
   'reviewedBy',
+  // Milestone 16 — evidence note. Internal-only context about why a line exists.
+  // Not customer-facing. Scrubbed in quotePrepContext projection before display.
+  'evidenceNote',
 ])
 
 const LINE_SAFE_KEY_SET = new Set(LINE_SAFE_KEYS)

@@ -392,3 +392,80 @@ describe('quotePrepDraft — source basis + review state', () => {
     assert.equal(lines[1].sourceBasis, 'manual_entry')
   })
 })
+
+describe('quotePrepDraft — evidenceNote (Milestone 16)', () => {
+  it('evidenceNote is included in LINE_SAFE_KEYS', () => {
+    assert.ok(LINE_SAFE_KEYS.includes('evidenceNote'))
+  })
+
+  it('evidenceNote survives normalizeQuotePrepLine', () => {
+    const line = normalizeQuotePrepLine({
+      name: 'Gas insert',
+      evidenceNote: 'Per BisTrack quote 04-212, line 3.',
+    })
+    assert.equal(line.evidenceNote, 'Per BisTrack quote 04-212, line 3.')
+  })
+
+  it('evidenceNote defaults to empty string when missing (backwards compat)', () => {
+    const line = normalizeQuotePrepLine({ name: 'Old line', partNumber: 'X-1' })
+    assert.equal(line.evidenceNote, '')
+  })
+
+  it('evidenceNote is preserved through normalizeQuotePrepLines', () => {
+    const lines = normalizeQuotePrepLines([
+      { name: 'A', evidenceNote: 'Confirmed at May 2 walk-in.' },
+      { name: 'B' },
+    ])
+    assert.equal(lines[0].evidenceNote, 'Confirmed at May 2 walk-in.')
+    assert.equal(lines[1].evidenceNote, '')
+  })
+
+  it('evidenceNote is preserved through updateQuotePrepLine', () => {
+    let lines = [normalizeQuotePrepLine({ name: 'A' })]
+    const id = lines[0].id
+    lines = updateQuotePrepLine(lines, id, { evidenceNote: 'From customer notes.' })
+    assert.equal(lines[0].evidenceNote, 'From customer notes.')
+    assert.equal(lines[0].id, id)
+  })
+
+  it('evidenceNote survives buildCustomerFilePatchFromQuotePrep round trip', () => {
+    const draft = {
+      lines: [{ name: 'Gas insert', evidenceNote: 'Via BisTrack line 5.' }],
+      notes: '',
+    }
+    const patch = buildCustomerFilePatchFromQuotePrep(draft)
+    assert.equal(patch.quotePrepLines[0].evidenceNote, 'Via BisTrack line 5.')
+  })
+
+  it('evidenceNote survives durable save → load round trip', async () => {
+    const storage = createSalesOsStorage({ engine: createMemoryEngine() })
+    const draft = {
+      lines: [
+        {
+          name: 'Whisper Flex 12',
+          partNumber: 'T1009898-12',
+          evidenceNote: 'Per BisTrack quote 04-212.',
+        },
+      ],
+      notes: '',
+    }
+    const patch = buildCustomerFilePatchFromQuotePrep(draft)
+    await saveCustomerFileDurable(storage, { id: 'cf-evidence-note', customerName: 'Test', ...patch })
+    const reloaded = await getCustomerFileDurable(storage, 'cf-evidence-note')
+    const reDraft = quotePrepDraftFromCustomerFile(reloaded)
+    assert.equal(reDraft.lines[0].evidenceNote, 'Per BisTrack quote 04-212.')
+  })
+
+  it('evidenceNote does not appear in customer-facing output context (not in customerSafeNotes)', () => {
+    const line = normalizeQuotePrepLine({
+      name: 'Gas insert',
+      evidenceNote: 'Internal: cost negotiated below MSRP.',
+      customerSafeNotes: 'High-efficiency gas insert.',
+    })
+    // evidenceNote is internal-only — it lives on the line but is separate from customerSafeNotes
+    assert.equal(line.customerSafeNotes, 'High-efficiency gas insert.')
+    assert.equal(line.evidenceNote, 'Internal: cost negotiated below MSRP.')
+    // Sensitive terms in evidenceNote are stored as-is (scrub happens in context projection)
+    assert.ok(line.evidenceNote.length > 0)
+  })
+})
