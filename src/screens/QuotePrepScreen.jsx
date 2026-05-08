@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import {
@@ -38,6 +38,7 @@ import {
   QUOTE_TYPE_VALUES,
   QUOTE_TYPE_LABELS,
   GATE_STATUS,
+  REASON_ACTION_TARGETS,
 } from '../lib/quotePrepGate.js'
 
 function VerifiedFromLensCard({ file }) {
@@ -293,7 +294,7 @@ function rowStatusBadge(status) {
   return { label: 'MISSING', cls: 'source source-assumed' }
 }
 
-function GateCard({ result, gateDraft, onPatch, disabled }) {
+function GateCard({ result, gateDraft, onPatch, onReasonAction, disabled, quoteTypeRef }) {
   if (!result) return null
   const badge = gateBadge(result.status)
   return (
@@ -319,6 +320,7 @@ function GateCard({ result, gateDraft, onPatch, disabled }) {
         <label>
           <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>QUOTE TYPE</span>
           <select
+            ref={quoteTypeRef}
             className="field"
             value={gateDraft.quotePrepQuoteType}
             onChange={(e) => onPatch({ quotePrepQuoteType: e.target.value })}
@@ -366,7 +368,26 @@ function GateCard({ result, gateDraft, onPatch, disabled }) {
         <div style={{ marginTop: 12 }}>
           <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>WHY NOT YET</span>
           <ul className="body-sm" style={{ marginTop: 4, paddingLeft: 18 }}>
-            {result.reasons.map((r, idx) => <li key={idx}>{r}</li>)}
+            {result.reasons.map((r, idx) => {
+              const message = typeof r === 'string' ? r : r && r.message
+              const action = typeof r === 'string' ? null : r && r.action
+              return (
+                <li key={idx} style={{ marginBottom: 4 }}>
+                  <span>{message}</span>
+                  {action && onReasonAction && (
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      style={{ marginLeft: 8, padding: '2px 8px' }}
+                      onClick={() => onReasonAction(action)}
+                      disabled={disabled}
+                    >
+                      {action.label} →
+                    </button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -409,6 +430,10 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
   const [submitting, setSubmitting] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [gateDraft, setGateDraft] = useState(quotePrepGateDraftFromCustomerFile(null))
+
+  const linesSectionRef = useRef(null)
+  const fieldRulesSectionRef = useRef(null)
+  const quoteTypeRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -465,6 +490,39 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
   function handleGatePatch(patch) {
     setGateDraft((prev) => ({ ...prev, ...patch }))
     setDirty(true); setSavedAt(null)
+  }
+
+  function handleReasonAction(action) {
+    if (!action || !action.target) return
+    if (action.target === REASON_ACTION_TARGETS.lens) {
+      if (onOpenLens && fileId) onOpenLens(fileId)
+      return
+    }
+    if (action.target === REASON_ACTION_TARGETS.addLine) {
+      handleAdd()
+      // Best-effort scroll to the lines list so the new card is visible.
+      if (linesSectionRef.current && linesSectionRef.current.scrollIntoView) {
+        linesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+    if (action.target === REASON_ACTION_TARGETS.reviewLines) {
+      if (linesSectionRef.current && linesSectionRef.current.scrollIntoView) {
+        linesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+    if (action.target === REASON_ACTION_TARGETS.fieldRules) {
+      if (fieldRulesSectionRef.current && fieldRulesSectionRef.current.scrollIntoView) {
+        fieldRulesSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+    if (action.target === REASON_ACTION_TARGETS.gateField) {
+      if (action.field === 'quotePrepQuoteType' && quoteTypeRef.current) {
+        try { quoteTypeRef.current.focus() } catch { /* focus unsupported — fall back to visible card */ }
+      }
+    }
   }
 
   async function handleSave(e) {
@@ -603,7 +661,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, alignItems: 'flex-start', marginTop: 18 }}>
             <form id="quote-prep-form" onSubmit={handleSave}>
-              <section>
+              <section ref={linesSectionRef}>
                 <div className="hstack">
                   <span className="eyebrow eyebrow-ember">PROPOSED LINE ITEMS</span>
                   <span className="spacer" />
@@ -668,7 +726,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
             </div>
           </div>
 
-          <div style={{ marginTop: 18 }}>
+          <div ref={fieldRulesSectionRef} style={{ marginTop: 18 }}>
             <span className="eyebrow eyebrow-ink">RULES CHECK</span>
             <div style={{ marginTop: 6 }}>
               <FieldRulesCard
@@ -683,6 +741,8 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
             result={gateResult}
             gateDraft={gateDraft}
             onPatch={handleGatePatch}
+            onReasonAction={handleReasonAction}
+            quoteTypeRef={quoteTypeRef}
             disabled={submitting}
           />
         </div>

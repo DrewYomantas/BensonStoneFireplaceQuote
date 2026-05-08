@@ -7,6 +7,7 @@ import {
   quotePrepGateDraftFromCustomerFile,
   projectQuotePrepGateStatus,
   GATE_STATUS,
+  REASON_ACTION_TARGETS,
   QUOTE_TYPE_VALUES,
   DEFAULT_QUOTE_TYPE,
 } from './quotePrepGate.js'
@@ -103,7 +104,7 @@ describe('quotePrepGate — evaluate', () => {
       fieldRulesResult: { findings: [] },
     })
     assert.equal(result.status, GATE_STATUS.draft)
-    assert.ok(result.reasons.some((r) => /no proposed line items/i.test(r)))
+    assert.ok(result.reasons.some((r) => /no proposed line items/i.test(r.message)))
     const hasLinesRow = rowOf(result, 'lines', 'has-lines')
     assert.equal(hasLinesRow.status, 'missing')
   })
@@ -164,7 +165,7 @@ describe('quotePrepGate — evaluate', () => {
     })
     assert.notEqual(result.status, GATE_STATUS.ready)
     assert.equal(result.counts.triggeredBlockers, 1)
-    assert.ok(result.reasons.some((r) => /field rule blocker/i.test(r)))
+    assert.ok(result.reasons.some((r) => /field rule blocker/i.test(r.message)))
   })
 
   it('shows ready only when context, lines, rules, and quote type all line up', () => {
@@ -196,7 +197,7 @@ describe('quotePrepGate — evaluate', () => {
       fieldRulesResult: { findings: [] },
     })
     assert.equal(result.status, GATE_STATUS.needsVerification)
-    assert.ok(result.reasons.some((r) => /quote type/i.test(r)))
+    assert.ok(result.reasons.some((r) => /quote type/i.test(r.message)))
   })
 
   it('missing optional Customer File / Lens fields do not crash', () => {
@@ -360,7 +361,11 @@ describe('projectQuotePrepGateStatus', () => {
         assert.equal(re.test(v.label), false, `label: ${v.label}`)
         assert.equal(re.test(v.helper), false, `helper: ${v.helper}`)
         for (const r of v.reasons) {
-          assert.equal(re.test(r), false, `reason: ${r}`)
+          const message = typeof r === 'string' ? r : r.message
+          assert.equal(re.test(message), false, `reason: ${message}`)
+          if (r && r.action && r.action.label) {
+            assert.equal(re.test(r.action.label), false, `action label: ${r.action.label}`)
+          }
         }
       }
     }
@@ -389,6 +394,182 @@ describe('projectQuotePrepGateStatus', () => {
       const lower = k.toLowerCase()
       for (const banned of ['cost', 'margin', 'buyprice', 'supplier', 'rawocr', 'rawpdf', 'bistrackconfidence', 'ocrconfidence']) {
         assert.equal(lower.includes(banned), false, `leaked key: ${k}`)
+      }
+    }
+  })
+})
+
+describe('quotePrepGate — actionable reasons (PR 12)', () => {
+  function findReason(result, regex) {
+    return result.reasons.find((r) => regex.test(r.message))
+  }
+
+  it('missing customer goal carries an action targeting Setup + Goal Lens', () => {
+    const result = evaluateQuotePrepGate({
+      file: { customerName: 'X', customerPhone: '5', lensSetupType: 'masonry-fireplace', quotePrepLines: [] },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        notes: '',
+      },
+      fieldRulesResult: { findings: [] },
+    })
+    const r = findReason(result, /customer goal/i)
+    assert.ok(r, 'goal reason missing')
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.lens)
+    assert.equal(r.action.label, 'Open Setup + Goal Lens')
+  })
+
+  it('missing setup type carries an action targeting Setup + Goal Lens', () => {
+    const result = evaluateQuotePrepGate({
+      file: { customerName: 'X', customerPhone: '5', customerGoal: 'g', quotePrepLines: [] },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        notes: '',
+      },
+      fieldRulesResult: { findings: [] },
+    })
+    const r = findReason(result, /setup type/i)
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.lens)
+  })
+
+  it('no proposed lines carries an action to add a line', () => {
+    const result = evaluateQuotePrepGate({
+      file: { customerName: 'X' },
+      draft: { lines: [], notes: '' },
+      fieldRulesResult: { findings: [] },
+    })
+    const r = findReason(result, /no proposed line items/i)
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.addLine)
+    assert.equal(r.action.label, 'Add line item')
+  })
+
+  it('quote type unknown carries an action targeting the quote type field', () => {
+    const result = evaluateQuotePrepGate({
+      file: {
+        customerName: 'X', customerPhone: '5', customerGoal: 'g',
+        lensSetupType: 'masonry-fireplace',
+        quotePrepQuoteType: 'unknown',
+      },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        notes: '',
+      },
+      fieldRulesResult: { findings: [] },
+    })
+    const r = findReason(result, /quote type/i)
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.gateField)
+    assert.equal(r.action.field, 'quotePrepQuoteType')
+  })
+
+  it('triggered blocker carries an action targeting Field Rules', () => {
+    const result = evaluateQuotePrepGate({
+      file: { customerName: 'X', customerPhone: '5', customerGoal: 'g', lensSetupType: 'masonry-fireplace' },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        notes: '',
+      },
+      fieldRulesResult: {
+        findings: [{ id: 'x', label: 'X', severity: 'blocker', status: 'triggered' }],
+      },
+    })
+    const r = findReason(result, /field rule blocker/i)
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.fieldRules)
+  })
+
+  it('do-not-use line carries an action to review proposed lines', () => {
+    const result = evaluateQuotePrepGate({
+      file: { customerName: 'X', customerPhone: '5', customerGoal: 'g', lensSetupType: 'masonry-fireplace' },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'do_not_use_yet' }],
+        notes: '',
+      },
+      fieldRulesResult: { findings: [] },
+    })
+    const r = findReason(result, /do not use yet/i)
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.reviewLines)
+  })
+
+  it('ready gate has no actionable reasons', () => {
+    const result = evaluateQuotePrepGate({
+      file: {
+        customerName: 'Test', customerPhone: '5', customerGoal: 'g',
+        lensSetupType: 'masonry-fireplace',
+        quotePrepQuoteType: 'planning',
+      },
+      draft: {
+        lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        notes: '',
+      },
+      fieldRulesResult: { findings: [] },
+    })
+    assert.equal(result.status, GATE_STATUS.ready)
+    assert.equal(result.reasons.length, 0)
+  })
+
+  it('action labels never include banned customer-facing phrases', () => {
+    const banned = [/ready to send/i, /proposal ready/i, /customer ready/i, /\bapproved\b/i]
+    const variants = [
+      evaluateQuotePrepGate({
+        file: {}, draft: { lines: [], notes: '' }, fieldRulesResult: { findings: [] },
+      }),
+      evaluateQuotePrepGate({
+        file: { customerName: 'X', customerPhone: '5', quotePrepQuoteType: 'unknown' },
+        draft: {
+          lines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'do_not_use_yet' }],
+          notes: '',
+        },
+        fieldRulesResult: {
+          findings: [{ id: 'x', label: 'X', severity: 'blocker', status: 'triggered' }],
+        },
+      }),
+    ]
+    for (const v of variants) {
+      for (const r of v.reasons) {
+        if (r.action && r.action.label) {
+          for (const re of banned) {
+            assert.equal(re.test(r.action.label), false, `leaked: ${r.action.label}`)
+          }
+        }
+      }
+    }
+  })
+
+  it('action targets pass through projectQuotePrepGateStatus display projection', () => {
+    const status = projectQuotePrepGateStatus({})
+    const r = status.reasons.find((rr) => /no proposed line items/i.test(rr.message))
+    assert.ok(r)
+    assert.equal(r.action.target, REASON_ACTION_TARGETS.addLine)
+    assert.equal(r.action.label, 'Add line item')
+  })
+
+  it('missing/empty input does not crash action projection', () => {
+    const status = projectQuotePrepGateStatus(null)
+    for (const r of status.reasons) {
+      if (r.action) {
+        assert.equal(typeof r.action.label, 'string')
+        assert.equal(typeof r.action.target, 'string')
+      }
+    }
+  })
+
+  it('sensitive keys are not surfaced in any action label or reason', () => {
+    const banned = ['cost', 'margin', 'buy price', 'supplier total', 'raw ocr', 'raw pdf', 'bistrack confidence', 'fuzzy match', 'ocr confidence', 'sales rank', 'product rank']
+    const status = projectQuotePrepGateStatus({
+      customerName: 'X', cost: 999, margin: 0.5, supplierTotal: 100,
+      bistrackConfidence: '0.7', rawOcr: 'noise', salesRank: 1,
+      quotePrepLines: [{ id: '1', reviewStatus: 'do_not_use_yet' }],
+    })
+    for (const r of status.reasons) {
+      const lower = r.message.toLowerCase()
+      for (const phrase of banned) assert.equal(lower.includes(phrase), false)
+      if (r.action) {
+        const al = r.action.label.toLowerCase()
+        for (const phrase of banned) assert.equal(al.includes(phrase), false)
       }
     }
   })

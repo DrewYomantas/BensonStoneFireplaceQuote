@@ -55,6 +55,16 @@ export const GATE_STATUS = Object.freeze({
   draft: 'draft',
 })
 
+// Stable action targets the screen layer maps to navigation/focus behavior.
+// Helpers stay pure: they return descriptors only — no functions, no DOM.
+export const REASON_ACTION_TARGETS = Object.freeze({
+  lens: 'lens',
+  addLine: 'quotePrepLine.add',
+  reviewLines: 'quotePrepLine.review',
+  gateField: 'quotePrepGateField',
+  fieldRules: 'fieldRules',
+})
+
 const GATE_STATUS_LABELS = Object.freeze({
   ready: 'Ready to build in BisTrack',
   needs_verification: 'Needs verification before BisTrack',
@@ -309,11 +319,16 @@ export function evaluateQuotePrepGate(input = {}) {
     (file.customerGoal || file.goalNotes) &&
     setupKnown && file.lensSetupType !== 'unknown'
 
+  const reason = (message, action) => Object.freeze({ message, action: action || null })
+
   const reasons = []
   let status
   if (!hasLines) {
     status = GATE_STATUS.draft
-    reasons.push('No proposed line items yet.')
+    reasons.push(reason(
+      'No proposed line items yet.',
+      { label: 'Add line item', target: REASON_ACTION_TARGETS.addLine },
+    ))
   } else if (
     requiredComplete &&
     triggeredBlockers === 0 &&
@@ -325,15 +340,40 @@ export function evaluateQuotePrepGate(input = {}) {
     status = GATE_STATUS.ready
   } else {
     status = GATE_STATUS.needsVerification
-    if (!file.customerName) reasons.push('Customer name not captured.')
-    if (!pickContact(file)) reasons.push('Primary contact not captured.')
-    if (!(file.customerGoal || file.goalNotes)) reasons.push('Customer goal not captured.')
-    if (!setupKnown || file.lensSetupType === 'unknown') reasons.push('Setup type not captured.')
-    if (triggeredBlockers > 0) reasons.push('Field Rule blocker still triggered.')
-    if (summary.doNotUseYet > 0) reasons.push('A line is marked "do not use yet".')
-    if (summary.readyForBistrack === 0) reasons.push('No line is marked ready for BisTrack yet.')
-    if (gateFields.quotePrepQuoteType === 'unknown') reasons.push('Quote type not selected.')
-    if (summary.needsVerification > 0) reasons.push('Some lines still need verification.')
+    if (!file.customerName) reasons.push(reason('Customer name not captured.'))
+    if (!pickContact(file)) reasons.push(reason('Primary contact not captured.'))
+    if (!(file.customerGoal || file.goalNotes)) reasons.push(reason(
+      'Customer goal not captured.',
+      { label: 'Open Setup + Goal Lens', target: REASON_ACTION_TARGETS.lens },
+    ))
+    if (!setupKnown || file.lensSetupType === 'unknown') reasons.push(reason(
+      'Setup type not captured.',
+      { label: 'Open Setup + Goal Lens', target: REASON_ACTION_TARGETS.lens },
+    ))
+    if (triggeredBlockers > 0) reasons.push(reason(
+      'Field Rule blocker still triggered.',
+      { label: 'Review Field Rules', target: REASON_ACTION_TARGETS.fieldRules },
+    ))
+    if (summary.doNotUseYet > 0) reasons.push(reason(
+      'A line is marked "do not use yet".',
+      { label: 'Review proposed lines', target: REASON_ACTION_TARGETS.reviewLines },
+    ))
+    if (summary.readyForBistrack === 0) reasons.push(reason(
+      'No line is marked ready for BisTrack yet.',
+      { label: 'Review proposed lines', target: REASON_ACTION_TARGETS.reviewLines },
+    ))
+    if (gateFields.quotePrepQuoteType === 'unknown') reasons.push(reason(
+      'Quote type not selected.',
+      {
+        label: 'Set quote type',
+        target: REASON_ACTION_TARGETS.gateField,
+        field: 'quotePrepQuoteType',
+      },
+    ))
+    if (summary.needsVerification > 0) reasons.push(reason(
+      'Some lines still need verification.',
+      { label: 'Review proposed lines', target: REASON_ACTION_TARGETS.reviewLines },
+    ))
   }
 
   return Object.freeze({
@@ -391,7 +431,30 @@ export function projectQuotePrepGateStatus(file, options = {}) {
   const gate = evaluateQuotePrepGate({ file: safeFile, draft, fieldRulesResult })
   const reasonCap = Number.isFinite(options.reasonLimit) ? options.reasonLimit : 2
   const cappedReasons = (gate.reasons || [])
-    .map(safeDisplayString)
+    .map((r) => {
+      if (!r) return null
+      // Backwards tolerant: if a reason ever comes through as a plain
+      // string, wrap it. New shape is { message, action }.
+      if (typeof r === 'string') {
+        const message = safeDisplayString(r)
+        return message ? Object.freeze({ message, action: null }) : null
+      }
+      const message = safeDisplayString(r.message)
+      if (!message) return null
+      let action = null
+      if (r.action && typeof r.action === 'object') {
+        const label = safeDisplayString(r.action.label)
+        const target = safeDisplayString(r.action.target)
+        if (label && target) {
+          action = Object.freeze({
+            label,
+            target,
+            field: safeDisplayString(r.action.field) || null,
+          })
+        }
+      }
+      return Object.freeze({ message, action })
+    })
     .filter(Boolean)
     .slice(0, Math.max(0, reasonCap))
 

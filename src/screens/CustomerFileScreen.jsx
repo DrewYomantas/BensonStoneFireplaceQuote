@@ -87,7 +87,9 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep }
       )}
       {status.reasons && status.reasons.length > 0 && (
         <ul className="body-sm" style={{ marginTop: 8, paddingLeft: 18 }}>
-          {status.reasons.map((r, idx) => <li key={idx}>{r}</li>)}
+          {status.reasons.map((r, idx) => (
+            <li key={idx}>{typeof r === 'string' ? r : r && r.message}</li>
+          ))}
         </ul>
       )}
       <div style={{ marginTop: 10 }}>
