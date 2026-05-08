@@ -10,7 +10,13 @@ import {
   removeQuotePrepLine,
   quotePrepLineSearchText,
   buildQuotePrepEngineInput,
+  summarizeQuotePrepReview,
   LINE_SAFE_KEYS,
+  SOURCE_BASIS_VALUES,
+  REVIEW_STATUS_VALUES,
+  REVIEW_FLAG_VALUES,
+  DEFAULT_SOURCE_BASIS,
+  DEFAULT_REVIEW_STATUS,
 } from './quotePrepDraft.js'
 import { evaluateFieldRules } from './fieldRules.js'
 import {
@@ -82,11 +88,11 @@ describe('quotePrepDraft — normalize', () => {
     assert.deepEqual(normalizeQuotePrepLines('nope'), [])
     const line = normalizeQuotePrepLine({})
     for (const k of LINE_SAFE_KEYS) {
-      if (k === 'id') {
-        assert.ok(line.id.startsWith('qpl-'))
-      } else {
-        assert.equal(line[k], '')
-      }
+      if (k === 'id') assert.ok(line.id.startsWith('qpl-'))
+      else if (k === 'sourceBasis') assert.equal(line.sourceBasis, DEFAULT_SOURCE_BASIS)
+      else if (k === 'reviewStatus') assert.equal(line.reviewStatus, DEFAULT_REVIEW_STATUS)
+      else if (k === 'reviewFlags') assert.deepEqual(line.reviewFlags, [])
+      else assert.equal(line[k], '')
     }
   })
 
@@ -226,5 +232,163 @@ describe('quotePrepDraft — durable round trip', () => {
     assert.equal('cost' in line, false)
     assert.equal('margin' in line, false)
     assert.equal(line.partNumber, 'X-1')
+  })
+})
+
+describe('quotePrepDraft — source basis + review state', () => {
+  it('legacy PR 8 lines without review fields normalize to safe defaults', () => {
+    const line = normalizeQuotePrepLine({ name: 'Old line', partNumber: 'X-1' })
+    assert.equal(line.sourceBasis, DEFAULT_SOURCE_BASIS)
+    assert.equal(line.reviewStatus, DEFAULT_REVIEW_STATUS)
+    assert.deepEqual(line.reviewFlags, [])
+    assert.equal(line.sourceNote, '')
+    assert.equal(line.reviewedAt, '')
+    assert.equal(line.reviewedBy, '')
+  })
+
+  it('preserves a valid source basis', () => {
+    for (const basis of SOURCE_BASIS_VALUES) {
+      const line = normalizeQuotePrepLine({ name: 'A', sourceBasis: basis })
+      assert.equal(line.sourceBasis, basis)
+    }
+  })
+
+  it('falls back to manual_entry on an invalid source basis', () => {
+    const line = normalizeQuotePrepLine({ name: 'A', sourceBasis: 'totally-bogus' })
+    assert.equal(line.sourceBasis, 'manual_entry')
+  })
+
+  it('preserves a valid review status', () => {
+    for (const status of REVIEW_STATUS_VALUES) {
+      const line = normalizeQuotePrepLine({ name: 'A', reviewStatus: status })
+      assert.equal(line.reviewStatus, status)
+    }
+  })
+
+  it('falls back to draft on an invalid review status', () => {
+    const line = normalizeQuotePrepLine({ name: 'A', reviewStatus: 'fake-status' })
+    assert.equal(line.reviewStatus, 'draft')
+  })
+
+  it('reviewFlags preserves only allowed safe flags and dedupes', () => {
+    const line = normalizeQuotePrepLine({
+      name: 'A',
+      reviewFlags: [
+        'sku_or_part_confirmed', 'sku_or_part_confirmed',
+        'needs_measurement', 'fake-flag', '', null, 'cost',
+      ],
+    })
+    assert.deepEqual(line.reviewFlags, ['sku_or_part_confirmed', 'needs_measurement'])
+    for (const f of line.reviewFlags) {
+      assert.ok(REVIEW_FLAG_VALUES.includes(f))
+    }
+  })
+
+  it('strips banned sensitive keys including from poisoned source/review payloads', () => {
+    const line = normalizeQuotePrepLine({
+      name: 'A',
+      sourceNote: 'fine note',
+      sourceBasis: 'manual_entry',
+      reviewStatus: 'reviewed_for_prep',
+      reviewFlags: ['needs_measurement'],
+      cost: 999,
+      margin: 0.42,
+      buyPrice: 50,
+      supplierTotal: 100,
+      bistrackConfidence: '0.9',
+      ocrConfidence: '0.7',
+      rawOcr: 'noise',
+    })
+    for (const k of [
+      'cost', 'margin', 'buyPrice', 'supplierTotal',
+      'bistrackConfidence', 'ocrConfidence', 'rawOcr',
+    ]) {
+      assert.equal(k in line, false)
+    }
+    assert.equal(line.sourceNote, 'fine note')
+    assert.equal(line.sourceBasis, 'manual_entry')
+    assert.equal(line.reviewStatus, 'reviewed_for_prep')
+    assert.deepEqual(line.reviewFlags, ['needs_measurement'])
+  })
+
+  it('summary counts total / needsVerification / readyForBistrack / doNotUseYet', () => {
+    const lines = [
+      { name: 'a', reviewStatus: 'draft' },
+      { name: 'b', reviewStatus: 'needs_verification' },
+      { name: 'c', reviewStatus: 'needs_verification' },
+      { name: 'd', reviewStatus: 'ready_for_bistrack' },
+      { name: 'e', reviewStatus: 'do_not_use_yet' },
+      { name: 'f', reviewStatus: 'reviewed_for_prep', sourceBasis: 'needs_source' },
+    ]
+    const sum = summarizeQuotePrepReview(lines)
+    assert.equal(sum.total, 6)
+    assert.equal(sum.needsVerification, 2)
+    assert.equal(sum.readyForBistrack, 1)
+    assert.equal(sum.doNotUseYet, 1)
+    assert.equal(sum.draft, 1)
+    assert.equal(sum.reviewedForPrep, 1)
+    assert.equal(sum.needsSource, 1)
+  })
+
+  it('summary on empty / null input returns zeros without crashing', () => {
+    assert.deepEqual(summarizeQuotePrepReview([]), {
+      total: 0, needsVerification: 0, readyForBistrack: 0, doNotUseYet: 0,
+      draft: 0, reviewedForPrep: 0, needsSource: 0,
+    })
+    assert.equal(summarizeQuotePrepReview(null).total, 0)
+    assert.equal(summarizeQuotePrepReview(undefined).total, 0)
+  })
+
+  it('durable round trip preserves source/review fields via memory storage', async () => {
+    const storage = createSalesOsStorage({ engine: createMemoryEngine() })
+    const draft = {
+      lines: [
+        {
+          name: 'Whisper Flex 12',
+          partNumber: 'T1009898-12',
+          sourceBasis: 'from_pricebook_or_manual',
+          sourceNote: 'Empire price list',
+          reviewStatus: 'ready_for_bistrack',
+          reviewFlags: ['sku_or_part_confirmed', 'field_rule_checked'],
+        },
+        {
+          name: 'TBD insert',
+          sourceBasis: 'needs_source',
+          reviewStatus: 'do_not_use_yet',
+        },
+      ],
+      notes: 'Confirm flue with Liam.',
+    }
+    const patch = buildCustomerFilePatchFromQuotePrep(draft, new Date('2026-05-08T16:00:00Z'))
+    await saveCustomerFileDurable(storage, { id: 'cf-prep-review', customerName: 'Test', ...patch })
+    const reloaded = await getCustomerFileDurable(storage, 'cf-prep-review')
+    const reDraft = quotePrepDraftFromCustomerFile(reloaded)
+    assert.equal(reDraft.lines.length, 2)
+    const [line0, line1] = reDraft.lines
+    assert.equal(line0.sourceBasis, 'from_pricebook_or_manual')
+    assert.equal(line0.sourceNote, 'Empire price list')
+    assert.equal(line0.reviewStatus, 'ready_for_bistrack')
+    assert.deepEqual(line0.reviewFlags, ['sku_or_part_confirmed', 'field_rule_checked'])
+    assert.equal(line1.sourceBasis, 'needs_source')
+    assert.equal(line1.reviewStatus, 'do_not_use_yet')
+  })
+
+  it('updateQuotePrepLine on review/source fields keeps id stable and other lines intact', () => {
+    let lines = [
+      normalizeQuotePrepLine({ name: 'A', partNumber: 'A1' }),
+      normalizeQuotePrepLine({ name: 'B', partNumber: 'B1' }),
+    ]
+    const targetId = lines[0].id
+    lines = updateQuotePrepLine(lines, targetId, {
+      sourceBasis: 'from_lens',
+      reviewStatus: 'needs_verification',
+      reviewFlags: ['needs_measurement'],
+    })
+    assert.equal(lines[0].id, targetId)
+    assert.equal(lines[0].sourceBasis, 'from_lens')
+    assert.equal(lines[0].reviewStatus, 'needs_verification')
+    assert.deepEqual(lines[0].reviewFlags, ['needs_measurement'])
+    assert.equal(lines[1].name, 'B')
+    assert.equal(lines[1].sourceBasis, 'manual_entry')
   })
 })

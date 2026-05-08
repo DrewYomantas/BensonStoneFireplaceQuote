@@ -20,6 +20,13 @@ import {
   updateQuotePrepLine,
   removeQuotePrepLine,
   normalizeQuotePrepLine,
+  summarizeQuotePrepReview,
+  SOURCE_BASIS_VALUES,
+  SOURCE_BASIS_LABELS,
+  REVIEW_STATUS_VALUES,
+  REVIEW_STATUS_LABELS,
+  REVIEW_FLAG_VALUES,
+  REVIEW_FLAG_LABELS,
 } from '../lib/quotePrepDraft.js'
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
@@ -166,7 +173,103 @@ function LineRow({ line, onPatch, onRemove, disabled }) {
           disabled={disabled}
         />
       </label>
+
+      <div style={{
+        marginTop: 12, paddingTop: 12,
+        borderTop: '1px dashed var(--rule)',
+      }}>
+        <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>SOURCE / REVIEW · REP-ONLY</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+          <label>
+            <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>WHERE THIS CAME FROM</span>
+            <select
+              className="field"
+              value={line.sourceBasis}
+              onChange={(e) => onPatch(line.id, { sourceBasis: e.target.value })}
+              disabled={disabled}
+            >
+              {SOURCE_BASIS_VALUES.map((v) => (
+                <option key={v} value={v}>{SOURCE_BASIS_LABELS[v]}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>REVIEW STATUS</span>
+            <select
+              className="field"
+              value={line.reviewStatus}
+              onChange={(e) => onPatch(line.id, { reviewStatus: e.target.value })}
+              disabled={disabled}
+            >
+              {REVIEW_STATUS_VALUES.map((v) => (
+                <option key={v} value={v}>{REVIEW_STATUS_LABELS[v]}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label style={{ display: 'block', marginTop: 10 }}>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>SOURCE NOTE</span>
+          <input
+            className="field"
+            value={line.sourceNote}
+            onChange={(e) => onPatch(line.id, { sourceNote: e.target.value })}
+            placeholder="Where exactly — e.g. 04-198 BisTrack quote, May 2 Lens, etc."
+            disabled={disabled}
+          />
+        </label>
+        <fieldset style={{ border: 'none', padding: 0, margin: '10px 0 0' }}>
+          <legend className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>REVIEW FLAGS</legend>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 6 }}>
+            {REVIEW_FLAG_VALUES.map((flag) => {
+              const checked = Array.isArray(line.reviewFlags) && line.reviewFlags.includes(flag)
+              return (
+                <label key={flag} className="body-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      const current = Array.isArray(line.reviewFlags) ? line.reviewFlags : []
+                      const next = e.target.checked
+                        ? [...current.filter((f) => f !== flag), flag]
+                        : current.filter((f) => f !== flag)
+                      onPatch(line.id, { reviewFlags: next })
+                    }}
+                    disabled={disabled}
+                  />
+                  <span>{REVIEW_FLAG_LABELS[flag]}</span>
+                </label>
+              )
+            })}
+          </div>
+        </fieldset>
+      </div>
     </div>
+  )
+}
+
+function ReviewSummaryCard({ summary }) {
+  if (!summary || summary.total === 0) return null
+  const items = [
+    { label: 'Total proposed lines', value: summary.total },
+    { label: 'Needs verification', value: summary.needsVerification },
+    { label: 'Ready for BisTrack', value: summary.readyForBistrack },
+    { label: 'Do not use yet', value: summary.doNotUseYet },
+  ]
+  return (
+    <section className="card-flat" style={{ padding: 14, marginTop: 18 }}>
+      <span className="eyebrow eyebrow-ink">PREP REVIEW SUMMARY · INTERNAL</span>
+      <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {items.map((it) => (
+          <div key={it.label}>
+            <div className="serif-h" style={{ fontSize: 22, lineHeight: 1.1 }}>{it.value}</div>
+            <div className="body-sm" style={{ color: 'var(--slate)' }}>{it.label}</div>
+          </div>
+        ))}
+      </div>
+      <p className="body-sm" style={{ marginTop: 10, color: 'var(--slate)' }}>
+        This is prep review only. Build the official quote in BisTrack.
+      </p>
+    </section>
   )
 }
 
@@ -289,6 +392,11 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
     return evaluateFieldRules(engineFile, { discussionText })
   }, [file, draft])
 
+  const reviewSummary = useMemo(
+    () => summarizeQuotePrepReview(draft.lines),
+    [draft.lines],
+  )
+
   const fieldRulesBlocker = fieldRulesResult
     ? fieldRulesResult.findings.find((f) => f.severity === 'blocker' && f.status === 'triggered')
     : null
@@ -348,7 +456,9 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
           )}
           <hr className="rule-brass" style={{ margin: '20px 0' }} />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, alignItems: 'flex-start' }}>
+          <ReviewSummaryCard summary={reviewSummary} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, alignItems: 'flex-start', marginTop: 18 }}>
             <form id="quote-prep-form" onSubmit={handleSave}>
               <section>
                 <div className="hstack">

@@ -23,9 +23,114 @@ export const LINE_SAFE_KEYS = Object.freeze([
   'quantity',
   'customerSafeNotes',
   'internalPrepNote',
+  // PR 9 — source basis + review state. Internal-only, never customer-facing.
+  'sourceBasis',
+  'sourceNote',
+  'reviewStatus',
+  'reviewFlags',
+  'reviewedAt',
+  'reviewedBy',
 ])
 
 const LINE_SAFE_KEY_SET = new Set(LINE_SAFE_KEYS)
+
+// Where the rep traced this line back to. The default for a fresh hand-typed
+// line is `manual_entry`; `needs_source` is the explicit "I don't know yet"
+// state so the summary can flag it.
+export const SOURCE_BASIS_VALUES = Object.freeze([
+  'manual_entry',
+  'from_lens',
+  'from_bistrack_quote',
+  'from_customer_notes',
+  'from_photo_or_measurement',
+  'from_pricebook_or_manual',
+  'needs_source',
+])
+
+export const SOURCE_BASIS_LABELS = Object.freeze({
+  manual_entry: 'Manual entry',
+  from_lens: 'From Setup + Goal Lens',
+  from_bistrack_quote: 'From BisTrack quote',
+  from_customer_notes: 'From customer notes',
+  from_photo_or_measurement: 'From photo / measurement',
+  from_pricebook_or_manual: 'From price list / manual',
+  needs_source: 'Needs source',
+})
+
+export const DEFAULT_SOURCE_BASIS = 'manual_entry'
+
+// How confident the rep is that this line should leave Quote / Prep. None of
+// these mean the proposal is ready — they only describe internal review.
+export const REVIEW_STATUS_VALUES = Object.freeze([
+  'draft',
+  'needs_verification',
+  'reviewed_for_prep',
+  'ready_for_bistrack',
+  'do_not_use_yet',
+])
+
+export const REVIEW_STATUS_LABELS = Object.freeze({
+  draft: 'Draft',
+  needs_verification: 'Needs verification',
+  reviewed_for_prep: 'Reviewed for prep',
+  ready_for_bistrack: 'Ready for BisTrack',
+  do_not_use_yet: 'Do not use yet',
+})
+
+export const DEFAULT_REVIEW_STATUS = 'draft'
+
+export const REVIEW_FLAG_VALUES = Object.freeze([
+  'sku_or_part_confirmed',
+  'quantity_confirmed',
+  'customer_goal_matches',
+  'install_implication_checked',
+  'field_rule_checked',
+  'needs_liam_review',
+  'needs_measurement',
+  'not_customer_ready',
+])
+
+export const REVIEW_FLAG_LABELS = Object.freeze({
+  sku_or_part_confirmed: 'SKU / part confirmed',
+  quantity_confirmed: 'Quantity confirmed',
+  customer_goal_matches: 'Customer goal matches',
+  install_implication_checked: 'Install implication checked',
+  field_rule_checked: 'Field rule checked',
+  needs_liam_review: 'Needs Liam review',
+  needs_measurement: 'Needs measurement',
+  not_customer_ready: 'Not customer-ready',
+})
+
+const SOURCE_BASIS_SET = new Set(SOURCE_BASIS_VALUES)
+const REVIEW_STATUS_SET = new Set(REVIEW_STATUS_VALUES)
+const REVIEW_FLAG_SET = new Set(REVIEW_FLAG_VALUES)
+
+function normalizeSourceBasis(value, fallback = DEFAULT_SOURCE_BASIS) {
+  const v = clampString(value).trim()
+  if (!v) return fallback
+  return SOURCE_BASIS_SET.has(v) ? v : fallback
+}
+
+function normalizeReviewStatus(value, fallback = DEFAULT_REVIEW_STATUS) {
+  const v = clampString(value).trim()
+  if (!v) return fallback
+  return REVIEW_STATUS_SET.has(v) ? v : fallback
+}
+
+function normalizeReviewFlags(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const out = []
+  for (const f of value) {
+    const v = clampString(f).trim()
+    if (!v) continue
+    if (!REVIEW_FLAG_SET.has(v)) continue
+    if (seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out
+}
 
 function safeId(seed = '') {
   const tail = Math.random().toString(36).slice(2, 7)
@@ -62,14 +167,27 @@ export function normalizeQuotePrepLine(input = {}, options = {}) {
         out.quantity = normalizeQuantity(v)
       } else if (k === 'id') {
         out.id = clampString(v).trim()
+      } else if (k === 'sourceBasis') {
+        out.sourceBasis = normalizeSourceBasis(v)
+      } else if (k === 'reviewStatus') {
+        out.reviewStatus = normalizeReviewStatus(v)
+      } else if (k === 'reviewFlags') {
+        out.reviewFlags = normalizeReviewFlags(v)
       } else {
         out[k] = clampString(v)
       }
     }
   }
   if (!out.id) out.id = safeId(options.idSeed || out.name || out.partNumber || '')
+  // Defaults for the source / review fields. Apply before generic fill so
+  // the array/select fields land with the right shape.
+  if (out.sourceBasis === undefined) out.sourceBasis = DEFAULT_SOURCE_BASIS
+  if (out.reviewStatus === undefined) out.reviewStatus = DEFAULT_REVIEW_STATUS
+  if (!Array.isArray(out.reviewFlags)) out.reviewFlags = []
   for (const k of LINE_SAFE_KEYS) {
-    if (out[k] === undefined) out[k] = ''
+    if (out[k] === undefined) {
+      out[k] = k === 'reviewFlags' ? [] : ''
+    }
   }
   return out
 }
@@ -154,6 +272,32 @@ export function quotePrepLinesSearchText(lines) {
     .map(quotePrepLineSearchText)
     .filter(Boolean)
     .join(' \n ')
+}
+
+// Internal summary of review state across the proposed line items. Counts
+// only — never a "the proposal is ready" signal. If everything is still in
+// `draft` / `needs_verification`, `readyForBistrack` is zero and the UI is
+// expected to lean on that, not infer readiness.
+export function summarizeQuotePrepReview(lines) {
+  const list = normalizeQuotePrepLines(lines)
+  const summary = {
+    total: list.length,
+    needsVerification: 0,
+    readyForBistrack: 0,
+    doNotUseYet: 0,
+    draft: 0,
+    reviewedForPrep: 0,
+    needsSource: 0,
+  }
+  for (const line of list) {
+    if (line.reviewStatus === 'needs_verification') summary.needsVerification += 1
+    else if (line.reviewStatus === 'ready_for_bistrack') summary.readyForBistrack += 1
+    else if (line.reviewStatus === 'do_not_use_yet') summary.doNotUseYet += 1
+    else if (line.reviewStatus === 'reviewed_for_prep') summary.reviewedForPrep += 1
+    else summary.draft += 1
+    if (line.sourceBasis === 'needs_source') summary.needsSource += 1
+  }
+  return summary
 }
 
 // Build the input shape Field Rules consumes for the Quote / Prep surface.
