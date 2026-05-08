@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
-import TodayActionCard from '../components/today/TodayActionCard.jsx'
-import { badgesForFile } from '../lib/fieldRulesBadges.js'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
 import { recentCustomerFiles, enrichCustomerFilesListWithFollowUps } from '../lib/customerFilesList.js'
@@ -30,59 +28,6 @@ function todayPrepSignal(quotePrep) {
 
 const RECENT_LIMIT = 4
 
-const SAMPLE_FILES = [
-  {
-    id: 'sample-karpinski',
-    stamp: 'OVERDUE · 7 DAYS',
-    state: 'blocked',
-    name: 'Karpinski, Tom',
-    note: 'Promised stone allowance estimate Friday.',
-    tag: '04-198 · gas insert',
-    source: 'bistrack',
-    sourceLabel: 'BT-44217',
-    nextAction: 'Call about stone allowance before noon',
-    fieldRuleSample: {
-      lensSetupType: 'zero-clearance-metal-fireplace',
-      existingNotes: 'Gas insert into existing prefab; full install scope, drywall finish work.',
-      projectAddress: '14 Oak Ln, Rockford IL 61104',
-    },
-  },
-  {
-    id: 'sample-hernandez',
-    stamp: 'TODAY · 14:30',
-    state: 'review',
-    name: 'Hernandez, M & J',
-    note: 'Showroom appt. Bring Cosmo I35 spec sheet.',
-    tag: '04-217 · wood→gas insert',
-    source: 'verified',
-    nextAction: 'Confirm flue + gas line at the 2:30',
-  },
-  {
-    id: 'sample-powell',
-    stamp: 'WAITING · 11 DAYS',
-    state: 'waiting',
-    name: 'Powell, Rebecca',
-    note: 'Asked about gas line cost. No reply.',
-    tag: '04-189 · gas insert · prefers text',
-    source: 'said',
-    sourceLabel: 'CUSTOMER SAID',
-    nextAction: 'Send a warm nudge text',
-  },
-  {
-    id: 'sample-vinson',
-    stamp: 'NEW · 11:14',
-    state: 'review',
-    name: 'Vinson, James',
-    note: 'Walk-in. Existing zero-clearance, bedroom remodel.',
-    tag: 'Draft 04-220 · file unfinished',
-    source: 'manual',
-    sourceLabel: 'DRAFT',
-    nextAction: 'Finish visit capture + add measurements',
-    fieldRuleSample: {
-      existingNotes: 'Empire vent-free log set in masonry fireplace, customer wants more heat.',
-    },
-  },
-]
 
 function formatStamp(iso) {
   if (!iso) return ''
@@ -153,7 +98,7 @@ function RecentFileRow({ row, onOpen }) {
   )
 }
 
-function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList }) {
+function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onOpenBulkIntake }) {
   if (state.kind === 'loading') {
     return <p className="body-sm">Loading recent files…</p>
   }
@@ -173,13 +118,22 @@ function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList }) {
       <div className="card-flat" style={{ padding: 16 }}>
         <span className="eyebrow eyebrow-ink">No saved Customer Files yet</span>
         <p className="body-sm" style={{ marginTop: 6 }}>
-          Files appear here after a Start Visit is created. Sample cards below
-          are training references only.
+          Start a visit to create the first Customer File, or bulk import a list of existing contacts.
         </p>
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
             Start a visit
           </button>
+          {onOpenBulkIntake && (
+            <button type="button" className="btn btn-quiet" onClick={onOpenBulkIntake}>
+              Bulk import contacts
+            </button>
+          )}
+          {onOpenList && (
+            <button type="button" className="btn btn-quiet" onClick={onOpenList}>
+              View all Customer Files
+            </button>
+          )}
         </div>
       </div>
     )
@@ -198,7 +152,7 @@ function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList }) {
   )
 }
 
-export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList }) {
+export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenBulkIntake }) {
   const [recent, setRecent] = useState({ kind: 'loading' })
 
   useEffect(() => {
@@ -254,36 +208,11 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
                 onOpenFile={onOpenFile}
                 onOpenStartVisit={onOpenStartVisit}
                 onOpenList={onOpenFilesList}
+                onOpenBulkIntake={onOpenBulkIntake}
               />
             </div>
           </section>
 
-          <section style={{ marginTop: 28 }} aria-labelledby="today-samples-heading">
-            <div className="hstack">
-              <span id="today-samples-heading" className="eyebrow eyebrow-ink">SAMPLE CARDS · TRAINING</span>
-              <span className="spacer" />
-              <span className="body-sm" style={{ color: 'var(--slate)' }}>
-                Reference fixtures · not real customers
-              </span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 10 }}>
-              {SAMPLE_FILES.map((f) => (
-                <TodayActionCard
-                  key={f.id}
-                  stamp={f.stamp}
-                  state={f.state}
-                  name={f.name}
-                  note={f.note}
-                  tag={f.tag}
-                  source={f.source}
-                  sourceLabel={f.sourceLabel}
-                  nextAction={f.nextAction}
-                  fieldRuleBadges={f.fieldRuleSample ? badgesForFile(f.fieldRuleSample) : []}
-                  onOpen={() => onOpenFile && onOpenFile(f.id)}
-                />
-              ))}
-            </div>
-          </section>
         </div>
       </div>
       <NextActionBar

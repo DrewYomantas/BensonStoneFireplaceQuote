@@ -10,6 +10,7 @@ import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
 import QuotePrepScreen from './screens/QuotePrepScreen.jsx'
 import BisTrackHandoffScreen from './screens/BisTrackHandoffScreen.jsx'
 import ProposalPreviewScreen from './screens/ProposalPreviewScreen.jsx'
+import BulkIntakeScreen from './screens/BulkIntakeScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
@@ -23,6 +24,7 @@ const TITLES = {
   quotePrep: 'Quote / Prep',
   handoff: 'Internal BisTrack Handoff',
   proposalPreview: 'Proposal Preview',
+  bulkIntake: 'Bulk Import',
   backstage: 'Backstage',
 }
 
@@ -35,6 +37,7 @@ const CRUMBS = {
   quotePrep: ['Customer files', 'Quote / Prep'],
   handoff: ['Customer files', 'Internal BisTrack Handoff'],
   proposalPreview: ['Customer files', 'Proposal Preview'],
+  bulkIntake: ['Bulk Import'],
   backstage: ['Backstage'],
 }
 
@@ -77,13 +80,17 @@ export default function App() {
     setRoute({ screen: 'proposalPreview', fileId })
   }
 
+  function openBulkIntake() {
+    setRoute({ screen: 'bulkIntake', fileId: null })
+  }
+
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
 
   return (
     <AppShell
-      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview'].includes(route.screen) ? 'files' : route.screen}
+      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview', 'bulkIntake'].includes(route.screen) ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -94,6 +101,7 @@ export default function App() {
           onOpenStartVisit={() => navigate('visit')}
           onOpenFile={openFile}
           onOpenFilesList={openFilesList}
+          onOpenBulkIntake={openBulkIntake}
         />
       )}
       {route.screen === 'visit' && (
@@ -103,6 +111,7 @@ export default function App() {
         <CustomerFilesListScreen
           onOpenFile={openFile}
           onOpenStartVisit={() => navigate('visit')}
+          onOpenBulkIntake={openBulkIntake}
         />
       )}
       {route.screen === 'files' && (
@@ -144,6 +153,12 @@ export default function App() {
           onBack={() => openFile(route.fileId)}
           onOpenLens={openLens}
           onOpenQuotePrep={openQuotePrep}
+        />
+      )}
+      {route.screen === 'bulkIntake' && (
+        <BulkIntakeScreen
+          onBack={openFilesList}
+          onOpenFilesList={openFilesList}
         />
       )}
       {route.screen === 'backstage' && (

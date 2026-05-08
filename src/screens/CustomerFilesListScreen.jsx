@@ -101,7 +101,7 @@ function FileRow({ row, onOpen }) {
   )
 }
 
-export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }) {
+export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, onOpenBulkIntake }) {
   const [rows, setRows] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [query, setQuery] = useState('')
@@ -267,6 +267,13 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
           <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
             Start a visit
           </button>
+        }
+        secondary={
+          onOpenBulkIntake ? (
+            <button type="button" className="btn btn-quiet" onClick={onOpenBulkIntake}>
+              Bulk import
+            </button>
+          ) : null
         }
       />
     </>
