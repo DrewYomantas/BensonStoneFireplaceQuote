@@ -117,6 +117,13 @@ const stringKeys = [
   // The proposed line items themselves live in the array store below.
   'quotePrepNotes',
   'quotePrepUpdatedAt',
+  // Quote Prep Review Gate (PR 10) — file-level readiness/handoff fields.
+  // Internal-only, never customer-facing. Drives the Pre-BisTrack Review card.
+  'quotePrepQuoteType',          // 'planning' | 'verified' | 'unknown'
+  'quotePrepVerificationOwner',
+  'quotePrepUnverifiedItems',
+  'quotePrepNextStep',
+  'quotePrepGateUpdatedAt',
   // Model tag / appliance verification
   'taggedModel',
   'taggedVendor',

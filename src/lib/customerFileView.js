@@ -27,6 +27,10 @@ const SAFE_KEYS = new Set([
   'zcGasInsertAcknowledgedAt', 'zcGasInsertAcknowledgedBy',
   // Quote / Prep (PR 8) — rep-only proposed line items + prep notes.
   'quotePrepLines', 'quotePrepNotes', 'quotePrepUpdatedAt',
+  // Quote Prep Review Gate (PR 10) — internal-only handoff fields.
+  'quotePrepQuoteType', 'quotePrepVerificationOwner',
+  'quotePrepUnverifiedItems', 'quotePrepNextStep',
+  'quotePrepGateUpdatedAt',
 ])
 
 export function projectCustomerFileForDisplay(file = {}) {

@@ -31,6 +31,14 @@ import {
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
 import { SETUP_TYPE_LABELS } from '../lib/setupGoalLens.js'
+import {
+  evaluateQuotePrepGate,
+  quotePrepGateDraftFromCustomerFile,
+  buildCustomerFilePatchFromQuotePrepGate,
+  QUOTE_TYPE_VALUES,
+  QUOTE_TYPE_LABELS,
+  GATE_STATUS,
+} from '../lib/quotePrepGate.js'
 
 function VerifiedFromLensCard({ file }) {
   if (!file) return null
@@ -273,6 +281,123 @@ function ReviewSummaryCard({ summary }) {
   )
 }
 
+function gateBadge(status) {
+  if (status === GATE_STATUS.ready) return { label: 'READY', cls: 'source source-verified' }
+  if (status === GATE_STATUS.needsVerification) return { label: 'NEEDS VERIFICATION', cls: 'source source-said' }
+  return { label: 'DRAFT', cls: 'source source-manual' }
+}
+
+function rowStatusBadge(status) {
+  if (status === 'complete') return { label: 'OK', cls: 'source source-verified' }
+  if (status === 'warning') return { label: 'WARN', cls: 'source source-said' }
+  return { label: 'MISSING', cls: 'source source-assumed' }
+}
+
+function GateCard({ result, gateDraft, onPatch, disabled }) {
+  if (!result) return null
+  const badge = gateBadge(result.status)
+  return (
+    <section
+      className="card"
+      style={{ padding: 18, marginTop: 18, borderLeft: '3px solid var(--ember)' }}
+      aria-labelledby="quote-prep-gate-heading"
+    >
+      <div className="hstack">
+        <span id="quote-prep-gate-heading" className="eyebrow eyebrow-ember">
+          PRE-BISTRACK REVIEW
+        </span>
+        <span className={badge.cls} style={{ marginLeft: 8 }}>{badge.label}</span>
+      </div>
+      <p className="body-sm" style={{ marginTop: 6 }}>
+        {result.label}.
+        {result.status === GATE_STATUS.ready
+          ? ' Build and verify the official quote in BisTrack.'
+          : ' This is internal prep — BisTrack remains source of truth.'}
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+        <label>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>QUOTE TYPE</span>
+          <select
+            className="field"
+            value={gateDraft.quotePrepQuoteType}
+            onChange={(e) => onPatch({ quotePrepQuoteType: e.target.value })}
+            disabled={disabled}
+          >
+            {QUOTE_TYPE_VALUES.map((v) => (
+              <option key={v} value={v}>{QUOTE_TYPE_LABELS[v]}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>VERIFICATION OWNER</span>
+          <input
+            className="field"
+            value={gateDraft.quotePrepVerificationOwner}
+            onChange={(e) => onPatch({ quotePrepVerificationOwner: e.target.value })}
+            placeholder="Who verifies next — Drew, Liam, customer…"
+            disabled={disabled}
+          />
+        </label>
+      </div>
+      <label style={{ display: 'block', marginTop: 10 }}>
+        <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>STILL UNVERIFIED</span>
+        <textarea
+          className="field"
+          rows={2}
+          value={gateDraft.quotePrepUnverifiedItems}
+          onChange={(e) => onPatch({ quotePrepUnverifiedItems: e.target.value })}
+          placeholder="Flue size, gas line, mantel clearance — anything still assumed."
+          disabled={disabled}
+        />
+      </label>
+      <label style={{ display: 'block', marginTop: 10 }}>
+        <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>NEXT STEP / FOLLOW-UP</span>
+        <input
+          className="field"
+          value={gateDraft.quotePrepNextStep}
+          onChange={(e) => onPatch({ quotePrepNextStep: e.target.value })}
+          placeholder="One concrete action — e.g. confirm flue size with Liam Wed."
+          disabled={disabled}
+        />
+      </label>
+
+      {result.reasons && result.reasons.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>WHY NOT YET</span>
+          <ul className="body-sm" style={{ marginTop: 4, paddingLeft: 18 }}>
+            {result.reasons.map((r, idx) => <li key={idx}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+        {result.groups.map((group) => (
+          <div key={group.id}>
+            <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>
+              {group.label.toUpperCase()}
+            </span>
+            <div style={{ marginTop: 4 }}>
+              {group.rows.map((r) => {
+                const b = rowStatusBadge(r.status)
+                return (
+                  <div key={r.id} className="fact-row">
+                    <div className="fact-row-head">
+                      <span className="fact-row-label body-sm">{r.label}</span>
+                      <span className={b.cls} aria-label={`Status: ${b.label}`}>{b.label}</span>
+                    </div>
+                    {r.detail && <p className="fact-row-sub">{r.detail}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
   const [file, setFile] = useState(null)
   const [draft, setDraft] = useState(emptyQuotePrepDraft())
@@ -283,6 +408,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
   const [savedAt, setSavedAt] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [gateDraft, setGateDraft] = useState(quotePrepGateDraftFromCustomerFile(null))
 
   useEffect(() => {
     let cancelled = false
@@ -307,6 +433,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
         if (!row) { setMissing(true); setLoading(false); return }
         setFile(projectCustomerFileForDisplay(row))
         setDraft(quotePrepDraftFromCustomerFile(row))
+        setGateDraft(quotePrepGateDraftFromCustomerFile(row))
         setLoading(false)
       } catch (err) {
         if (!cancelled) { setErrorMsg(err.message || String(err)); setLoading(false) }
@@ -335,6 +462,11 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
     setDirty(true); setSavedAt(null)
   }
 
+  function handleGatePatch(patch) {
+    setGateDraft((prev) => ({ ...prev, ...patch }))
+    setDirty(true); setSavedAt(null)
+  }
+
   async function handleSave(e) {
     if (e && e.preventDefault) e.preventDefault()
     if (!fileId || submitting) return
@@ -342,13 +474,15 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
     const saveState = getSalesOsSaveState()
     try {
       const storage = getSalesOsStorage()
-      const patch = buildCustomerFilePatchFromQuotePrep(draft)
+      const linePatch = buildCustomerFilePatchFromQuotePrep(draft)
+      const gatePatch = buildCustomerFilePatchFromQuotePrepGate(gateDraft)
       saveState.markSaving()
-      const updated = await updateCustomerFileDurable(storage, fileId, patch)
+      const updated = await updateCustomerFileDurable(storage, fileId, { ...linePatch, ...gatePatch })
       saveState.markSaved()
       if (updated) {
         setFile(projectCustomerFileForDisplay(updated))
         setDraft(quotePrepDraftFromCustomerFile(updated))
+        setGateDraft(quotePrepGateDraftFromCustomerFile(updated))
       }
       setDirty(false); setSavedAt(new Date().toISOString())
     } catch (err) {
@@ -377,6 +511,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
         // Lines / notes are preserved on the file row; refresh the draft from
         // the same row so the engine input stays in sync with saved state.
         setDraft(quotePrepDraftFromCustomerFile(updated))
+        setGateDraft(quotePrepGateDraftFromCustomerFile(updated))
       }
     } catch (err) {
       saveState.markError(err.message || String(err))
@@ -396,6 +531,14 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
     () => summarizeQuotePrepReview(draft.lines),
     [draft.lines],
   )
+
+  const gateResult = useMemo(() => {
+    if (!file) return null
+    // Gate evaluator reads gate fields off the file shape; overlay the
+    // unsaved gate draft so the rep sees the impact of edits live.
+    const fileWithGate = { ...file, ...gateDraft }
+    return evaluateQuotePrepGate({ file: fileWithGate, draft, fieldRulesResult })
+  }, [file, draft, fieldRulesResult, gateDraft])
 
   const fieldRulesBlocker = fieldRulesResult
     ? fieldRulesResult.findings.find((f) => f.severity === 'blocker' && f.status === 'triggered')
@@ -535,6 +678,13 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens }) {
               />
             </div>
           </div>
+
+          <GateCard
+            result={gateResult}
+            gateDraft={gateDraft}
+            onPatch={handleGatePatch}
+            disabled={submitting}
+          />
         </div>
       </div>
     )
