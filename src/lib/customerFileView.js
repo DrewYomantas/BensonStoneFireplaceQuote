@@ -14,6 +14,14 @@ const SAFE_KEYS = new Set([
   'heatExpectation', 'likelyPath',
   'photos', 'measurements', 'displaysShown', 'brochuresGiven', 'samplesGiven',
   'pinnedReferences', 'followUpTasks', 'notes',
+  // Setup + Goal Lens — source-stamped facts plus selected construction flags.
+  'lensSetupType', 'lensSetupTypeSource',
+  'lensDesiredOutcome', 'lensDesiredOutcomeSource',
+  'lensFuelGasPresent', 'lensFuelGasPresentSource',
+  'lensFuelElectricPresent', 'lensFuelElectricPresentSource',
+  'lensGasType', 'lensGasTypeSource',
+  'lensVenting', 'lensVentingSource',
+  'lensConstructionFlags', 'lensSalespersonNotes', 'lensUpdatedAt',
 ])
 
 export function projectCustomerFileForDisplay(file = {}) {

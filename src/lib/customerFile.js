@@ -91,6 +91,22 @@ const stringKeys = [
   'nextBestQuestion',
   'guidedPathNotes',
   'guidedPathCustomerSummary',
+  // Setup + Goal Lens (PR 2). Each fact has a paired source-state string so the
+  // Customer File can show inline source pills without re-deriving trust.
+  'lensSetupType',
+  'lensSetupTypeSource',
+  'lensDesiredOutcome',
+  'lensDesiredOutcomeSource',
+  'lensFuelGasPresent',
+  'lensFuelGasPresentSource',
+  'lensFuelElectricPresent',
+  'lensFuelElectricPresentSource',
+  'lensGasType',
+  'lensGasTypeSource',
+  'lensVenting',
+  'lensVentingSource',
+  'lensSalespersonNotes',
+  'lensUpdatedAt',
   // Model tag / appliance verification
   'taggedModel',
   'taggedVendor',
@@ -132,6 +148,7 @@ const arrayKeys = [
   'pinnedReferences',         // [{ id, referenceId, label, sourceLabel, pinnedAt }]
   'followUpTasks',             // [{ id, label, dueAt, doneAt }]
   'notes',                     // [{ id, body, createdAt }]
+  'lensConstructionFlags',     // [string] — selected coordination flags
 ]
 
 function getStorage(storage = globalThis.localStorage) {

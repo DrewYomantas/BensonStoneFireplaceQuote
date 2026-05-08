@@ -7,9 +7,11 @@ import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { getCustomerFileDurable } from '../lib/customerFileDurable.js'
 import { projectCustomerFileForDisplay, deriveFileWarnings } from '../lib/customerFileView.js'
+import { lensFactsForDisplay } from '../lib/setupGoalLens.js'
 
 function FactsCard({ file }) {
-  const goal = file.customerGoal
+  const lensFacts = lensFactsForDisplay(file)
+  const lensSaved = Boolean(file.lensUpdatedAt)
   return (
     <section className="card" style={{ padding: 18 }}>
       <span className="eyebrow eyebrow-ember">SETUP &amp; GOAL</span>
@@ -17,9 +19,16 @@ function FactsCard({ file }) {
         <FactRow label="Phone"          value={file.customerPhone}  source={file.customerPhone ? 'manual' : null} />
         <FactRow label="Email"          value={file.customerEmail}  source={file.customerEmail ? 'manual' : null} />
         <FactRow label="Project address" value={file.projectAddress} source={file.projectAddress ? 'manual' : null} />
-        <FactRow label="Existing setup"  value={file.existingNotes}  source={file.existingNotes ? 'said' : null}
-                 sub="Verify on next visit." warn={!file.existingNotes} />
-        <FactRow label="Customer goal"   value={goal} source={goal ? 'said' : null} />
+        {lensFacts.map((fact) => (
+          <FactRow
+            key={fact.key}
+            label={fact.label}
+            value={fact.missing ? '' : fact.value}
+            source={fact.missing ? null : fact.source}
+            sub={fact.missing ? (lensSaved ? 'Still needs to be verified.' : 'Open Setup + Goal Lens to capture this.') : null}
+            warn={fact.missing}
+          />
+        ))}
       </div>
     </section>
   )
@@ -34,7 +43,7 @@ function PlaceholderCard({ title, body }) {
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -71,6 +80,7 @@ export default function CustomerFileScreen({ fileId, onBack }) {
     ? { kind: 'safe', label: 'Active' }
     : { kind: 'review', label: 'In review' }
 
+  const canOpenLens = Boolean(display && fileId && onOpenLens)
   const nextBar = (
     <NextActionBar
       action={display ? 'Open Setup + Goal Lens to verify what was captured.' : 'Pick a Customer File from Today or Start Visit.'}
@@ -78,8 +88,13 @@ export default function CustomerFileScreen({ fileId, onBack }) {
       blocking={warnings.length ? warnings[0].message : null}
       dontForget="The original BisTrack PDF is the canonical pricing document."
       primary={
-        <button type="button" className="btn btn-primary" disabled>
-          Setup + Goal Lens (next pass)
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!canOpenLens}
+          onClick={() => canOpenLens && onOpenLens(fileId)}
+        >
+          Open Setup + Goal Lens
         </button>
       }
       secondary={
