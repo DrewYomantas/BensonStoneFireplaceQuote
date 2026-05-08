@@ -4,8 +4,12 @@
 // a real Customer File is saved through customerFileDurable.
 
 import { STORE_NAMES, isSensitiveKey } from './salesOsStorageSchema.js'
-import { saveCustomerFileDurable } from './customerFileDurable.js'
-import { buildStartVisitCustomerFile, normalizeStartVisitSeed } from './startVisitCustomerFile.js'
+import { getCustomerFileDurable, saveCustomerFileDurable } from './customerFileDurable.js'
+import {
+  buildStartVisitCustomerFile,
+  mergeStartVisitIntoCustomerFile,
+  normalizeStartVisitSeed,
+} from './startVisitCustomerFile.js'
 
 export const DRAFT_ID = 'start-visit-draft'
 const STORE = STORE_NAMES.visitSessions
@@ -69,7 +73,14 @@ export async function clearStartVisitDraft(storage) {
 export async function submitStartVisitDraft(storage, input, now = new Date()) {
   const seed = normalizeStartVisitSeed(input)
   const built = buildStartVisitCustomerFile(seed, now)
-  const saved = await saveCustomerFileDurable(storage, built.draft, now)
+  // If a Customer File with this deterministic id already exists, merge the
+  // Start Visit fields in non-destructively so re-submits don't erase
+  // lens-stamped facts. New customers fall through to the original path.
+  const existing = await getCustomerFileDurable(storage, built.draft.id)
+  const toSave = existing
+    ? mergeStartVisitIntoCustomerFile(existing, built.draft)
+    : built.draft
+  const saved = await saveCustomerFileDurable(storage, toSave, now)
   return {
     customerFile: saved,
     warnings: built.warnings,
@@ -77,6 +88,7 @@ export async function submitStartVisitDraft(storage, input, now = new Date()) {
     status: built.status,
     visitType: built.visitType,
     customerGoal: built.customerGoal,
+    mergedExisting: Boolean(existing),
   }
 }
 

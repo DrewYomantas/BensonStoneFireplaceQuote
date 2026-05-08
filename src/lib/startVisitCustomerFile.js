@@ -18,6 +18,22 @@
 import { createEmptyCustomerFile, sanitizeCustomerFile } from './customerFile.js'
 import { isSensitiveKey } from './salesOsStorageSchema.js'
 
+// Whitelist of Customer File fields that a Start Visit submit is allowed to
+// write into an existing record. Everything else — and especially every
+// lens-prefixed field — is preserved from the existing record on re-submit.
+// Keep this list narrow: Start Visit captures contact and a one-line scope
+// note, nothing else.
+export const START_VISIT_MERGE_FIELDS = Object.freeze([
+  'customerName',
+  'customerPhone',
+  'customerEmail',
+  'projectAddress',
+  'existingNotes',
+  'customerGoal',
+  'goalNotes',
+  'visitedAt',
+])
+
 export const VISIT_TYPES = Object.freeze([
   'walk-in',
   'phone',
@@ -170,4 +186,42 @@ export function buildStartVisitCustomerFile(rawSeed = {}, now = new Date()) {
     visitType: seed.visitType,
     customerGoal: seed.customerGoal,
   }
+}
+
+// Merge a Start Visit-built customer file into an existing one without
+// erasing meaningful fields. Used when a rep re-submits Start Visit for a
+// customer who already has a Customer File (typically same name + phone, so
+// the deterministic id collides).
+//
+// Rules:
+// - Only fields in START_VISIT_MERGE_FIELDS are eligible to be overwritten.
+// - An incoming string only overwrites if it has non-whitespace content and
+//   is not the literal 'unknown'. This means a blank field on a re-submit
+//   never erases a real value the rep already captured.
+// - Every lens-prefixed field, every array, and every other column is
+//   preserved verbatim from the existing record.
+// - The output passes through sanitizeCustomerFile so the schema stays
+//   honest and any sensitive keys (which sanitize already strips) cannot
+//   sneak in via a malformed seed.
+export function mergeStartVisitIntoCustomerFile(existingFile = {}, startVisitFile = {}) {
+  const existingSafe = sanitizeCustomerFile(existingFile)
+  const incomingSafe = sanitizeCustomerFile(startVisitFile)
+  const merged = { ...existingSafe }
+
+  for (const key of START_VISIT_MERGE_FIELDS) {
+    const value = incomingSafe[key]
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (!trimmed) continue
+    if (trimmed.toLowerCase() === 'unknown') continue
+    merged[key] = value
+  }
+
+  // Preserve id / createdAt from the existing record. If the existing record
+  // was malformed and lacked them, fall through to the incoming values so
+  // the save layer still has something to work with.
+  merged.id = existingSafe.id || incomingSafe.id
+  merged.createdAt = existingSafe.createdAt || incomingSafe.createdAt
+
+  return sanitizeCustomerFile(merged)
 }

@@ -7,7 +7,10 @@ import {
   deriveNextBestMove,
   deriveStartVisitWarnings,
   normalizeStartVisitSeed,
+  mergeStartVisitIntoCustomerFile,
+  START_VISIT_MERGE_FIELDS,
 } from './startVisitCustomerFile.js'
+import { submitStartVisitDraft } from './startVisitDraft.js'
 import { sanitizeCustomerFile } from './customerFile.js'
 import {
   createCustomerFileDurable,
@@ -228,5 +231,192 @@ describe('startVisitCustomerFile — buildStartVisitCustomerFile', () => {
     const created = await createCustomerFileDurable(storage, draft)
     assert.equal(created.customerName, 'Walk-in')
     assert.match(created.id, /^cf-/)
+  })
+})
+
+describe('startVisitCustomerFile — mergeStartVisitIntoCustomerFile', () => {
+  function existingWithLensState() {
+    // A customer file that has already been through Start Visit + Lens. Set
+    // every lens-prefixed field to a real value so the test fails loudly if
+    // a re-submit blanks any of them.
+    return {
+      id: 'cf-jordan-555',
+      createdAt: '2026-05-01T10:00:00Z',
+      customerName: 'Jordan',
+      customerPhone: '555-0001',
+      customerEmail: 'jordan@example.com',
+      projectAddress: '12 Birch',
+      existingNotes: 'Masonry, brick, open hearth',
+      customerGoal: 'more-heat',
+      goalNotes: 'Visit type: walk-in',
+      lensSetupType: 'gas-insert',
+      lensSetupTypeSource: 'verified',
+      lensDesiredOutcome: 'more-heat',
+      lensDesiredOutcomeSource: 'said',
+      lensFuelGasPresent: 'yes',
+      lensFuelGasPresentSource: 'verified',
+      lensVenting: 'masonry-chimney',
+      lensVentingSource: 'verified',
+      lensConstructionFlags: ['stone-or-masonry-work'],
+      lensSalespersonNotes: 'wife wants cleaner look',
+      lensUpdatedAt: '2026-05-02T11:00:00Z',
+    }
+  }
+
+  function builtDraft(seed) {
+    return buildStartVisitCustomerFile(seed, new Date('2026-05-08T15:00:00Z')).draft
+  }
+
+  it('blank re-submit preserves every lens-prefixed field', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({ customerName: 'Jordan', phone: '555-0001' })
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.lensSetupType, 'gas-insert')
+    assert.equal(merged.lensSetupTypeSource, 'verified')
+    assert.equal(merged.lensDesiredOutcome, 'more-heat')
+    assert.equal(merged.lensDesiredOutcomeSource, 'said')
+    assert.equal(merged.lensFuelGasPresent, 'yes')
+    assert.equal(merged.lensVenting, 'masonry-chimney')
+    assert.deepEqual(merged.lensConstructionFlags, ['stone-or-masonry-work'])
+    assert.equal(merged.lensSalespersonNotes, 'wife wants cleaner look')
+    assert.equal(merged.lensUpdatedAt, '2026-05-02T11:00:00Z')
+  })
+
+  it('blank existing setup note does not erase a real one', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({ customerName: 'Jordan', phone: '555-0001' })
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.existingNotes, 'Masonry, brick, open hearth')
+  })
+
+  it('unknown / blank goal does not overwrite a real customerGoal', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({ customerName: 'Jordan', phone: '555-0001' })
+    // buildStartVisitCustomerFile maps an unspecified goal to '' before save.
+    assert.equal(draft.customerGoal, '')
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.customerGoal, 'more-heat')
+  })
+
+  it('non-empty start visit fields update safely', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({
+      customerName: 'Jordan Updated',
+      phone: '555-0002',
+      email: 'jordan.new@example.com',
+      address: '14 Birch',
+      currentSetup: 'New scope note',
+      goal: 'easier-operation',
+    })
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.customerName, 'Jordan Updated')
+    assert.equal(merged.customerPhone, '555-0002')
+    assert.equal(merged.customerEmail, 'jordan.new@example.com')
+    assert.equal(merged.projectAddress, '14 Birch')
+    assert.equal(merged.existingNotes, 'New scope note')
+    assert.equal(merged.customerGoal, 'easier-operation')
+    // Lens fields still preserved.
+    assert.equal(merged.lensSetupType, 'gas-insert')
+  })
+
+  it('preserves existing id and createdAt', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({ customerName: 'Jordan', phone: '555-0001' })
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.id, 'cf-jordan-555')
+    assert.equal(merged.createdAt, '2026-05-01T10:00:00Z')
+  })
+
+  it('only fields in START_VISIT_MERGE_FIELDS are eligible to overwrite', () => {
+    const existing = { ...existingWithLensState(), notes: [{ id: 'n1', body: 'kept' }] }
+    // A pretend-malicious draft that tries to bypass the whitelist. None of
+    // these keys are in START_VISIT_MERGE_FIELDS, so they must be ignored.
+    const draft = {
+      ...builtDraft({ customerName: 'Jordan', phone: '555-0001' }),
+      lensSetupType: 'electric-fireplace',
+      lensSetupTypeSource: 'manual',
+      handoffNotes: 'overwrite attempt',
+      notes: [],
+    }
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.lensSetupType, 'gas-insert')
+    assert.equal(merged.lensSetupTypeSource, 'verified')
+    assert.equal(merged.handoffNotes, '')
+    assert.deepEqual(merged.notes, [{ id: 'n1', body: 'kept' }])
+  })
+
+  it('strips sensitive keys from incoming Start Visit data', () => {
+    const existing = existingWithLensState()
+    const draft = {
+      ...builtDraft({ customerName: 'Jordan', phone: '555-0001' }),
+      cost: 999,
+      buyPrice: 'leak',
+      rawOcr: 'leak',
+      bistrackConfidence: 0.99,
+    }
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal('cost' in merged, false)
+    assert.equal('buyPrice' in merged, false)
+    assert.equal('rawOcr' in merged, false)
+    assert.equal('bistrackConfidence' in merged, false)
+  })
+
+  it('whitespace-only string is treated as blank', () => {
+    const existing = existingWithLensState()
+    const draft = builtDraft({ customerName: '   ', phone: '   ', currentSetup: '   ' })
+    const merged = mergeStartVisitIntoCustomerFile(existing, draft)
+    assert.equal(merged.customerName, 'Jordan')
+    assert.equal(merged.customerPhone, '555-0001')
+    assert.equal(merged.existingNotes, 'Masonry, brick, open hearth')
+  })
+
+  it('the START_VISIT_MERGE_FIELDS whitelist excludes every lens-prefixed key', () => {
+    for (const field of START_VISIT_MERGE_FIELDS) {
+      assert.equal(field.startsWith('lens'), false, `${field} must not be in the whitelist`)
+    }
+  })
+})
+
+describe('startVisitCustomerFile — submitStartVisitDraft round-trip', () => {
+  it('first submit creates the file like before', async () => {
+    const storage = makeStorage()
+    const result = await submitStartVisitDraft(storage, {
+      customerName: 'Brand New', phone: '555-9000', goal: 'more-heat',
+    })
+    assert.equal(result.mergedExisting, false)
+    assert.equal(result.customerFile.customerName, 'Brand New')
+    assert.equal(result.customerFile.customerGoal, 'more-heat')
+  })
+
+  it('re-submit with same name+phone preserves Lens facts', async () => {
+    const storage = makeStorage()
+    const first = await submitStartVisitDraft(storage, {
+      customerName: 'Repeater', phone: '555-7777', goal: 'more-heat',
+      currentSetup: 'masonry brick',
+    })
+    // Simulate Lens save: write lens-prefixed fields onto the existing file.
+    await saveCustomerFileDurable(storage, {
+      ...(await getCustomerFileDurable(storage, first.customerFile.id)),
+      lensSetupType: 'gas-insert',
+      lensSetupTypeSource: 'verified',
+      lensDesiredOutcome: 'more-heat',
+      lensDesiredOutcomeSource: 'said',
+      lensUpdatedAt: '2026-05-02T11:00:00Z',
+    })
+
+    // Now re-submit Start Visit with blanks (the bug repro).
+    const again = await submitStartVisitDraft(storage, {
+      customerName: 'Repeater', phone: '555-7777',
+    })
+    assert.equal(again.mergedExisting, true)
+    const after = await getCustomerFileDurable(storage, again.customerFile.id)
+    assert.equal(after.lensSetupType, 'gas-insert',
+      'lens setup must survive a blank re-submit')
+    assert.equal(after.lensSetupTypeSource, 'verified',
+      'lens source must survive a blank re-submit')
+    assert.equal(after.lensDesiredOutcome, 'more-heat')
+    assert.equal(after.lensDesiredOutcomeSource, 'said')
+    assert.equal(after.existingNotes, 'masonry brick',
+      'a real captured scope note must not be erased by a blank re-submit')
   })
 })
