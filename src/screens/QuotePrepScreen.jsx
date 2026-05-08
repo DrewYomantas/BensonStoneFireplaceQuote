@@ -438,7 +438,7 @@ function GateCard({ result, gateDraft, onPatch, onReasonAction, disabled, quoteT
   )
 }
 
-export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHandoff }) {
+export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHandoff, onOpenProposalPreview }) {
   const [file, setFile] = useState(null)
   const [draft, setDraft] = useState(emptyQuotePrepDraft())
   const [loading, setLoading] = useState(true)
@@ -895,6 +895,12 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
     </button>
   ) : null
 
+  const proposalCta = onOpenProposalPreview && fileId ? (
+    <button type="button" className="btn btn-quiet" onClick={() => onOpenProposalPreview(fileId)}>
+      Preview Proposal
+    </button>
+  ) : null
+
   return (
     <>
       <div className="shell-content">{body}</div>
@@ -906,6 +912,7 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
         primary={primaryButton}
         secondary={
           <>
+            {proposalCta}
             {handoffCta}
             {lensCta}
             {onBack ? (

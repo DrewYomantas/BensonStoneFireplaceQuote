@@ -56,7 +56,7 @@ function gateBadge(status) {
   return { label: 'DRAFT', cls: 'source source-manual' }
 }
 
-function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, onOpenHandoff }) {
+function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview }) {
   const status = projectQuotePrepGateStatus(file, { fieldRulesResult })
   const badge = gateBadge(status.status)
   const headline = status.hasLines ? status.label : 'Quote Prep not started'
@@ -100,6 +100,14 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, 
           onClick={() => onOpenQuotePrep && onOpenQuotePrep(fileId)}
         >
           Open Quote / Prep
+        </button>
+        <button
+          type="button"
+          className="btn btn-quiet"
+          disabled={!fileId || !onOpenProposalPreview}
+          onClick={() => onOpenProposalPreview && onOpenProposalPreview(fileId)}
+        >
+          Preview Proposal
         </button>
         <button
           type="button"
@@ -301,7 +309,7 @@ function FollowUpCard({ followUp, onSave, onClear, disabled }) {
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview }) {
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -504,6 +512,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             fileId={fileId}
             onOpenQuotePrep={onOpenQuotePrep}
             onOpenHandoff={onOpenHandoff}
+            onOpenProposalPreview={onOpenProposalPreview}
           />
           <FollowUpCard
             key={`fu-${followUp ? followUp.dueAt : 'none'}-${followUp ? followUp.setAt : ''}`}

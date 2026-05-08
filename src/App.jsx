@@ -9,6 +9,7 @@ import CustomerFilesListScreen from './screens/CustomerFilesListScreen.jsx'
 import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
 import QuotePrepScreen from './screens/QuotePrepScreen.jsx'
 import BisTrackHandoffScreen from './screens/BisTrackHandoffScreen.jsx'
+import ProposalPreviewScreen from './screens/ProposalPreviewScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
@@ -21,6 +22,7 @@ const TITLES = {
   lens: 'Setup + Goal Lens',
   quotePrep: 'Quote / Prep',
   handoff: 'Internal BisTrack Handoff',
+  proposalPreview: 'Proposal Preview',
   backstage: 'Backstage',
 }
 
@@ -32,6 +34,7 @@ const CRUMBS = {
   lens: ['Customer files', 'Setup + Goal Lens'],
   quotePrep: ['Customer files', 'Quote / Prep'],
   handoff: ['Customer files', 'Internal BisTrack Handoff'],
+  proposalPreview: ['Customer files', 'Proposal Preview'],
   backstage: ['Backstage'],
 }
 
@@ -70,13 +73,17 @@ export default function App() {
     setRoute({ screen: 'handoff', fileId })
   }
 
+  function openProposalPreview(fileId) {
+    setRoute({ screen: 'proposalPreview', fileId })
+  }
+
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
 
   return (
     <AppShell
-      active={route.screen === 'lens' || route.screen === 'filesList' || route.screen === 'quotePrep' || route.screen === 'handoff' ? 'files' : route.screen}
+      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview'].includes(route.screen) ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -105,6 +112,7 @@ export default function App() {
           onOpenLens={openLens}
           onOpenQuotePrep={openQuotePrep}
           onOpenHandoff={openHandoff}
+          onOpenProposalPreview={openProposalPreview}
         />
       )}
       {route.screen === 'lens' && (
@@ -119,6 +127,15 @@ export default function App() {
           onBack={() => openFile(route.fileId)}
           onOpenLens={openLens}
           onOpenHandoff={openHandoff}
+          onOpenProposalPreview={openProposalPreview}
+        />
+      )}
+      {route.screen === 'proposalPreview' && (
+        <ProposalPreviewScreen
+          fileId={route.fileId}
+          onBack={() => openFile(route.fileId)}
+          onOpenQuotePrep={openQuotePrep}
+          onOpenLens={openLens}
         />
       )}
       {route.screen === 'handoff' && (
