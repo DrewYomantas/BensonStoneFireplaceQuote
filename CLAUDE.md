@@ -122,7 +122,8 @@ The internal prep chain attached to each Customer File. All read-side projection
 - `src/screens/BisTrackHandoffScreen.jsx` — read-only. Copy Handoff button uses `navigator.clipboard.writeText` with a clipboard-blocked fallback textarea.
 - `src/lib/customerProposalPreview.js` — `buildCustomerProposalPreview(rawFile)` returns a frozen, scrubbed customer-facing view model. Only lines with `reviewStatus: 'ready_for_bistrack' | 'reviewed_for_prep'` surface in the Detailed Investment Breakdown. Eight `BREAKDOWN_GROUPS` (fireplace-appliance → uncategorized), classified by keyword regex on category + name + description. Customer-safe scrub: banned phrases + extended sensitive terms stripped from every field.
   - `goalSummary` rule: bare slug keys (e.g. `"replace-existing"`) match `/^[a-z0-9]+(-[a-z0-9]+)*$/` and are suppressed. `goalNotes` is also excluded — it carries an internal "Visit type:" prefix. Only free-form human text or a `DESIRED_OUTCOME_LABELS` match surfaces.
-- `src/screens/ProposalPreviewScreen.jsx` — read-only internal draft view. Gate warning renders above the proposal document; the document always renders regardless of gate status. No PDF/print/export/send. Entry points: "Preview Proposal" on `CustomerFileScreen` (QuotePrepStatusCard) and `QuotePrepScreen` (NextActionBar).
+- `src/screens/ProposalPreviewScreen.jsx` — read-only internal draft view. Gate warning renders above the proposal document; the document always renders regardless of gate status. "Print / Save PDF" button calls `window.print()` — no data saved, no activity logged, no send flow. Entry points: "Preview Proposal" on `CustomerFileScreen` (QuotePrepStatusCard) and `QuotePrepScreen` (NextActionBar).
+  - Print CSS: `data-print-hide` on any element that must not appear in printed output (internal header, gate warning). CSS classes on the proposal document: `proposal-preview-content` (outer wrapper), `proposal-print-doc` (paper card), `proposal-print-section` (each section, break-inside avoid), `proposal-line-item` (each breakdown line, break-inside avoid). `@media print` block lives in `src/styles/app.css`.
 
 Banned phrases — must never appear in any string surfaced through the gate, handoff, list, or Today signal. The helpers' `safe()` scrubs them defensively:
 - "ready to send"
@@ -131,6 +132,8 @@ Banned phrases — must never appear in any string surfaced through the gate, ha
 - "approved"
 
 Use **"Ready to build in BisTrack"** when the gate helper says so — never customer-readiness language. The list filter, Today signal, and handoff all consume `projectQuotePrepGateStatus` so wording stays consistent across surfaces.
+
+Customer-facing copy (proposals, disclaimers, warm recap, goal summary): do not mention BisTrack by name. Use "official Benson Stone quote process" or "Benson Stone quote" instead. The `customerProposalPreview.js` disclaimer was updated in Milestone 18 for this reason.
 
 ## Architecture
 
