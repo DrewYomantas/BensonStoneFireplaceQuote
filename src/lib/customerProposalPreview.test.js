@@ -507,3 +507,45 @@ describe('buildCustomerProposalPreview — backwards compatibility', () => {
     assert.equal(allLines.length, 0)
   })
 })
+
+// ---- goalSummary slug suppression -------------------------------------------
+
+describe('buildCustomerProposalPreview — goalSummary slug suppression', () => {
+  it('does not surface a bare slug key from customerGoal', () => {
+    const preview = buildCustomerProposalPreview(makeFile({ customerGoal: 'replace-existing' }))
+    assert.notEqual(preview.goalSummary, 'replace-existing')
+  })
+
+  it('does not surface "replace-existing" slug even if DESIRED_OUTCOME_LABELS has no match', () => {
+    const preview = buildCustomerProposalPreview(makeFile({ customerGoal: 'replace-existing', lensDesiredOutcome: '' }))
+    assert.equal(preview.goalSummary, '')
+  })
+
+  it('does not surface multi-word slug-shaped key', () => {
+    const preview = buildCustomerProposalPreview(makeFile({ customerGoal: 'add-new-fireplace', lensDesiredOutcome: '' }))
+    assert.equal(preview.goalSummary, '')
+  })
+
+  it('surfaces free-form human text from customerGoal', () => {
+    const preview = buildCustomerProposalPreview(makeFile({ customerGoal: 'Replace insert with gas insert.' }))
+    assert.equal(preview.goalSummary, 'Replace insert with gas insert.')
+  })
+
+  it('does not surface goalNotes (contains internal Visit type prefix)', () => {
+    const preview = buildCustomerProposalPreview(makeFile({
+      customerGoal: '',
+      lensDesiredOutcome: '',
+      goalNotes: 'Visit type: walk-in\nWants gas insert.',
+    }))
+    assert.equal(preview.goalSummary, '')
+  })
+
+  it('uses DESIRED_OUTCOME_LABELS when lensDesiredOutcome matches a known key', () => {
+    const preview = buildCustomerProposalPreview(makeFile({
+      customerGoal: '',
+      lensDesiredOutcome: 'replace-existing-unit',
+    }))
+    assert.ok(preview.goalSummary.length > 0)
+    assert.notEqual(preview.goalSummary, 'replace-existing-unit')
+  })
+})

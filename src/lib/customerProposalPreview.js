@@ -160,13 +160,20 @@ function buildWarmRecap(file) {
   return `Thank you for visiting Benson Stone. Based on our conversation, here is an overview of the proposed items for your ${projectType}.`
 }
 
+// Slug pattern: lowercase letters/digits separated by hyphens — internal enum keys.
+const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
 function buildGoalSummary(file) {
-  return (
-    safe(file.customerGoal) ||
-    safe(file.goalNotes) ||
-    safe(DESIRED_OUTCOME_LABELS[clampString(file.lensDesiredOutcome)]) ||
-    ''
-  )
+  const rawGoal = clampString(file.customerGoal).trim()
+  if (rawGoal) {
+    // Try direct known-key lookup first (handles slug keys that match the map).
+    const fromKnownKey = safe(DESIRED_OUTCOME_LABELS[rawGoal])
+    if (fromKnownKey) return fromKnownKey
+    // If it's free-form human text (not a bare slug), surface it.
+    if (!SLUG_RE.test(rawGoal)) return safe(rawGoal)
+  }
+  // goalNotes is intentionally excluded — it carries internal "Visit type:" prefix.
+  return safe(DESIRED_OUTCOME_LABELS[clampString(file.lensDesiredOutcome)]) || ''
 }
 
 function buildSetupSummary(file) {
