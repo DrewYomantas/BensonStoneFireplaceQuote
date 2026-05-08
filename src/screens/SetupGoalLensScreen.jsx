@@ -17,10 +17,16 @@ import {
   lensDraftFromCustomerFile,
   buildCustomerFilePatchFromLens,
   setLensFactSource,
+  setLensFactValue,
   deriveLensWarnings,
   isLensReadyForProposal,
   CONSTRUCTION_FLAGS,
 } from '../lib/setupGoalLens.js'
+
+const SOURCE_PAIRED_FIELDS = new Set([
+  'setupType', 'desiredOutcome', 'fuelGasPresent',
+  'fuelElectricPresent', 'gasType', 'venting',
+])
 
 export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
   const [file, setFile] = useState(null)
@@ -63,7 +69,9 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
   }, [fileId])
 
   function update(field, value) {
-    setDraft((prev) => ({ ...prev, [field]: value }))
+    setDraft((prev) => SOURCE_PAIRED_FIELDS.has(field)
+      ? setLensFactValue(prev, field, value)
+      : { ...prev, [field]: value })
     setDirty(true); setSavedAt(null)
   }
 

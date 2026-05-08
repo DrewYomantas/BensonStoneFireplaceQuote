@@ -58,10 +58,14 @@ export default function BackstageBackup() {
         className="btn btn-quiet"
         onClick={handleBackup}
         disabled={busy}
-        title="Download a JSON backup of all local Sales OS data."
+        title="Manual local backup. Downloads a JSON file containing all Sales OS data on this tablet. Restore is not wired yet."
+        aria-label="Manual backup of local Sales OS data"
       >
         {busy ? 'Exporting…' : 'Backup'}
       </button>
+      <span className="body-sm" style={{ color: 'var(--slate)', whiteSpace: 'nowrap' }} aria-hidden="true">
+        Manual · local only
+      </span>
       {errorMsg && (
         <span className="body-sm" style={{ color: 'var(--ember)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {errorMsg}

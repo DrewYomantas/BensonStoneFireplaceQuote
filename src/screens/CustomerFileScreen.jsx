@@ -50,16 +50,18 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
 
   useEffect(() => {
     let cancelled = false
-    setFile(null); setMissing(false); setErrorMsg('')
-    if (!fileId || fileId.startsWith('sample-')) {
-      setMissing(true)
-      return () => {}
-    }
     ;(async () => {
+      if (cancelled) return
+      setFile(null); setMissing(false); setErrorMsg('')
+      if (!fileId || fileId.startsWith('sample-')) {
+        setMissing(true)
+        return
+      }
       try {
         const ready = await ensureSalesOsBoot()
+        if (cancelled) return
         if (!ready.ok) {
-          if (!cancelled) setErrorMsg(ready.error || 'Storage unavailable')
+          setErrorMsg(ready.error || 'Storage unavailable')
           return
         }
         const storage = getSalesOsStorage()

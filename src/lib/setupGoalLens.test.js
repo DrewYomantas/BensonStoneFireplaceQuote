@@ -7,12 +7,17 @@ import {
   buildCustomerFilePatchFromLens,
   applyLensDraftToCustomerFile,
   setLensFactSource,
+  setLensFactValue,
+  demoteSourceForValueChange,
+  mapStartVisitGoalToLens,
+  START_VISIT_GOAL_TO_LENS,
   deriveLensWarnings,
   isLensReadyForProposal,
   lensFactsForDisplay,
   SETUP_TYPES,
   DESIRED_OUTCOMES,
 } from './setupGoalLens.js'
+import { CUSTOMER_GOALS } from './startVisitCustomerFile.js'
 import { projectCustomerFileForDisplay } from './customerFileView.js'
 
 const SENSITIVE = [
@@ -227,6 +232,118 @@ describe('setupGoalLens — facts for display', () => {
     assert.equal(goal.source, 'said')
     const venting = facts.find((f) => f.key === 'venting')
     assert.equal(venting.missing, true)
+  })
+})
+
+describe('setupGoalLens — source demotion on value change', () => {
+  it('demoteSourceForValueChange demotes verified to said', () => {
+    assert.equal(demoteSourceForValueChange('verified'), 'said')
+  })
+  it('demoteSourceForValueChange keeps assumed and said as-is', () => {
+    assert.equal(demoteSourceForValueChange('assumed'), 'assumed')
+    assert.equal(demoteSourceForValueChange('said'), 'said')
+  })
+  it('demoteSourceForValueChange keeps manual/bistrack/ocr as-is', () => {
+    assert.equal(demoteSourceForValueChange('manual'), 'manual')
+    assert.equal(demoteSourceForValueChange('bistrack'), 'bistrack')
+    assert.equal(demoteSourceForValueChange('ocr'), 'ocr')
+  })
+
+  it('setLensFactValue demotes VERIFIED when the value actually changes', () => {
+    const draft = {
+      ...emptyLensDraft(),
+      setupType: 'gas-insert',
+      setupTypeSource: 'verified',
+    }
+    const next = setLensFactValue(draft, 'setupType', 'masonry-fireplace')
+    assert.equal(next.setupType, 'masonry-fireplace')
+    assert.equal(next.setupTypeSource, 'said',
+      'a verified pill must not silently survive a value change')
+  })
+
+  it('setLensFactValue keeps source unchanged when the value is the same', () => {
+    const draft = {
+      ...emptyLensDraft(),
+      setupType: 'gas-insert',
+      setupTypeSource: 'verified',
+    }
+    const next = setLensFactValue(draft, 'setupType', 'gas-insert')
+    assert.equal(next.setupTypeSource, 'verified',
+      'no value change means no source demotion')
+  })
+
+  it('setLensFactValue keeps ASSUMED when value changes', () => {
+    const draft = {
+      ...emptyLensDraft(),
+      desiredOutcome: 'more-heat',
+      desiredOutcomeSource: 'assumed',
+    }
+    const next = setLensFactValue(draft, 'desiredOutcome', 'cleaner-look')
+    assert.equal(next.desiredOutcomeSource, 'assumed')
+  })
+
+  it('setLensFactValue ignores unknown fact keys', () => {
+    const draft = emptyLensDraft()
+    const next = setLensFactValue(draft, 'rocketFuel', 'on')
+    assert.equal('rocketFuel' in next, false)
+    assert.equal(next.setupTypeSource, 'manual')
+  })
+
+  it('setLensFactValue rejects out-of-enum values (falls back to unknown)', () => {
+    const draft = {
+      ...emptyLensDraft(),
+      setupType: 'gas-insert',
+      setupTypeSource: 'verified',
+    }
+    const next = setLensFactValue(draft, 'setupType', 'rocket-fireplace')
+    assert.equal(next.setupType, 'unknown')
+    assert.equal(next.setupTypeSource, 'said', 'still demoted because value changed')
+  })
+
+  it('demotes presence and venting facts the same way', () => {
+    const draft = {
+      ...emptyLensDraft(),
+      fuelGasPresent: 'yes', fuelGasPresentSource: 'verified',
+      venting: 'masonry-chimney', ventingSource: 'verified',
+    }
+    const a = setLensFactValue(draft, 'fuelGasPresent', 'no')
+    const b = setLensFactValue(draft, 'venting', 'direct-vent')
+    assert.equal(a.fuelGasPresentSource, 'said')
+    assert.equal(b.ventingSource, 'said')
+  })
+})
+
+describe('setupGoalLens — Start Visit goal taxonomy', () => {
+  it('every Start Visit goal except unknown maps to a non-unknown Lens goal', () => {
+    for (const goal of CUSTOMER_GOALS) {
+      const mapped = mapStartVisitGoalToLens(goal)
+      assert.ok(DESIRED_OUTCOMES.includes(mapped), `mapped goal ${mapped} must be a Lens goal`)
+      if (goal !== 'unknown') {
+        assert.notEqual(mapped, 'unknown', `${goal} should map to a non-unknown Lens goal`)
+      }
+    }
+  })
+
+  it('canonical Lens goals pass through the mapper unchanged', () => {
+    for (const goal of DESIRED_OUTCOMES) {
+      assert.equal(mapStartVisitGoalToLens(goal), goal)
+    }
+  })
+
+  it('legacy / unrecognised values fall back to unknown without throwing', () => {
+    assert.equal(mapStartVisitGoalToLens(''), 'unknown')
+    assert.equal(mapStartVisitGoalToLens(null), 'unknown')
+    assert.equal(mapStartVisitGoalToLens('handled-by-rep-2017'), 'unknown')
+  })
+
+  it('hydrating a Customer File with a Start Visit goal carries it into the Lens as SAID', () => {
+    for (const goal of CUSTOMER_GOALS) {
+      if (goal === 'unknown') continue
+      const draft = lensDraftFromCustomerFile({ customerGoal: goal })
+      const expected = START_VISIT_GOAL_TO_LENS[goal]
+      assert.equal(draft.desiredOutcome, expected, `${goal} → ${expected}`)
+      assert.equal(draft.desiredOutcomeSource, 'said')
+    }
   })
 })
 

@@ -1,10 +1,12 @@
-import { DESIRED_OUTCOMES, DESIRED_OUTCOME_LABELS } from '../../lib/setupGoalLens.js'
+import { DESIRED_OUTCOME_LABELS } from '../../lib/setupGoalLens.js'
+import { suggestDesiredOutcomeOrder } from '../../lib/salesOsSmartDefaults.js'
 
 export default function GoalSelector({ value, source, onChange, onMarkSource }) {
+  const options = suggestDesiredOutcomeOrder()
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {DESIRED_OUTCOMES.map((opt) => (
+        {options.map((opt) => (
           <button
             key={opt}
             type="button"

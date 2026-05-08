@@ -8,14 +8,14 @@ const PRIMARY = [
 ]
 
 const SECONDARY = [
-  { key: 'lens',      label: 'Setup + Goal Lens',  disabled: true },
-  { key: 'prep',      label: 'Quote / Prep',       disabled: true },
-  { key: 'followup',  label: 'Follow-up',          disabled: true },
-  { key: 'context',   label: 'Smart Context',      disabled: true },
+  { key: 'lens',      label: 'Setup + Goal Lens',  disabled: true, hint: 'from file' },
+  { key: 'prep',      label: 'Quote / Prep',       disabled: true, hint: 'soon' },
+  { key: 'followup',  label: 'Follow-up',          disabled: true, hint: 'soon' },
+  { key: 'context',   label: 'Smart Context',      disabled: true, hint: 'soon' },
 ]
 
 const BACKSTAGE = [
-  { key: 'backstage', label: 'Backstage', disabled: true },
+  { key: 'backstage', label: 'Backstage', disabled: true, hint: 'soon' },
 ]
 
 function RailLink({ item, active, onSelect }) {
@@ -25,10 +25,15 @@ function RailLink({ item, active, onSelect }) {
       className={`shell-rail-link ${active ? 'is-active' : ''}`}
       disabled={item.disabled}
       aria-current={active ? 'page' : undefined}
+      title={item.disabled && item.hint === 'from file'
+        ? 'Open from a Customer File — the Lens always belongs to a specific file.'
+        : undefined}
       onClick={() => !item.disabled && onSelect(item.key)}
     >
       {item.label}
-      {item.disabled && <span className="mono" style={{ marginLeft: 'auto' }}>soon</span>}
+      {item.disabled && item.hint && (
+        <span className="mono" style={{ marginLeft: 'auto' }}>{item.hint}</span>
+      )}
     </button>
   )
 }

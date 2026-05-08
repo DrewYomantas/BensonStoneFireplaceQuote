@@ -1,10 +1,12 @@
-import { SETUP_TYPES, SETUP_TYPE_LABELS } from '../../lib/setupGoalLens.js'
+import { SETUP_TYPE_LABELS } from '../../lib/setupGoalLens.js'
+import { suggestSetupTypeOrder } from '../../lib/salesOsSmartDefaults.js'
 
 export default function SetupTypeSelector({ value, source, onChange, onMarkVerified }) {
+  const options = suggestSetupTypeOrder()
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {SETUP_TYPES.map((opt) => (
+        {options.map((opt) => (
           <button
             key={opt}
             type="button"

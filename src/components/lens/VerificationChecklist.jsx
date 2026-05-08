@@ -1,9 +1,13 @@
 import {
-  PRESENCE_VALUES,
   GAS_TYPES, GAS_TYPE_LABELS,
-  VENTING_TYPES, VENTING_LABELS,
-  CONSTRUCTION_FLAGS, CONSTRUCTION_FLAG_LABELS,
+  VENTING_LABELS,
+  CONSTRUCTION_FLAG_LABELS,
 } from '../../lib/setupGoalLens.js'
+import {
+  suggestPresenceOrder,
+  suggestVentingOrder,
+  suggestConstructionFlagOrder,
+} from '../../lib/salesOsSmartDefaults.js'
 
 const PRESENCE_LABELS = { unknown: 'Not yet known', yes: 'Yes', no: 'No' }
 const SOURCE_OPTIONS = ['said', 'assumed', 'verified']
@@ -54,12 +58,15 @@ function Block({ label, children }) {
 }
 
 export default function VerificationChecklist({ draft, onChange, onMarkSource, onToggleFlag }) {
+  const presenceOptions = suggestPresenceOrder()
+  const ventingOptions = suggestVentingOrder()
+  const constructionFlagOptions = suggestConstructionFlagOrder()
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Block label="Gas at fireplace">
         <ChipRow
           value={draft.fuelGasPresent}
-          options={PRESENCE_VALUES}
+          options={presenceOptions}
           labels={PRESENCE_LABELS}
           onChange={(v) => onChange('fuelGasPresent', v)}
         />
@@ -87,7 +94,7 @@ export default function VerificationChecklist({ draft, onChange, onMarkSource, o
       <Block label="Electric at fireplace">
         <ChipRow
           value={draft.fuelElectricPresent}
-          options={PRESENCE_VALUES}
+          options={presenceOptions}
           labels={PRESENCE_LABELS}
           onChange={(v) => onChange('fuelElectricPresent', v)}
         />
@@ -101,7 +108,7 @@ export default function VerificationChecklist({ draft, onChange, onMarkSource, o
       <Block label="Venting / chimney">
         <ChipRow
           value={draft.venting}
-          options={VENTING_TYPES}
+          options={ventingOptions}
           labels={VENTING_LABELS}
           onChange={(v) => onChange('venting', v)}
         />
@@ -114,7 +121,7 @@ export default function VerificationChecklist({ draft, onChange, onMarkSource, o
 
       <Block label="Construction coordination">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {CONSTRUCTION_FLAGS.map((flag) => (
+          {constructionFlagOptions.map((flag) => (
             <button
               key={flag}
               type="button"

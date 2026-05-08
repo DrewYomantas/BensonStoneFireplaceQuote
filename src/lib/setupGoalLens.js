@@ -121,6 +121,33 @@ function pickSource(value, fallback = 'manual') {
   return LENS_SOURCE_KINDS.includes(v) ? v : normalizeSourceKind(v)
 }
 
+// Canonical Start Visit → Lens goal mapping. Exported so Start Visit can show
+// the same label set Drew will see in the Lens, and so backwards compat for
+// already-saved customer files stays explicit (legacy or unknown values fall
+// through to 'unknown' rather than throwing).
+export const START_VISIT_GOAL_TO_LENS = Object.freeze({
+  'more-heat': 'more-heat',
+  'less-mess': 'easier-operation',
+  'update-look': 'cleaner-look',
+  'easier-operation': 'easier-operation',
+  'replace-existing': 'replace-existing-unit',
+  'explore-options': 'explore-options',
+  'gas-convenience': 'gas-convenience',
+  'wood-burning-experience': 'wood-burning-experience',
+  'electric-simplicity': 'electric-simplicity',
+  'ambience-design': 'ambience-design',
+  'unknown': 'unknown',
+})
+
+export function mapStartVisitGoalToLens(value) {
+  const v = String(value || '').trim().toLowerCase()
+  if (!v) return 'unknown'
+  if (v in START_VISIT_GOAL_TO_LENS) return START_VISIT_GOAL_TO_LENS[v]
+  // If the customer file already stores a canonical Lens value (e.g. legacy
+  // direct mirror), accept it; otherwise treat as unknown.
+  return DESIRED_OUTCOMES.includes(v) ? v : 'unknown'
+}
+
 function pickFlags(values) {
   if (!Array.isArray(values)) return []
   const out = []
@@ -175,18 +202,10 @@ export function lensDraftFromCustomerFile(file = {}) {
     draft.desiredOutcome = pickEnum(file.lensDesiredOutcome, DESIRED_OUTCOMES)
     draft.desiredOutcomeSource = pickSource(file.lensDesiredOutcomeSource, 'said')
   } else if (file.customerGoal) {
-    const startVisitMap = {
-      'more-heat': 'more-heat',
-      'less-mess': 'easier-operation',
-      'update-look': 'cleaner-look',
-      'easier-operation': 'easier-operation',
-      'replace-existing': 'replace-existing-unit',
-      'explore-options': 'explore-options',
-    }
-    const mapped = startVisitMap[String(file.customerGoal).toLowerCase()]
-    if (mapped) {
+    const mapped = mapStartVisitGoalToLens(file.customerGoal)
+    if (mapped !== 'unknown') {
       draft.desiredOutcome = mapped
-      // Start Visit captured this from customer; never auto-promote to verified.
+      // Start Visit captured this from the customer; never auto-promote to verified.
       draft.desiredOutcomeSource = 'said'
     }
   }
@@ -299,12 +318,55 @@ const LENS_SOURCE_FIELDS = Object.freeze({
   venting: 'ventingSource',
 })
 
+const LENS_FACT_ENUMS = Object.freeze({
+  setupType: SETUP_TYPES,
+  desiredOutcome: DESIRED_OUTCOMES,
+  fuelGasPresent: PRESENCE_VALUES,
+  fuelElectricPresent: PRESENCE_VALUES,
+  gasType: GAS_TYPES,
+  venting: VENTING_TYPES,
+})
+
 export function setLensFactSource(rawDraft = {}, factKey, sourceKind) {
   const draft = normalizeLensDraft(rawDraft)
   const sourceField = LENS_SOURCE_FIELDS[factKey]
   if (!sourceField) return draft
   const next = pickSource(sourceKind, draft[sourceField])
   return { ...draft, [sourceField]: next }
+}
+
+// Demote a source kind when its paired value changes. The contract:
+// - VERIFIED is never silently preserved across a value change. Drew has to
+//   re-confirm it explicitly. Demote to SAID — the most common case is the
+//   customer correcting what they previously said.
+// - ASSUMED stays ASSUMED — still an inference, just about a new value.
+// - SAID stays SAID — still customer-stated, just a different statement.
+// - MANUAL/BISTRACK/OCR/anything else stays as-is, since the source describes
+//   how the fact was captured, not which specific value it had.
+export function demoteSourceForValueChange(prevSource) {
+  const kind = pickSource(prevSource, 'manual')
+  if (kind === 'verified') return 'said'
+  return kind
+}
+
+// Set a lens fact's value. If the value actually changes and the previous
+// source was VERIFIED, demote the source — Drew should not silently keep a
+// verified pill on a value he just edited. Same shape as setLensFactSource so
+// screens can call either one.
+export function setLensFactValue(rawDraft = {}, factKey, value) {
+  const draft = normalizeLensDraft(rawDraft)
+  const sourceField = LENS_SOURCE_FIELDS[factKey]
+  const allowed = LENS_FACT_ENUMS[factKey]
+  if (!sourceField || !allowed) return draft
+  const nextValue = pickEnum(value, allowed)
+  if (nextValue === draft[factKey]) {
+    return { ...draft, [factKey]: nextValue }
+  }
+  return {
+    ...draft,
+    [factKey]: nextValue,
+    [sourceField]: demoteSourceForValueChange(draft[sourceField]),
+  }
 }
 
 // Deterministic blockers / clarifying questions / warnings.
