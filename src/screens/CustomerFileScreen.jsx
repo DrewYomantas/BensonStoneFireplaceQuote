@@ -11,6 +11,10 @@ import { projectCustomerFileForDisplay, deriveFileWarnings } from '../lib/custom
 import { lensFactsForDisplay } from '../lib/setupGoalLens.js'
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
+import {
+  projectQuotePrepGateStatus,
+  GATE_STATUS,
+} from '../lib/quotePrepGate.js'
 
 function FactsCard({ file }) {
   const lensFacts = lensFactsForDisplay(file)
@@ -42,6 +46,60 @@ function PlaceholderCard({ title, body }) {
     <section className="card-flat" style={{ padding: 18 }}>
       <span className="eyebrow eyebrow-ink">{title}</span>
       <p className="body-sm" style={{ marginTop: 8 }}>{body}</p>
+    </section>
+  )
+}
+
+function gateBadge(status) {
+  if (status === GATE_STATUS.ready) return { label: 'READY FOR BISTRACK', cls: 'source source-verified' }
+  if (status === GATE_STATUS.needsVerification) return { label: 'NEEDS VERIFICATION', cls: 'source source-said' }
+  return { label: 'DRAFT', cls: 'source source-manual' }
+}
+
+function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep }) {
+  const status = projectQuotePrepGateStatus(file, { fieldRulesResult })
+  const badge = gateBadge(status.status)
+  const headline = status.hasLines ? status.label : 'Quote Prep not started'
+  const counts = status.counts
+  const countLine = status.hasLines
+    ? [
+        `${counts.total} proposed line${counts.total === 1 ? '' : 's'}`,
+        counts.needsVerification > 0 ? `${counts.needsVerification} needs verification` : null,
+        counts.readyForBistrack > 0 ? `${counts.readyForBistrack} ready for BisTrack` : null,
+        counts.doNotUseYet > 0 ? `${counts.doNotUseYet} do not use yet` : null,
+      ].filter(Boolean).join(' · ')
+    : ''
+  return (
+    <section className="card" style={{ padding: 18 }}>
+      <div className="hstack">
+        <span className="eyebrow eyebrow-ember">QUOTE / PREP</span>
+        <span className={badge.cls} style={{ marginLeft: 8 }}>{badge.label}</span>
+      </div>
+      <p className="body-sm" style={{ marginTop: 8 }}>
+        {headline}
+        {status.hasLines ? '.' : '.'}
+      </p>
+      {countLine && (
+        <p className="body-sm" style={{ marginTop: 4, color: 'var(--slate)' }}>{countLine}</p>
+      )}
+      {status.helper && (
+        <p className="body-sm" style={{ marginTop: 4, color: 'var(--slate)' }}>{status.helper}</p>
+      )}
+      {status.reasons && status.reasons.length > 0 && (
+        <ul className="body-sm" style={{ marginTop: 8, paddingLeft: 18 }}>
+          {status.reasons.map((r, idx) => <li key={idx}>{r}</li>)}
+        </ul>
+      )}
+      <div style={{ marginTop: 10 }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!fileId || !onOpenQuotePrep}
+          onClick={() => onOpenQuotePrep && onOpenQuotePrep(fileId)}
+        >
+          Open Quote / Prep
+        </button>
+      </div>
     </section>
   )
 }
@@ -183,31 +241,13 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
           <ManagerReviewReasons />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, marginTop: 18 }}>
-          <section className="card" style={{ padding: 18 }}>
-            <div className="hstack">
-              <span className="eyebrow eyebrow-ember">QUOTE / PREP</span>
-              <span className="spacer" />
-              {Array.isArray(display.quotePrepLines) && display.quotePrepLines.length > 0 && (
-                <span className="body-sm" style={{ color: 'var(--slate)' }}>
-                  {display.quotePrepLines.length} proposed line{display.quotePrepLines.length === 1 ? '' : 's'}
-                </span>
-              )}
-            </div>
-            <p className="body-sm" style={{ marginTop: 8 }}>
-              Rep-only workbench for proposed line items and prep notes. BisTrack
-              remains the source of truth for the official quote.
-            </p>
-            <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!fileId || !onOpenQuotePrep}
-                onClick={() => onOpenQuotePrep && onOpenQuotePrep(fileId)}
-              >
-                Open Quote / Prep
-              </button>
-            </div>
-          </section>
+          <QuotePrepStatusCard
+            file={display}
+            fieldRulesResult={fieldRulesResult}
+            fileId={fileId}
+            onOpenQuotePrep={onOpenQuotePrep}
+          />
+
           <PlaceholderCard
             title="ACTIVITY"
             body={`Created ${new Date(display.createdAt).toLocaleDateString()}. Visit timeline lands in PR 2.`}

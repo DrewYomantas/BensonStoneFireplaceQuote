@@ -17,7 +17,12 @@
 //   - duplicate Field Rule logic — it consumes the engine's output
 
 import { isSensitiveKey } from './salesOsStorageSchema.js'
-import { summarizeQuotePrepReview } from './quotePrepDraft.js'
+import {
+  summarizeQuotePrepReview,
+  quotePrepDraftFromCustomerFile,
+  buildQuotePrepEngineInput,
+} from './quotePrepDraft.js'
+import { evaluateFieldRules } from './fieldRules.js'
 
 export const QUOTE_TYPE_VALUES = Object.freeze(['unknown', 'planning', 'verified'])
 export const QUOTE_TYPE_LABELS = Object.freeze({
@@ -345,5 +350,66 @@ export function evaluateQuotePrepGate(input = {}) {
     }),
     reasons: Object.freeze(reasons),
     fields: Object.freeze(gateFields),
+  })
+}
+
+// Banned phrases — these must never appear in any string surfaced through
+// the gate display. The gate's label set deliberately uses
+// "Ready to build in BisTrack" so customer-facing language can't leak in.
+const BANNED_DISPLAY_PHRASES = [
+  'ready to send',
+  'proposal ready',
+  'customer ready',
+  'approved',
+]
+
+function safeDisplayString(value) {
+  if (value === undefined || value === null) return ''
+  const s = String(value)
+  const lower = s.toLowerCase()
+  for (const phrase of BANNED_DISPLAY_PHRASES) {
+    if (lower.includes(phrase)) return ''
+  }
+  return s
+}
+
+// Small read-only projection for surfaces outside Quote / Prep (e.g.
+// Customer File detail). Computes the same gate result the Quote / Prep
+// screen would, then returns a compact display shape. No durable writes,
+// no rule logic duplicated, no sensitive keys surfaced.
+export function projectQuotePrepGateStatus(file, options = {}) {
+  const safeFile = file && typeof file === 'object' ? file : {}
+  const draft = quotePrepDraftFromCustomerFile(safeFile)
+  // Field Rules result: callers may pass one in (when they already evaluated
+  // it for FieldRulesCard), otherwise compute the same way Quote / Prep does
+  // so the answer matches what the rep sees on Quote / Prep.
+  let fieldRulesResult = options.fieldRulesResult || null
+  if (!fieldRulesResult) {
+    const { file: engineFile, discussionText } = buildQuotePrepEngineInput(safeFile, draft)
+    fieldRulesResult = evaluateFieldRules(engineFile, { discussionText })
+  }
+  const gate = evaluateQuotePrepGate({ file: safeFile, draft, fieldRulesResult })
+  const reasonCap = Number.isFinite(options.reasonLimit) ? options.reasonLimit : 2
+  const cappedReasons = (gate.reasons || [])
+    .map(safeDisplayString)
+    .filter(Boolean)
+    .slice(0, Math.max(0, reasonCap))
+
+  let helper
+  if (gate.counts.total === 0) {
+    helper = 'Open Quote / Prep to start the prep workbench.'
+  } else if (gate.status === GATE_STATUS.ready) {
+    helper = 'Build and verify the official quote in BisTrack.'
+  } else {
+    helper = 'BisTrack remains source of truth — this is internal prep.'
+  }
+
+  return Object.freeze({
+    status: gate.status,
+    label: safeDisplayString(gate.label) || 'Draft prep',
+    helper: safeDisplayString(helper),
+    hasLines: gate.counts.total > 0,
+    counts: gate.counts,
+    reasons: Object.freeze(cappedReasons),
   })
 }

@@ -5,6 +5,7 @@ import {
   normalizeQuotePrepGateFields,
   buildCustomerFilePatchFromQuotePrepGate,
   quotePrepGateDraftFromCustomerFile,
+  projectQuotePrepGateStatus,
   GATE_STATUS,
   QUOTE_TYPE_VALUES,
   DEFAULT_QUOTE_TYPE,
@@ -272,5 +273,123 @@ describe('quotePrepGate — durable round trip', () => {
     assert.equal(reloaded.quotePrepUnverifiedItems, 'Flue size.')
     assert.equal(reloaded.quotePrepNextStep, 'Confirm with Liam.')
     assert.equal(reloaded.quotePrepGateUpdatedAt, '2026-05-08T18:00:00.000Z')
+  })
+})
+
+describe('projectQuotePrepGateStatus', () => {
+  function noLinesFile() {
+    return { customerName: 'A', customerPhone: '5551111' }
+  }
+
+  function readyFileWithLine() {
+    return {
+      customerName: 'Test',
+      customerPhone: '555-0100',
+      projectAddress: '12 Oak Ln',
+      customerGoal: 'More heat',
+      lensSetupType: 'masonry-fireplace',
+      lensFuelGasPresent: 'yes',
+      quotePrepQuoteType: 'planning',
+      quotePrepVerificationOwner: 'Drew',
+      quotePrepNextStep: 'Call Liam.',
+      quotePrepLines: [
+        {
+          id: 'qpl-1', name: 'a',
+          sourceBasis: 'manual_entry',
+          reviewStatus: 'ready_for_bistrack',
+        },
+      ],
+    }
+  }
+
+  it('returns draft state when there are no proposed lines', () => {
+    const status = projectQuotePrepGateStatus(noLinesFile())
+    assert.equal(status.hasLines, false)
+    assert.equal(status.status, GATE_STATUS.draft)
+    assert.match(status.helper, /Open Quote \/ Prep/)
+  })
+
+  it('returns needs-verification state with capped reasons', () => {
+    const status = projectQuotePrepGateStatus({
+      customerName: 'Test',
+      customerPhone: '555',
+      // no goal, no setup, do_not_use line
+      quotePrepLines: [
+        { id: 'a', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'do_not_use_yet' },
+      ],
+    })
+    assert.equal(status.status, GATE_STATUS.needsVerification)
+    assert.ok(status.reasons.length <= 2)
+    assert.equal(status.label, 'Needs verification before BisTrack')
+  })
+
+  it('returns ready-to-build-in-BisTrack when everything aligns', () => {
+    const status = projectQuotePrepGateStatus(readyFileWithLine())
+    assert.equal(status.status, GATE_STATUS.ready)
+    assert.equal(status.label, 'Ready to build in BisTrack')
+    assert.match(status.helper, /Build and verify the official quote in BisTrack/)
+  })
+
+  it('count summary surfaces total / needsVerification / readyForBistrack / doNotUseYet', () => {
+    const status = projectQuotePrepGateStatus({
+      customerName: 'Test', customerPhone: '555',
+      quotePrepLines: [
+        { id: 'a', name: 'a', reviewStatus: 'needs_verification' },
+        { id: 'b', name: 'b', reviewStatus: 'needs_verification' },
+        { id: 'c', name: 'c', reviewStatus: 'ready_for_bistrack' },
+        { id: 'd', name: 'd', reviewStatus: 'do_not_use_yet' },
+      ],
+    })
+    assert.equal(status.counts.total, 4)
+    assert.equal(status.counts.needsVerification, 2)
+    assert.equal(status.counts.readyForBistrack, 1)
+    assert.equal(status.counts.doNotUseYet, 1)
+  })
+
+  it('never surfaces banned customer-facing wording in label or helper', () => {
+    const banned = [/ready to send/i, /proposal ready/i, /customer ready/i, /\bapproved\b/i]
+    const variants = [
+      projectQuotePrepGateStatus(noLinesFile()),
+      projectQuotePrepGateStatus({
+        customerName: 'X', customerPhone: '5', quotePrepLines: [{ id: '1', reviewStatus: 'do_not_use_yet' }],
+      }),
+      projectQuotePrepGateStatus(readyFileWithLine()),
+    ]
+    for (const v of variants) {
+      for (const re of banned) {
+        assert.equal(re.test(v.label), false, `label: ${v.label}`)
+        assert.equal(re.test(v.helper), false, `helper: ${v.helper}`)
+        for (const r of v.reasons) {
+          assert.equal(re.test(r), false, `reason: ${r}`)
+        }
+      }
+    }
+  })
+
+  it('does not crash on missing/empty file', () => {
+    const a = projectQuotePrepGateStatus(undefined)
+    const b = projectQuotePrepGateStatus(null)
+    const c = projectQuotePrepGateStatus({})
+    for (const status of [a, b, c]) {
+      assert.ok(status.status)
+      assert.equal(status.hasLines, false)
+    }
+  })
+
+  it('does not surface sensitive keys to display output', () => {
+    const status = projectQuotePrepGateStatus({
+      customerName: 'X', customerPhone: '5',
+      cost: 999, margin: 0.4, buyPrice: 50,
+      supplierTotal: 100, bistrackConfidence: '0.5',
+      ocrConfidence: '0.7', rawOcr: 'noise', rawPdf: 'bytes',
+      quotePrepLines: [{ id: '1', name: 'a', reviewStatus: 'do_not_use_yet' }],
+    })
+    const keys = Object.keys(status)
+    for (const k of keys) {
+      const lower = k.toLowerCase()
+      for (const banned of ['cost', 'margin', 'buyprice', 'supplier', 'rawocr', 'rawpdf', 'bistrackconfidence', 'ocrconfidence']) {
+        assert.equal(lower.includes(banned), false, `leaked key: ${k}`)
+      }
+    }
   })
 })
