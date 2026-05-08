@@ -1,5 +1,6 @@
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import TodayActionCard from '../components/today/TodayActionCard.jsx'
+import { badgesForFile } from '../lib/fieldRulesBadges.js'
 
 const SAMPLE_FILES = [
   {
@@ -12,6 +13,11 @@ const SAMPLE_FILES = [
     source: 'bistrack',
     sourceLabel: 'BT-44217',
     nextAction: 'Call about stone allowance before noon',
+    fieldRuleSample: {
+      lensSetupType: 'zero-clearance-metal-fireplace',
+      existingNotes: 'Gas insert into existing prefab; full install scope, drywall finish work.',
+      projectAddress: '14 Oak Ln, Rockford IL 61104',
+    },
   },
   {
     id: 'sample-hernandez',
@@ -44,6 +50,9 @@ const SAMPLE_FILES = [
     source: 'manual',
     sourceLabel: 'DRAFT',
     nextAction: 'Finish visit capture + add measurements',
+    fieldRuleSample: {
+      existingNotes: 'Empire vent-free log set in masonry fireplace, customer wants more heat.',
+    },
   },
 ]
 
@@ -73,6 +82,7 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile }) {
                 source={f.source}
                 sourceLabel={f.sourceLabel}
                 nextAction={f.nextAction}
+                fieldRuleBadges={f.fieldRuleSample ? badgesForFile(f.fieldRuleSample) : []}
                 onOpen={() => onOpenFile && onOpenFile(f.id)}
               />
             ))}

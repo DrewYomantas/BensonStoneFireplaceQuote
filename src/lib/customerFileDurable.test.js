@@ -87,6 +87,62 @@ describe('customerFileDurable — async API', () => {
     assert.equal(created.customerName, 'New Walk-in')
   })
 
+  it('zc gas-insert ack keys round-trip through save/read', async () => {
+    const t1 = new Date('2026-05-08T10:00:00Z')
+    await saveCustomerFileDurable(storage, {
+      id: 'cf-ack',
+      customerName: 'Ack Test',
+      lensSetupType: 'zero-clearance-metal-fireplace',
+    }, t1)
+    const t2 = new Date('2026-05-08T15:00:00Z')
+    const updated = await updateCustomerFileDurable(storage, 'cf-ack', {
+      zcGasInsertAcknowledgedAt: t2.toISOString(),
+      zcGasInsertAcknowledgedBy: 'Drew',
+    }, t2)
+    assert.equal(updated.zcGasInsertAcknowledgedAt, t2.toISOString())
+    assert.equal(updated.zcGasInsertAcknowledgedBy, 'Drew')
+
+    const fetched = await getCustomerFileDurable(storage, 'cf-ack')
+    assert.equal(fetched.zcGasInsertAcknowledgedAt, t2.toISOString())
+    assert.equal(fetched.zcGasInsertAcknowledgedBy, 'Drew')
+  })
+
+  it('zc ack keys survive backup → restore', async () => {
+    await saveCustomerFileDurable(storage, {
+      id: 'cf-ack',
+      customerName: 'Ack Round-trip',
+      lensSetupType: 'zero-clearance-metal-fireplace',
+      zcGasInsertAcknowledgedAt: '2026-05-08T15:00:00.000Z',
+      zcGasInsertAcknowledgedBy: 'Drew',
+    })
+    const payload = await exportSalesOsBackup(storage)
+    const row = payload.stores.customerFiles.find((r) => r.id === 'cf-ack')
+    assert.equal(row.zcGasInsertAcknowledgedAt, '2026-05-08T15:00:00.000Z')
+    assert.equal(row.zcGasInsertAcknowledgedBy, 'Drew')
+
+    const fresh = makeStorage()
+    const restored = await importSalesOsBackup(fresh, payload, { mode: 'replace' })
+    assert.equal(restored.ok, true)
+    const out = await getCustomerFileDurable(fresh, 'cf-ack')
+    assert.equal(out.zcGasInsertAcknowledgedAt, '2026-05-08T15:00:00.000Z')
+    assert.equal(out.zcGasInsertAcknowledgedBy, 'Drew')
+  })
+
+  it('zc ack keys survive customerFileView display projection', async () => {
+    const { projectCustomerFileForDisplay } = await import('./customerFileView.js')
+    await saveCustomerFileDurable(storage, {
+      id: 'cf-proj',
+      customerName: 'Projection',
+      lensSetupType: 'zero-clearance-metal-fireplace',
+      zcGasInsertAcknowledgedAt: '2026-05-08T15:00:00.000Z',
+      zcGasInsertAcknowledgedBy: 'Drew',
+    })
+    const fetched = await getCustomerFileDurable(storage, 'cf-proj')
+    const display = projectCustomerFileForDisplay(fetched)
+    assert.equal(display.zcGasInsertAcknowledgedAt, '2026-05-08T15:00:00.000Z')
+    assert.equal(display.zcGasInsertAcknowledgedBy, 'Drew')
+  })
+
   it('lookup by opportunity id', async () => {
     await saveCustomerFileDurable(storage, { id: 'cf-1', opportunityId: 'quote-99', customerName: 'Linked' })
     const found = await getCustomerFileByOpportunityDurable(storage, 'quote-99')

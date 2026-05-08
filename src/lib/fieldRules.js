@@ -40,8 +40,6 @@ import { projectCustomerFileForDisplay } from './customerFileView.js'
 const EMPIRE_BRAND_PATTERN =
   /\b(empire|white\s*mountain\s*hearth|wmh|american\s*hearth)\b/i
 
-const HARGROVE_PATTERN = /\bhargrove\b/i
-
 const VENT_FREE_LOG_PATTERN =
   /\b(vent[-\s]*free|vf|ventless|unvented)\b[^.]{0,40}\b(log|logs|log\s*set)\b/i
 
@@ -52,6 +50,12 @@ const GAS_INSERT_PATTERN = /\b(gas\s*insert|gas\s*inserts)\b/i
 
 const MILLIVOLT_PATTERN =
   /\b(millivolt|standing\s*pilot|continuous\s*pilot|continuous[-\s]*pilot)\b/i
+
+// Whisper Flex part numbers — config carries the canonical strings, but the
+// detection patterns here are tolerant of optional whitespace/dashes in case
+// the part shows up pasted from a quote line.
+const WHISPER_FLEX_SMALL_PATTERN = /\bT[\s-]*1009898[\s-]*12\b/i
+const WHISPER_FLEX_LARGE_PATTERN = /\bT[\s-]*1009898[\s-]*16\b/i
 
 const INSTALL_SCOPE_PATTERN =
   /\b(install(ation)?|installer|installed|installing|construct(ion)?|finish\s*work|drywall|stone\s*work|masonry|bump[-\s]*out|chase|framing)\b/i
@@ -194,16 +198,27 @@ function buildFinding(rule, { status, reason, action, internalNote, parts }) {
 function evaluateWhisperFlex(rule, file, text) {
   if (!rule.enabled) return null
   const empireMatch = EMPIRE_BRAND_PATTERN.test(text)
-  const hargroveMatch = HARGROVE_PATTERN.test(text)
   const ventFreeLogMatch =
     VENT_FREE_LOG_PATTERN.test(text) || VENT_FREE_LOG_REVERSE_PATTERN.test(text)
+  // Empire / WMH vent-free log path is the trigger. Hargrove-only logs already
+  // include flex and should not warn — and because the gate above requires an
+  // Empire/WMH match, mixed Empire + Hargrove still triggers.
   if (!empireMatch || !ventFreeLogMatch) return null
-  // Hargrove-only product: do not warn (already includes flex).
-  if (hargroveMatch && !empireMatch) return null
+  const smallPresent = WHISPER_FLEX_SMALL_PATTERN.test(text)
+  const largePresent = WHISPER_FLEX_LARGE_PATTERN.test(text)
+  if (smallPresent || largePresent) {
+    const partLabel = smallPresent ? rule.parts.smaller : rule.parts.larger
+    return buildFinding(rule, {
+      status: 'satisfied',
+      reason: `Whisper Flex part ${partLabel} detected — checklist complete.`,
+      action: null,
+      parts: rule.parts,
+    })
+  }
   return buildFinding(rule, {
     status: 'triggered',
     reason: 'Empire / WMH vent-free log set detected without confirmed flex line.',
-    action: 'Add Whisper Flex line',
+    action: 'Add the correct Whisper Flex size',
     parts: rule.parts,
   })
 }

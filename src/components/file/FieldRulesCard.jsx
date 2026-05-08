@@ -23,7 +23,7 @@ function sortFindings(findings) {
 
 function statusBadge(finding) {
   if (finding.status === 'cleared') return { label: 'CLEARED', cls: 'source source-verified' }
-  if (finding.status === 'satisfied') return { label: 'OK', cls: 'source source-verified' }
+  if (finding.status === 'satisfied') return { label: 'SATISFIED', cls: 'source source-verified' }
   if (finding.status === 'soft-warning') return { label: 'WARN', cls: 'source source-said' }
   // triggered
   if (finding.severity === 'blocker') return { label: 'BLOCKER', cls: 'source source-assumed' }
@@ -42,7 +42,13 @@ function FindingRow({ finding, onAcknowledgeZcAck, canAcknowledge }) {
       <div className="fact-row-head">
         <span className="eyebrow eyebrow-ink fact-row-label">{finding.label}</span>
         <span className="fact-row-value">{finding.action || '—'}</span>
-        <span className={badge.cls}>{badge.label}</span>
+        <span
+          className={badge.cls}
+          aria-label={`Status: ${badge.label}`}
+          title={`Status: ${badge.label}`}
+        >
+          {badge.label}
+        </span>
       </div>
       {finding.reason && (
         <p className="fact-row-sub">{finding.reason}</p>
@@ -64,6 +70,7 @@ function FindingRow({ finding, onAcknowledgeZcAck, canAcknowledge }) {
             type="button"
             className="btn btn-quiet"
             disabled={!canAcknowledge}
+            aria-label="Acknowledge gas insert into ZC fireplace with customer"
             onClick={() => canAcknowledge && onAcknowledgeZcAck(finding)}
           >
             Acknowledge with customer

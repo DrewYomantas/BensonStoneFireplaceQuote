@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import SetupGoalLensForm from '../components/lens/SetupGoalLensForm.jsx'
 import ClarifyingQuestionsCard from '../components/lens/ClarifyingQuestionsCard.jsx'
+import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
+import { evaluateFieldRules } from '../lib/fieldRules.js'
+import { buildLensEngineInput } from '../lib/lensFieldRulesInput.js'
 import {
   ensureSalesOsBoot,
   getSalesOsStorage,
@@ -119,6 +122,10 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
 
   const { blockers, warnings, questions } = deriveLensWarnings(draft)
   const ready = isLensReadyForProposal(draft)
+  const lensFieldRulesResult = file
+    ? evaluateFieldRules(buildLensEngineInput(file, draft))
+    : null
+  const lensHasUnsavedChanges = dirty
 
   let primaryAction
   let primaryButton
@@ -191,6 +198,14 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
               />
             </form>
             <ClarifyingQuestionsCard blockers={blockers} warnings={warnings} questions={questions} />
+          </div>
+          <div style={{ marginTop: 18 }}>
+            <FieldRulesCard result={lensFieldRulesResult} canAcknowledge={false} />
+            {lensHasUnsavedChanges && (
+              <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
+                Save the Lens to enable acknowledgement actions on the Customer File.
+              </p>
+            )}
           </div>
         </div>
       </div>

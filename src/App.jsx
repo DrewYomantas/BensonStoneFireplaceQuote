@@ -6,6 +6,7 @@ import TodayScreen from './screens/TodayScreen.jsx'
 import StartVisitScreen from './screens/StartVisitScreen.jsx'
 import CustomerFileScreen from './screens/CustomerFileScreen.jsx'
 import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
+import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
 
@@ -14,6 +15,7 @@ const TITLES = {
   visit: 'Start a visit',
   files: 'Customer file',
   lens: 'Setup + Goal Lens',
+  backstage: 'Backstage',
 }
 
 const CRUMBS = {
@@ -21,6 +23,7 @@ const CRUMBS = {
   visit: ['New visit'],
   files: ['Customer files'],
   lens: ['Customer files', 'Setup + Goal Lens'],
+  backstage: ['Backstage'],
 }
 
 export default function App() {
@@ -29,7 +32,7 @@ export default function App() {
   useEffect(() => { ensureSalesOsBoot() }, [])
 
   function navigate(screen) {
-    if (screen === 'today' || screen === 'visit') {
+    if (screen === 'today' || screen === 'visit' || screen === 'backstage') {
       setRoute({ screen, fileId: null })
     } else if (screen === 'files') {
       setRoute((prev) => ({ screen: 'files', fileId: prev.fileId }))
@@ -74,6 +77,9 @@ export default function App() {
           fileId={route.fileId}
           onBack={() => openFile(route.fileId)}
         />
+      )}
+      {route.screen === 'backstage' && (
+        <BackstageScreen onBack={() => navigate('today')} />
       )}
     </AppShell>
   )

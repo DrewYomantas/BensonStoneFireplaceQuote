@@ -131,6 +131,44 @@ describe('evaluateFieldRules — Rule 1: Whisper Flex', () => {
     const finding = findFinding(result, FIELD_RULE_IDS.whisperFlex)
     assert.equal(finding, null)
   })
+
+  it('Empire VF logs WITH T1009898-12 mark Whisper Flex satisfied', () => {
+    const result = evaluateFieldRules({
+      existingNotes: 'Empire vent-free log set; quoted Whisper Flex T1009898-12 with the basket.',
+    })
+    const finding = findFinding(result, FIELD_RULE_IDS.whisperFlex)
+    assert.ok(finding)
+    assert.equal(finding.status, 'satisfied')
+    assert.match(finding.reason, /T1009898-12/)
+  })
+
+  it('Empire VF logs WITH T1009898-16 also mark Whisper Flex satisfied', () => {
+    const result = evaluateFieldRules({
+      lensSalespersonNotes: 'WMH ventless logs · added T1009898-16 (larger flex).',
+    })
+    const finding = findFinding(result, FIELD_RULE_IDS.whisperFlex)
+    assert.ok(finding)
+    assert.equal(finding.status, 'satisfied')
+  })
+
+  it('Mixed Empire + Hargrove still triggers Whisper Flex when no flex part is present', () => {
+    const result = evaluateFieldRules({
+      existingNotes: 'Empire vent-free log set in family room; Hargrove vented set in den.',
+    })
+    const finding = findFinding(result, FIELD_RULE_IDS.whisperFlex)
+    assert.ok(finding)
+    assert.equal(finding.status, 'triggered')
+    assert.match(finding.action, /Whisper Flex size/i)
+  })
+
+  it('Triggered wording asks to add the correct Whisper Flex size when both parts absent', () => {
+    const result = evaluateFieldRules({
+      existingNotes: 'Empire VF logs, customer wants more heat.',
+    })
+    const finding = findFinding(result, FIELD_RULE_IDS.whisperFlex)
+    assert.ok(finding)
+    assert.equal(finding.action, 'Add the correct Whisper Flex size')
+  })
 })
 
 describe('evaluateFieldRules — Rule 2: ZC gas-insert acknowledgement', () => {
@@ -357,5 +395,73 @@ describe('evaluateFieldRules — safety boundaries', () => {
 
   it('FIELD_RULES export from engine matches config', () => {
     assert.equal(FIELD_RULES.length, CONFIG_FIELD_RULES.length)
+  })
+
+  it('projectFileForFieldRules drops a broad sweep of sensitive variants', () => {
+    const sensitive = {
+      cost: 1,
+      averageCost: 2,
+      margin: 0.3,
+      marginPercent: 30,
+      buyPrice: 50,
+      buy_price: 50,
+      'buy-price': 50,
+      supplierTotal: 999,
+      supplier_total: 999,
+      supplierHistory: 'redacted',
+      rawOcr: 'redacted',
+      raw_ocr: 'redacted',
+      rawPdf: 'redacted',
+      raw_pdf: 'redacted',
+      bistrackConfidence: 0.7,
+      bistrack_confidence: 0.7,
+      fuzzyMatchConfidence: 0.9,
+      fuzzy_match_confidence: 0.9,
+      ocrConfidence: 0.5,
+      ocr_confidence: 0.5,
+      salesRank: 1,
+      sales_rank: 1,
+      productRank: 2,
+      product_rank: 2,
+      inventoryTurn: 4,
+      privateCatalog: 'redacted',
+      // Safe keys that should survive:
+      customerName: 'Audit',
+      lensSetupType: 'masonry-fireplace',
+      existingNotes: 'Empire VF logs.',
+    }
+    const out = projectFileForFieldRules(sensitive)
+    for (const k of [
+      'cost', 'averageCost', 'margin', 'marginPercent',
+      'buyPrice', 'buy_price', 'buy-price',
+      'supplierTotal', 'supplier_total', 'supplierHistory',
+      'rawOcr', 'raw_ocr', 'rawPdf', 'raw_pdf',
+      'bistrackConfidence', 'bistrack_confidence',
+      'fuzzyMatchConfidence', 'fuzzy_match_confidence',
+      'ocrConfidence', 'ocr_confidence',
+      'salesRank', 'sales_rank', 'productRank', 'product_rank',
+      'inventoryTurn', 'privateCatalog',
+    ]) {
+      assert.equal(k in out, false, `${k} leaked into engine input`)
+    }
+    assert.equal(out.customerName, 'Audit')
+    assert.equal(out.lensSetupType, 'masonry-fireplace')
+    assert.equal(out.existingNotes, 'Empire VF logs.')
+  })
+
+  it('vendor-net / dealer-net language never appears in customer-safe finding text', () => {
+    const banned = [/vendor\s*net/i, /dealer\s*net/i]
+    const result = evaluateFieldRules({
+      projectAddress: 'Rockford, IL',
+      lensSetupType: 'zero-clearance-metal-fireplace',
+      existingNotes: 'Empire VF logs, gas insert, millivolt, full install.',
+    })
+    for (const f of result.findings) {
+      if (!f.customerSafe) continue
+      for (const pattern of banned) {
+        assert.equal(pattern.test(f.customerSafe), false,
+          `${f.id} leaks vendor/dealer-net language: ${f.customerSafe}`)
+      }
+    }
   })
 })

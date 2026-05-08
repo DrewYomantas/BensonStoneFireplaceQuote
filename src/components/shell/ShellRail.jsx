@@ -15,7 +15,7 @@ const SECONDARY = [
 ]
 
 const BACKSTAGE = [
-  { key: 'backstage', label: 'Backstage', disabled: true, hint: 'soon' },
+  { key: 'backstage', label: 'Backstage', disabled: false },
 ]
 
 function RailLink({ item, active, onSelect }) {
