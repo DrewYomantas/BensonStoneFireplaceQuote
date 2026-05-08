@@ -30,11 +30,13 @@ import {
 } from '../lib/quotePrepDraft.js'
 import { evaluateFieldRules } from '../lib/fieldRules.js'
 import { acknowledgeZcGasInsertOnFile } from '../lib/zcGasInsertAck.js'
+import { appendActivityForFile } from '../lib/visitActivity.js'
 import { SETUP_TYPE_LABELS } from '../lib/setupGoalLens.js'
 import {
   evaluateQuotePrepGate,
   quotePrepGateDraftFromCustomerFile,
   buildCustomerFilePatchFromQuotePrepGate,
+  projectQuotePrepGateStatus,
   QUOTE_TYPE_VALUES,
   QUOTE_TYPE_LABELS,
   GATE_STATUS,
@@ -534,6 +536,9 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
       const storage = getSalesOsStorage()
       const linePatch = buildCustomerFilePatchFromQuotePrep(draft)
       const gatePatch = buildCustomerFilePatchFromQuotePrepGate(gateDraft)
+      // Snapshot the pre-save gate status from the saved file (not the
+      // memoized gateResult) so the React compiler can keep its useMemo.
+      const prevGateStatus = file ? projectQuotePrepGateStatus(file).status : null
       saveState.markSaving()
       const updated = await updateCustomerFileDurable(storage, fileId, { ...linePatch, ...gatePatch })
       saveState.markSaved()
@@ -541,6 +546,21 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
         setFile(projectCustomerFileForDisplay(updated))
         setDraft(quotePrepDraftFromCustomerFile(updated))
         setGateDraft(quotePrepGateDraftFromCustomerFile(updated))
+        // Activity: quote_line_saved on every save; quote_gate_changed when
+        // the gate status flipped against the pre-save snapshot.
+        try {
+          await appendActivityForFile(storage, fileId, {
+            kind: 'quote_line_saved',
+            summary: 'Quote / Prep saved.',
+          })
+          const postStatus = projectQuotePrepGateStatus(updated).status
+          if (prevGateStatus && postStatus && prevGateStatus !== postStatus) {
+            await appendActivityForFile(storage, fileId, {
+              kind: 'quote_gate_changed',
+              summary: `Gate moved to ${postStatus.replace(/_/g, ' ')}.`,
+            })
+          }
+        } catch { /* activity is best-effort */ }
       }
       setDirty(false); setSavedAt(new Date().toISOString())
     } catch (err) {

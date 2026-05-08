@@ -15,6 +15,15 @@ import {
   projectQuotePrepGateStatus,
   GATE_STATUS,
 } from '../lib/quotePrepGate.js'
+import {
+  ACTIVITY_KIND_LABELS,
+  appendActivityForFile,
+  listActivityForFile,
+  getFollowUpForFile,
+  saveFollowUpForFile,
+  clearFollowUpForFile,
+  describeFollowUp,
+} from '../lib/visitActivity.js'
 
 function FactsCard({ file }) {
   const lensFacts = lensFactsForDisplay(file)
@@ -37,15 +46,6 @@ function FactsCard({ file }) {
           />
         ))}
       </div>
-    </section>
-  )
-}
-
-function PlaceholderCard({ title, body }) {
-  return (
-    <section className="card-flat" style={{ padding: 18 }}>
-      <span className="eyebrow eyebrow-ink">{title}</span>
-      <p className="body-sm" style={{ marginTop: 8 }}>{body}</p>
     </section>
   )
 }
@@ -114,16 +114,219 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, 
   )
 }
 
+function formatActivityStamp(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function followUpToneColor(tone) {
+  if (tone === 'ember') return 'var(--ember)'
+  if (tone === 'brass') return 'var(--brass)'
+  return 'var(--slate)'
+}
+
+function ActivityCard({ events, onSaveNote, disabled }) {
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  async function submitNote(e) {
+    if (e && e.preventDefault) e.preventDefault()
+    if (!note.trim() || saving) return
+    setSaving(true); setSaveError('')
+    try {
+      const ok = await onSaveNote(note.trim())
+      if (ok) setNote('')
+      else setSaveError('Note could not be saved — try again.')
+    } catch (err) {
+      setSaveError(err.message || String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="card-flat" style={{ padding: 18 }}>
+      <span className="eyebrow eyebrow-ink">VISIT ACTIVITY</span>
+      {events.length === 0 ? (
+        <p className="body-sm" style={{ marginTop: 8, color: 'var(--slate)' }}>
+          No activity yet. Visits, lens saves, quote prep changes, and handoff copies will appear here.
+        </p>
+      ) : (
+        <ul className="body-sm" style={{ marginTop: 8, paddingLeft: 0, listStyle: 'none' }}>
+          {events.map((ev) => (
+            <li key={ev.id} style={{ marginBottom: 8 }}>
+              <div className="hstack">
+                <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>
+                  {(ACTIVITY_KIND_LABELS[ev.kind] || ev.kind).toUpperCase()}
+                </span>
+                <span className="spacer" />
+                <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                  {formatActivityStamp(ev.at)}
+                </span>
+              </div>
+              {ev.summary && (
+                <p className="body-sm" style={{ marginTop: 2 }}>{ev.summary}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={submitNote} style={{ marginTop: 12 }}>
+        <label>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>ADD A NOTE</span>
+          <textarea
+            className="field"
+            rows={2}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Internal note. Not customer-facing."
+            disabled={disabled || saving}
+            style={{ marginTop: 6, width: '100%' }}
+          />
+        </label>
+        {saveError && (
+          <p className="body-sm" style={{ marginTop: 6, color: 'var(--ember)' }}>{saveError}</p>
+        )}
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="submit"
+            className="btn btn-quiet"
+            disabled={disabled || saving || !note.trim()}
+          >
+            {saving ? 'Saving…' : 'Save note'}
+          </button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+function FollowUpCard({ followUp, onSave, onClear, disabled }) {
+  // Seed local state from the durable follow-up. Parent passes a `key`
+  // tied to the follow-up identity so this component remounts when the
+  // saved value changes — no setState-in-effect dance required.
+  const [dueAt, setDueAt] = useState(followUp ? followUp.dueAt : '')
+  const [note, setNote] = useState(followUp ? followUp.note : '')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  const signal = describeFollowUp(followUp)
+
+  async function submit(e) {
+    if (e && e.preventDefault) e.preventDefault()
+    if (!dueAt || saving) return
+    setSaving(true); setSaveError('')
+    try {
+      const ok = await onSave({ dueAt, note: note.trim() })
+      if (!ok) setSaveError('Follow-up could not be saved — try again.')
+    } catch (err) {
+      setSaveError(err.message || String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function clear() {
+    if (saving) return
+    setSaving(true); setSaveError('')
+    try {
+      await onClear()
+      setDueAt(''); setNote('')
+    } catch (err) {
+      setSaveError(err.message || String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="card" style={{ padding: 18 }}>
+      <span className="eyebrow eyebrow-ember">FOLLOW-UP</span>
+      {signal.kind !== 'none' && (
+        <p className="body-sm" style={{ marginTop: 6, color: followUpToneColor(signal.tone) }}>
+          {signal.text}
+        </p>
+      )}
+      <form onSubmit={submit} style={{ marginTop: 8 }}>
+        <label>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>FOLLOW UP BY</span>
+          <input
+            type="date"
+            className="field"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            disabled={disabled || saving}
+            style={{ marginTop: 6 }}
+          />
+        </label>
+        <label style={{ display: 'block', marginTop: 10 }}>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>SHORT NOTE</span>
+          <input
+            className="field"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Why following up — internal only."
+            disabled={disabled || saving}
+            style={{ marginTop: 6, width: '100%' }}
+          />
+        </label>
+        {saveError && (
+          <p className="body-sm" style={{ marginTop: 6, color: 'var(--ember)' }}>{saveError}</p>
+        )}
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="submit" className="btn btn-quiet" disabled={disabled || saving || !dueAt}>
+            {saving ? 'Saving…' : 'Save follow-up'}
+          </button>
+          {followUp && (
+            <button type="button" className="btn btn-quiet" onClick={clear} disabled={disabled || saving}>
+              Clear follow-up
+            </button>
+          )}
+        </div>
+      </form>
+      <p className="body-sm" style={{ marginTop: 8, color: 'var(--slate)' }}>
+        Internal reminder only — nothing is sent.
+      </p>
+    </section>
+  )
+}
+
 export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff }) {
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [activity, setActivity] = useState([])
+  const [followUp, setFollowUp] = useState(null)
+
+  async function reloadActivityAndFollowUp(storage, id) {
+    try {
+      const [acts, fu] = await Promise.all([
+        listActivityForFile(storage, id, { limit: 8 }),
+        getFollowUpForFile(storage, id),
+      ])
+      setActivity(acts)
+      setFollowUp(fu)
+    } catch {
+      // Activity is best-effort — don't block the file view if storage hiccups.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       if (cancelled) return
       setFile(null); setMissing(false); setErrorMsg('')
+      setActivity([]); setFollowUp(null)
       if (!fileId || fileId.startsWith('sample-')) {
         setMissing(true)
         return
@@ -138,14 +341,58 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
         const storage = getSalesOsStorage()
         const row = await getCustomerFileDurable(storage, fileId)
         if (cancelled) return
-        if (!row) setMissing(true)
-        else setFile(projectCustomerFileForDisplay(row))
+        if (!row) { setMissing(true); return }
+        setFile(projectCustomerFileForDisplay(row))
+        await reloadActivityAndFollowUp(storage, fileId)
       } catch (err) {
         if (!cancelled) setErrorMsg(err.message || String(err))
       }
     })()
     return () => { cancelled = true }
   }, [fileId])
+
+  async function handleSaveNote(text) {
+    if (!fileId) return false
+    try {
+      const storage = getSalesOsStorage()
+      const ev = await appendActivityForFile(storage, fileId, {
+        kind: 'manual_note',
+        summary: text,
+      })
+      await reloadActivityAndFollowUp(storage, fileId)
+      return Boolean(ev)
+    } catch {
+      return false
+    }
+  }
+
+  async function handleSaveFollowUp({ dueAt, note }) {
+    if (!fileId) return false
+    try {
+      const storage = getSalesOsStorage()
+      await saveFollowUpForFile(storage, fileId, { dueAt, note })
+      await appendActivityForFile(storage, fileId, {
+        kind: 'follow_up_set',
+        summary: note ? `Follow up by ${dueAt}: ${note}` : `Follow up by ${dueAt}.`,
+      })
+      await reloadActivityAndFollowUp(storage, fileId)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function handleClearFollowUp() {
+    if (!fileId) return false
+    try {
+      const storage = getSalesOsStorage()
+      await clearFollowUpForFile(storage, fileId)
+      await reloadActivityAndFollowUp(storage, fileId)
+      return true
+    } catch {
+      return false
+    }
+  }
 
   const display = file
   const warnings = display ? deriveFileWarnings(display) : []
@@ -258,10 +505,19 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             onOpenQuotePrep={onOpenQuotePrep}
             onOpenHandoff={onOpenHandoff}
           />
-
-          <PlaceholderCard
-            title="ACTIVITY"
-            body={`Created ${new Date(display.createdAt).toLocaleDateString()}. Visit timeline lands in PR 2.`}
+          <FollowUpCard
+            key={`fu-${followUp ? followUp.dueAt : 'none'}-${followUp ? followUp.setAt : ''}`}
+            followUp={followUp}
+            onSave={handleSaveFollowUp}
+            onClear={handleClearFollowUp}
+            disabled={!fileId}
+          />
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <ActivityCard
+            events={activity}
+            onSaveNote={handleSaveNote}
+            disabled={!fileId}
           />
         </div>
       </div>

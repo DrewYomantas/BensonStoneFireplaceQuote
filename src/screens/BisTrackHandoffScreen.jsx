@@ -7,6 +7,7 @@ import {
   formatBisTrackHandoffAsText,
 } from '../lib/bisTrackHandoff.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
+import { appendActivityForFile } from '../lib/visitActivity.js'
 
 function gateBadge(status) {
   if (status === GATE_STATUS.ready) return { label: 'READY FOR BISTRACK', cls: 'source source-verified' }
@@ -309,6 +310,17 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
   const view = useMemo(() => (file ? projectBisTrackHandoff(file) : null), [file])
   const handoffText = useMemo(() => (view ? formatBisTrackHandoffAsText(view) : ''), [view])
 
+  async function logHandoffCopied() {
+    if (!fileId) return
+    try {
+      const storage = getSalesOsStorage()
+      await appendActivityForFile(storage, fileId, {
+        kind: 'handoff_copied',
+        summary: 'Internal BisTrack handoff copied.',
+      })
+    } catch { /* activity is best-effort */ }
+  }
+
   async function handleCopy() {
     if (!handoffText) return
     setCopyState({ kind: 'idle', message: '' })
@@ -317,6 +329,7 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
         await navigator.clipboard.writeText(handoffText)
         setCopyState({ kind: 'ok', message: 'Copied internal handoff' })
         setTimeout(() => setCopyState((s) => (s.kind === 'ok' ? { kind: 'idle', message: '' } : s)), 2500)
+        await logHandoffCopied()
         return
       }
       throw new Error('Clipboard API unavailable')
@@ -325,6 +338,9 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
         kind: 'fallback',
         message: 'Clipboard blocked — select the text below and copy manually.',
       })
+      // Fallback path still represents intent to copy — log it so the
+      // activity timeline reflects the rep's action either way.
+      await logHandoffCopied()
       // Best-effort: highlight the textarea once it renders.
       setTimeout(() => {
         const el = fallbackTextareaRef.current

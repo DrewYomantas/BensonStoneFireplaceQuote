@@ -16,6 +16,7 @@ import {
   updateCustomerFileDurable,
 } from '../lib/customerFileDurable.js'
 import { projectCustomerFileForDisplay } from '../lib/customerFileView.js'
+import { appendActivityForFile } from '../lib/visitActivity.js'
 import {
   emptyLensDraft,
   lensDraftFromCustomerFile,
@@ -139,6 +140,12 @@ export default function SetupGoalLensScreen({ fileId, onBack, onSaved }) {
       if (updated) {
         setFile(projectCustomerFileForDisplay(updated))
         setDraft(lensDraftFromCustomerFile(updated))
+        try {
+          await appendActivityForFile(storage, fileId, {
+            kind: 'lens_saved',
+            summary: 'Setup + Goal Lens saved.',
+          })
+        } catch { /* activity is best-effort */ }
       }
       setDirty(false); setSavedAt(new Date().toISOString())
       if (onSaved) onSaved(fileId)

@@ -14,6 +14,15 @@ import { projectCustomerFileForDisplay } from './customerFileView.js'
 import { isSensitiveKey } from './salesOsStorageSchema.js'
 import { SETUP_TYPE_LABELS } from './setupGoalLens.js'
 import { projectQuotePrepGateStatus, GATE_STATUS } from './quotePrepGate.js'
+import { describeFollowUp, isFollowUpDueOrOverdue } from './visitActivity.js'
+
+// Follow-up filter buckets for the Customer Files list (Milestone 15).
+// Composes alongside the quote prep filter — different filter group.
+export const FOLLOW_UP_FILTER_VALUES = Object.freeze(['all', 'dueOrOverdue'])
+export const FOLLOW_UP_FILTER_LABELS = Object.freeze({
+  all: 'All',
+  dueOrOverdue: 'Follow-up due',
+})
 
 // Compact filter buckets for the Customer Files list. "all" is the
 // default; "notStarted" matches files with no proposed lines (gate ===
@@ -48,6 +57,7 @@ const SAFE_LIST_KEYS = new Set([
   'opportunityId',
   'searchHay',
   'quotePrep',
+  'followUp',
 ])
 
 function pickContact(file) {
@@ -160,6 +170,44 @@ export function searchCustomerFilesList(rows = [], query = '') {
   const q = String(query || '').trim().toLowerCase()
   if (!q) return rows
   return rows.filter((r) => r.searchHay && r.searchHay.includes(q))
+}
+
+// Attach follow-up records to projected list rows. Each row gets
+// row.followUp = { dueAt, note, signal: { kind, text, tone } } or null.
+// Uses the same describeFollowUp() the Today signal + Customer File card use.
+export function enrichCustomerFilesListWithFollowUps(rows = [], followUpsByFileId = {}, now = new Date()) {
+  if (!Array.isArray(rows)) return []
+  const map = followUpsByFileId && typeof followUpsByFileId === 'object' ? followUpsByFileId : {}
+  return rows.map((row) => {
+    if (!row || !row.id) return row
+    const fu = map[row.id]
+    if (!fu) {
+      const next = { ...row, followUp: null }
+      return Object.freeze(next)
+    }
+    const signal = describeFollowUp(fu, now)
+    const next = {
+      ...row,
+      followUp: Object.freeze({
+        dueAt: fu.dueAt,
+        note: fu.note || '',
+        signal,
+      }),
+    }
+    return Object.freeze(next)
+  })
+}
+
+// Filter rows by follow-up bucket. Default "all" returns the full list.
+// "dueOrOverdue" keeps only rows whose follow-up is overdue or due today.
+export function filterCustomerFilesListByFollowUp(rows, filter = 'all', now = new Date()) {
+  const list = Array.isArray(rows) ? rows : []
+  const key = FOLLOW_UP_FILTER_VALUES.includes(filter) ? filter : 'all'
+  if (key === 'all') return list
+  return list.filter((r) => {
+    if (!r || !r.followUp) return false
+    return isFollowUpDueOrOverdue({ dueAt: r.followUp.dueAt }, now)
+  })
 }
 
 // Filter rows by quote prep status bucket. Unknown buckets fall back to

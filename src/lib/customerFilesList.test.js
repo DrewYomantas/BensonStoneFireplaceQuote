@@ -6,7 +6,10 @@ import {
   recentCustomerFiles,
   searchCustomerFilesList,
   filterCustomerFilesListByQuotePrep,
+  enrichCustomerFilesListWithFollowUps,
+  filterCustomerFilesListByFollowUp,
   QUOTE_PREP_FILTER_VALUES,
+  FOLLOW_UP_FILTER_VALUES,
 } from './customerFilesList.js'
 import { createMemoryEngine, createSalesOsStorage } from './salesOsStorage.js'
 import {
@@ -381,5 +384,109 @@ describe('customerFilesList — quotePrep status + filter (Milestone 14)', () =>
     for (const phrase of ['"cost"', '"margin"', '"suppliertotal"', '"rawocr"', '"bistrackconfidence"']) {
       assert.equal(flat.includes(phrase), false, `leaked: ${phrase}`)
     }
+  })
+})
+
+describe('customerFilesList — follow-up enrichment + filter (Milestone 15)', () => {
+  const now = new Date('2026-05-08T15:00:00.000Z')
+
+  function rows() {
+    return projectCustomerFilesList([
+      { id: 'cf-a', customerName: 'A', customerPhone: '5551111' },
+      { id: 'cf-b', customerName: 'B', customerPhone: '5552222' },
+      { id: 'cf-c', customerName: 'C', customerPhone: '5553333' },
+    ])
+  }
+
+  it('enrich attaches followUp with describeFollowUp signal', () => {
+    const enriched = enrichCustomerFilesListWithFollowUps(
+      rows(),
+      {
+        'cf-a': { fileId: 'cf-a', dueAt: '2026-05-01' },
+        'cf-b': { fileId: 'cf-b', dueAt: '2026-05-08' },
+        'cf-c': { fileId: 'cf-c', dueAt: '2026-06-01' },
+      },
+      now,
+    )
+    const byId = Object.fromEntries(enriched.map((r) => [r.id, r]))
+    assert.equal(byId['cf-a'].followUp.signal.kind, 'overdue')
+    assert.equal(byId['cf-b'].followUp.signal.kind, 'today')
+    assert.equal(byId['cf-c'].followUp.signal.kind, 'future')
+  })
+
+  it('rows without follow-up records get followUp=null', () => {
+    const enriched = enrichCustomerFilesListWithFollowUps(rows(), {}, now)
+    for (const r of enriched) assert.equal(r.followUp, null)
+  })
+
+  it('filterCustomerFilesListByFollowUp("dueOrOverdue") narrows to overdue + today', () => {
+    const enriched = enrichCustomerFilesListWithFollowUps(
+      rows(),
+      {
+        'cf-a': { fileId: 'cf-a', dueAt: '2026-05-01' }, // overdue
+        'cf-b': { fileId: 'cf-b', dueAt: '2026-05-08' }, // today
+        'cf-c': { fileId: 'cf-c', dueAt: '2026-06-01' }, // future
+      },
+      now,
+    )
+    const due = filterCustomerFilesListByFollowUp(enriched, 'dueOrOverdue', now)
+    assert.equal(due.length, 2)
+    assert.deepEqual(due.map((r) => r.id).sort(), ['cf-a', 'cf-b'])
+  })
+
+  it('filter "all" returns every row, unknown filter falls back to all', () => {
+    const enriched = enrichCustomerFilesListWithFollowUps(
+      rows(),
+      { 'cf-a': { fileId: 'cf-a', dueAt: '2026-05-01' } },
+      now,
+    )
+    assert.equal(filterCustomerFilesListByFollowUp(enriched, 'all', now).length, 3)
+    assert.equal(filterCustomerFilesListByFollowUp(enriched, 'bogus', now).length, 3)
+  })
+
+  it('quote prep filter and follow-up filter compose', () => {
+    const raw = [
+      // ready_for_bistrack line + due overdue
+      {
+        id: 'cf-1', customerName: 'Ready Due', customerPhone: '5',
+        customerGoal: 'g', lensSetupType: 'masonry-fireplace',
+        quotePrepQuoteType: 'planning',
+        quotePrepLines: [{ id: 'l', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+      },
+      // ready_for_bistrack line + future
+      {
+        id: 'cf-2', customerName: 'Ready Future', customerPhone: '5',
+        customerGoal: 'g', lensSetupType: 'masonry-fireplace',
+        quotePrepQuoteType: 'planning',
+        quotePrepLines: [{ id: 'l', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+      },
+      // empty + overdue
+      { id: 'cf-3', customerName: 'Empty Due', customerPhone: '5' },
+    ]
+    const list = projectCustomerFilesList(raw)
+    const enriched = enrichCustomerFilesListWithFollowUps(
+      list,
+      {
+        'cf-1': { fileId: 'cf-1', dueAt: '2026-05-01' },
+        'cf-2': { fileId: 'cf-2', dueAt: '2026-06-01' },
+        'cf-3': { fileId: 'cf-3', dueAt: '2026-05-01' },
+      },
+      now,
+    )
+    const ready = filterCustomerFilesListByQuotePrep(enriched, 'ready')
+    const readyAndDue = filterCustomerFilesListByFollowUp(ready, 'dueOrOverdue', now)
+    assert.equal(readyAndDue.length, 1)
+    assert.equal(readyAndDue[0].id, 'cf-1')
+  })
+
+  it('FOLLOW_UP_FILTER_VALUES exposed for the UI chip group', () => {
+    assert.ok(FOLLOW_UP_FILTER_VALUES.includes('all'))
+    assert.ok(FOLLOW_UP_FILTER_VALUES.includes('dueOrOverdue'))
+  })
+
+  it('does not crash on missing/null inputs', () => {
+    assert.deepEqual(enrichCustomerFilesListWithFollowUps(null), [])
+    assert.deepEqual(enrichCustomerFilesListWithFollowUps([], null, now), [])
+    assert.deepEqual(filterCustomerFilesListByFollowUp(null, 'dueOrOverdue', now), [])
   })
 })

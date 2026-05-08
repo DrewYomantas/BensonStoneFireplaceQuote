@@ -10,6 +10,7 @@ import {
 } from '../lib/startVisitDraft.js'
 import { ensureSalesOsBoot, getSalesOsStorage, getSalesOsSaveState } from '../lib/salesOsStorageBoot.js'
 import { buildStartVisitCustomerFile } from '../lib/startVisitCustomerFile.js'
+import { appendActivityForFile } from '../lib/visitActivity.js'
 
 export default function StartVisitScreen({ onCustomerFileCreated }) {
   const [values, setValues] = useState(emptyDraft())
@@ -77,6 +78,18 @@ export default function StartVisitScreen({ onCustomerFileCreated }) {
       saveState.markSaving()
       const result = await submitStartVisitDraft(storage, values)
       await clearStartVisitDraft(storage)
+      // Log a visit_started event only on the first creation. Re-submitting
+      // an existing file (mergedExisting=true) is not a new visit.
+      if (result.customerFile && !result.mergedExisting) {
+        try {
+          await appendActivityForFile(storage, result.customerFile.id, {
+            kind: 'visit_started',
+            summary: 'Customer file created from Start Visit.',
+          })
+        } catch {
+          // Activity is best-effort.
+        }
+      }
       saveState.markSaved()
       setValues(emptyDraft())
       if (onCustomerFileCreated) onCustomerFileCreated(result.customerFile)

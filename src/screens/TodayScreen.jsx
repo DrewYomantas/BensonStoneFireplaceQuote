@@ -4,8 +4,15 @@ import TodayActionCard from '../components/today/TodayActionCard.jsx'
 import { badgesForFile } from '../lib/fieldRulesBadges.js'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
-import { recentCustomerFiles } from '../lib/customerFilesList.js'
+import { recentCustomerFiles, enrichCustomerFilesListWithFollowUps } from '../lib/customerFilesList.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
+import { listAllFollowUps } from '../lib/visitActivity.js'
+
+function followUpToneColor(tone) {
+  if (tone === 'ember') return 'var(--ember)'
+  if (tone === 'brass') return 'var(--brass)'
+  return 'var(--slate)'
+}
 
 function todayPrepSignal(quotePrep) {
   if (!quotePrep) return null
@@ -128,6 +135,11 @@ function RecentFileRow({ row, onOpen }) {
       {row.summary && (
         <p className="body-sm" style={{ marginTop: 6 }}>{row.summary}</p>
       )}
+      {row.followUp && row.followUp.signal && row.followUp.signal.kind !== 'none' && (
+        <p className="body-sm" style={{ marginTop: 4, color: followUpToneColor(row.followUp.signal.tone) }}>
+          {row.followUp.signal.text}
+        </p>
+      )}
       {(() => {
         const signal = todayPrepSignal(row.quotePrep)
         if (!signal) return null
@@ -200,9 +212,13 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
           return
         }
         const storage = getSalesOsStorage()
-        const raw = await listCustomerFilesDurable(storage)
+        const [raw, followUps] = await Promise.all([
+          listCustomerFilesDurable(storage),
+          listAllFollowUps(storage),
+        ])
         if (cancelled) return
-        const rows = recentCustomerFiles(raw, RECENT_LIMIT)
+        const baseRows = recentCustomerFiles(raw, RECENT_LIMIT)
+        const rows = enrichCustomerFilesListWithFollowUps(baseRows, followUps, new Date())
         setRecent(rows.length ? { kind: 'ok', rows } : { kind: 'empty' })
       } catch (err) {
         if (!cancelled) {

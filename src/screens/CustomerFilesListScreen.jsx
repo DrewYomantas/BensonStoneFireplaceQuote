@@ -6,16 +6,27 @@ import {
   projectCustomerFilesList,
   searchCustomerFilesList,
   filterCustomerFilesListByQuotePrep,
+  enrichCustomerFilesListWithFollowUps,
+  filterCustomerFilesListByFollowUp,
   QUOTE_PREP_FILTER_VALUES,
   QUOTE_PREP_FILTER_LABELS,
+  FOLLOW_UP_FILTER_VALUES,
+  FOLLOW_UP_FILTER_LABELS,
 } from '../lib/customerFilesList.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
+import { listAllFollowUps } from '../lib/visitActivity.js'
 
 function quotePrepPill(status, hasLines) {
   if (!hasLines) return { label: 'NOT STARTED', cls: 'source source-manual' }
   if (status === GATE_STATUS.ready) return { label: 'READY FOR BISTRACK', cls: 'source source-verified' }
   if (status === GATE_STATUS.needsVerification) return { label: 'NEEDS VERIFICATION', cls: 'source source-said' }
   return { label: 'DRAFT', cls: 'source source-manual' }
+}
+
+function followUpToneColor(tone) {
+  if (tone === 'ember') return 'var(--ember)'
+  if (tone === 'brass') return 'var(--brass)'
+  return 'var(--slate)'
 }
 
 function formatStamp(iso) {
@@ -81,6 +92,11 @@ function FileRow({ row, onOpen }) {
       {row.summary && (
         <p className="body-sm" style={{ marginTop: 8 }}>{row.summary}</p>
       )}
+      {row.followUp && row.followUp.signal && row.followUp.signal.kind !== 'none' && (
+        <p className="body-sm" style={{ marginTop: 4, color: followUpToneColor(row.followUp.signal.tone) }}>
+          {row.followUp.signal.text}
+        </p>
+      )}
     </button>
   )
 }
@@ -90,6 +106,7 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
   const [errorMsg, setErrorMsg] = useState('')
   const [query, setQuery] = useState('')
   const [quotePrepFilter, setQuotePrepFilter] = useState('all')
+  const [followUpFilter, setFollowUpFilter] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -103,9 +120,13 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
           return
         }
         const storage = getSalesOsStorage()
-        const raw = await listCustomerFilesDurable(storage)
+        const [raw, followUps] = await Promise.all([
+          listCustomerFilesDurable(storage),
+          listAllFollowUps(storage),
+        ])
         if (cancelled) return
-        setRows(projectCustomerFilesList(raw))
+        const projected = projectCustomerFilesList(raw)
+        setRows(enrichCustomerFilesListWithFollowUps(projected, followUps, new Date()))
       } catch (err) {
         if (!cancelled) {
           setErrorMsg(err.message || String(err))
@@ -118,8 +139,9 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
 
   const filtered = useMemo(() => {
     const searched = searchCustomerFilesList(rows || [], query)
-    return filterCustomerFilesListByQuotePrep(searched, quotePrepFilter)
-  }, [rows, query, quotePrepFilter])
+    const byQuote = filterCustomerFilesListByQuotePrep(searched, quotePrepFilter)
+    return filterCustomerFilesListByFollowUp(byQuote, followUpFilter, new Date())
+  }, [rows, query, quotePrepFilter, followUpFilter])
 
   const loading = rows === null && !errorMsg
   const isEmpty = !loading && !errorMsg && (rows || []).length === 0
@@ -179,6 +201,26 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
                     aria-pressed={active}
                   >
                     {QUOTE_PREP_FILTER_LABELS[v]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <span className="eyebrow eyebrow-ink">FOLLOW-UP</span>
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {FOLLOW_UP_FILTER_VALUES.map((v) => {
+                const active = v === followUpFilter
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    className={active ? 'btn btn-primary' : 'btn btn-quiet'}
+                    style={{ padding: '4px 10px' }}
+                    onClick={() => setFollowUpFilter(v)}
+                    aria-pressed={active}
+                  >
+                    {FOLLOW_UP_FILTER_LABELS[v]}
                   </button>
                 )
               })}
