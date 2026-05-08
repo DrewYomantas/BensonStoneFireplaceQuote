@@ -5,7 +5,18 @@ import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
 import {
   projectCustomerFilesList,
   searchCustomerFilesList,
+  filterCustomerFilesListByQuotePrep,
+  QUOTE_PREP_FILTER_VALUES,
+  QUOTE_PREP_FILTER_LABELS,
 } from '../lib/customerFilesList.js'
+import { GATE_STATUS } from '../lib/quotePrepGate.js'
+
+function quotePrepPill(status, hasLines) {
+  if (!hasLines) return { label: 'NOT STARTED', cls: 'source source-manual' }
+  if (status === GATE_STATUS.ready) return { label: 'READY FOR BISTRACK', cls: 'source source-verified' }
+  if (status === GATE_STATUS.needsVerification) return { label: 'NEEDS VERIFICATION', cls: 'source source-said' }
+  return { label: 'DRAFT', cls: 'source source-manual' }
+}
 
 function formatStamp(iso) {
   if (!iso) return ''
@@ -44,7 +55,7 @@ function FileRow({ row, onOpen }) {
           </span>
         )}
       </div>
-      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
         {row.contact && (
           <span className="body-sm" style={{ color: 'var(--ink)' }}>{row.contact}</span>
         )}
@@ -53,6 +64,18 @@ function FileRow({ row, onOpen }) {
         )}
         {row.lensSetupTypeLabel && (
           <span className="source source-manual">{row.lensSetupTypeLabel.toUpperCase()}</span>
+        )}
+        {row.quotePrep && (() => {
+          const pill = quotePrepPill(row.quotePrep.status, row.quotePrep.hasLines)
+          return <span className={pill.cls}>{pill.label}</span>
+        })()}
+        {row.quotePrep && row.quotePrep.hasLines && (
+          <span className="body-sm" style={{ color: 'var(--slate)' }}>
+            {row.quotePrep.counts.total} line{row.quotePrep.counts.total === 1 ? '' : 's'}
+            {row.quotePrep.counts.needsVerification > 0 ? ` · ${row.quotePrep.counts.needsVerification} needs verification` : ''}
+            {row.quotePrep.counts.readyForBistrack > 0 ? ` · ${row.quotePrep.counts.readyForBistrack} ready for BisTrack` : ''}
+            {row.quotePrep.counts.doNotUseYet > 0 ? ` · ${row.quotePrep.counts.doNotUseYet} do not use yet` : ''}
+          </span>
         )}
       </div>
       {row.summary && (
@@ -66,6 +89,7 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
   const [rows, setRows] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [query, setQuery] = useState('')
+  const [quotePrepFilter, setQuotePrepFilter] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -92,10 +116,10 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
     return () => { cancelled = true }
   }, [])
 
-  const filtered = useMemo(
-    () => searchCustomerFilesList(rows || [], query),
-    [rows, query],
-  )
+  const filtered = useMemo(() => {
+    const searched = searchCustomerFilesList(rows || [], query)
+    return filterCustomerFilesListByQuotePrep(searched, quotePrepFilter)
+  }, [rows, query, quotePrepFilter])
 
   const loading = rows === null && !errorMsg
   const isEmpty = !loading && !errorMsg && (rows || []).length === 0
@@ -140,9 +164,30 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit }
             autoComplete="off"
             style={{ marginTop: 6, width: '100%' }}
           />
-          <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
+          <div style={{ marginTop: 10 }}>
+            <span className="eyebrow eyebrow-ink">QUOTE PREP STATUS</span>
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {QUOTE_PREP_FILTER_VALUES.map((v) => {
+                const active = v === quotePrepFilter
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    className={active ? 'btn btn-primary' : 'btn btn-quiet'}
+                    style={{ padding: '4px 10px' }}
+                    onClick={() => setQuotePrepFilter(v)}
+                    aria-pressed={active}
+                  >
+                    {QUOTE_PREP_FILTER_LABELS[v]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <p className="body-sm" style={{ marginTop: 8, color: 'var(--slate)' }}>
             {filtered.length} of {rows.length} {rows.length === 1 ? 'file' : 'files'}
             {query.trim() ? ` · "${query.trim()}"` : ''}
+            {quotePrepFilter !== 'all' ? ` · ${QUOTE_PREP_FILTER_LABELS[quotePrepFilter]}` : ''}
           </p>
         </div>
         {filtered.length === 0 ? (

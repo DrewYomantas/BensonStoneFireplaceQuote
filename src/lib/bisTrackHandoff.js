@@ -238,3 +238,154 @@ export function projectBisTrackHandoff(rawFile, options = {}) {
 
   return Object.freeze(view)
 }
+
+// ---- Copy-friendly text formatter (Milestone 14) -------------------------
+//
+// Plain text only. No Markdown tables, no HTML. Built from the same view
+// model `projectBisTrackHandoff` returns so we don't grow a second
+// projection path. Every emitted line is run through `safe()` so banned
+// customer-facing wording cannot leak in.
+
+function line(parts) {
+  return parts.map(safe).filter(Boolean).join(' ')
+}
+
+// Emit `Label: value` only when value is non-empty after the safe scrub.
+function labeled(label, value) {
+  const v = safe(value)
+  if (!v) return ''
+  return `${label} ${v}`
+}
+
+function bullet(text) {
+  const t = safe(text)
+  return t ? `- ${t}` : ''
+}
+
+function nonEmpty(arr) {
+  return arr.filter((s) => typeof s === 'string' && s.trim().length > 0)
+}
+
+export function formatBisTrackHandoffAsText(rawView) {
+  const view = rawView && typeof rawView === 'object' ? rawView : null
+  const sections = []
+
+  // Header
+  const headerLines = [
+    safe(view && view.title) || 'Internal BisTrack Handoff',
+  ]
+  const subtitle = safe(view && view.subtitle)
+  if (subtitle) headerLines.push(subtitle)
+  const sourceNote = safe(view && view.sourceNote)
+  if (sourceNote) headerLines.push(sourceNote)
+  sections.push(nonEmpty(headerLines).join('\n'))
+
+  // Customer / project
+  if (view && view.customer) {
+    const c = view.customer
+    const filled = nonEmpty([
+      labeled('Name:', c.customerName),
+      labeled('Contact:', c.contact),
+      labeled('Project:', c.projectAddress),
+    ])
+    if (filled.length) sections.push(['CUSTOMER', ...filled].join('\n'))
+  }
+
+  // Watch-outs
+  if (view && Array.isArray(view.warnings) && view.warnings.length > 0) {
+    const warns = view.warnings.map(bullet).filter(Boolean)
+    if (warns.length) sections.push(['WATCH-OUTS', ...warns].join('\n'))
+  }
+
+  // Gate
+  if (view && view.gate) {
+    const g = view.gate
+    const lines = [
+      labeled('Status:', g.label),
+      labeled('Quote type:', g.quoteType),
+      labeled('Verification owner:', g.verificationOwner),
+      labeled('Still unverified:', g.unverifiedItems),
+      labeled('Next step:', g.nextStep),
+    ]
+    if (g.counts && (g.counts.total || g.counts.needsVerification || g.counts.readyForBistrack || g.counts.doNotUseYet)) {
+      const c = g.counts
+      lines.push(line([
+        'Counts:',
+        `${c.total || 0} total`,
+        c.needsVerification ? `· ${c.needsVerification} needs verification` : '',
+        c.readyForBistrack ? `· ${c.readyForBistrack} ready for BisTrack` : '',
+        c.doNotUseYet ? `· ${c.doNotUseYet} do not use yet` : '',
+      ]))
+    }
+    const filled = nonEmpty(lines)
+    if (filled.length) sections.push(['QUOTE PREP GATE', ...filled].join('\n'))
+  }
+
+  // Lens facts
+  if (view && Array.isArray(view.lensFacts) && view.lensFacts.length > 0) {
+    const facts = view.lensFacts
+      .map((f) => line([`${f.label}:`, f.value]))
+      .filter(Boolean)
+    if (facts.length) sections.push(['SETUP + GOAL LENS', ...facts].join('\n'))
+  }
+
+  // Proposed line items
+  if (view && Array.isArray(view.lineItems) && view.lineItems.length > 0) {
+    const blocks = view.lineItems.map((item, idx) => {
+      const head = `Line ${idx + 1}: ${safe(item.name) || 'Unnamed'}`
+      const meta = [
+        item.brand && `Brand: ${safe(item.brand)}`,
+        item.partNumber && `Part: ${safe(item.partNumber)}`,
+        item.category && `Category: ${safe(item.category)}`,
+        item.quantity && `Qty: ${safe(item.quantity)}`,
+      ].filter(Boolean).join(' · ')
+      const lines = [head]
+      if (meta) lines.push(`  ${meta}`)
+      if (item.description) lines.push(`  Description: ${safe(item.description)}`)
+      if (item.customerSafeNotes) lines.push(`  Notes: ${safe(item.customerSafeNotes)}`)
+      if (item.internalPrepNote) lines.push(`  Rep-only: ${safe(item.internalPrepNote)}`)
+      lines.push(`  Source basis: ${safe(item.sourceBasisLabel)}`)
+      lines.push(`  Review status: ${safe(item.reviewStatusLabel)}`)
+      if (Array.isArray(item.reviewFlags) && item.reviewFlags.length > 0) {
+        const flags = item.reviewFlags.map(safe).filter(Boolean).join(', ')
+        if (flags) lines.push(`  Flags: ${flags}`)
+      }
+      return nonEmpty(lines).join('\n')
+    }).filter(Boolean)
+    if (blocks.length) sections.push(['PROPOSED LINE ITEMS', ...blocks].join('\n\n'))
+  }
+
+  // Field Rules
+  if (view && view.fieldRules && Array.isArray(view.fieldRules.items) && view.fieldRules.items.length > 0) {
+    const counts = view.fieldRules.counts || {}
+    const summary = line([
+      'Counts:',
+      counts.triggered ? `${counts.triggered} triggered` : '',
+      counts.softWarning ? `· ${counts.softWarning} soft-warning` : '',
+      counts.cleared ? `· ${counts.cleared} cleared` : '',
+      counts.satisfied ? `· ${counts.satisfied} satisfied` : '',
+    ])
+    const items = view.fieldRules.items.map((f) => {
+      const status = (safe(f.status) || '').toUpperCase()
+      const head = `- ${safe(f.label)} [${status}]`
+      const reasonLine = f.reason ? `    ${safe(f.reason)}` : ''
+      const actionLine = f.action ? `    Action: ${safe(f.action)}` : ''
+      return nonEmpty([head, reasonLine, actionLine]).join('\n')
+    }).filter(Boolean)
+    const lines = nonEmpty([summary, ...items])
+    if (lines.length) sections.push(['FIELD RULES', ...lines].join('\n'))
+  }
+
+  // Missing / next actions
+  if (view && Array.isArray(view.nextActions) && view.nextActions.length > 0) {
+    const items = view.nextActions.map((a) => {
+      const msg = safe(a.message)
+      if (!msg) return ''
+      const tag = a.actionLabel ? ` (${safe(a.actionLabel)})` : ''
+      return `- ${msg}${tag}`
+    }).filter(Boolean)
+    if (items.length) sections.push(['MISSING / NEXT ACTIONS', ...items].join('\n'))
+  }
+
+  return sections.filter(Boolean).join('\n\n')
+}

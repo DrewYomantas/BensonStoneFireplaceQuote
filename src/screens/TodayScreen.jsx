@@ -5,6 +5,21 @@ import { badgesForFile } from '../lib/fieldRulesBadges.js'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
 import { recentCustomerFiles } from '../lib/customerFilesList.js'
+import { GATE_STATUS } from '../lib/quotePrepGate.js'
+
+function todayPrepSignal(quotePrep) {
+  if (!quotePrep) return null
+  if (!quotePrep.hasLines) {
+    return { text: 'Quote Prep not started.', tone: 'var(--slate)' }
+  }
+  if (quotePrep.status === GATE_STATUS.ready) {
+    return { text: 'Ready to build in BisTrack.', tone: 'var(--brass)' }
+  }
+  if (quotePrep.status === GATE_STATUS.needsVerification) {
+    return { text: 'Prep needs verification.', tone: 'var(--ember)' }
+  }
+  return { text: 'Quote Prep draft.', tone: 'var(--slate)' }
+}
 
 const RECENT_LIMIT = 4
 
@@ -113,6 +128,15 @@ function RecentFileRow({ row, onOpen }) {
       {row.summary && (
         <p className="body-sm" style={{ marginTop: 6 }}>{row.summary}</p>
       )}
+      {(() => {
+        const signal = todayPrepSignal(row.quotePrep)
+        if (!signal) return null
+        return (
+          <p className="body-sm" style={{ marginTop: 4, color: signal.tone }}>
+            {signal.text}
+          </p>
+        )
+      })()}
     </button>
   )
 }

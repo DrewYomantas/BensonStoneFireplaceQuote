@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { projectBisTrackHandoff } from './bisTrackHandoff.js'
+import {
+  projectBisTrackHandoff,
+  formatBisTrackHandoffAsText,
+} from './bisTrackHandoff.js'
 
 function readyFile() {
   return {
@@ -206,5 +209,147 @@ describe('bisTrackHandoff — projectBisTrackHandoff', () => {
     const view = projectBisTrackHandoff(readyFile())
     assert.match(view.sourceNote, /BisTrack remains the official quote/i)
     assert.equal(/customer ready|proposal ready|ready to send|\bapproved\b/i.test(view.sourceNote), false)
+  })
+})
+
+describe('bisTrackHandoff — formatBisTrackHandoffAsText', () => {
+  it('handles empty/missing view safely without throwing', () => {
+    assert.equal(typeof formatBisTrackHandoffAsText(null), 'string')
+    assert.equal(typeof formatBisTrackHandoffAsText(undefined), 'string')
+    assert.equal(typeof formatBisTrackHandoffAsText({}), 'string')
+    const empty = formatBisTrackHandoffAsText({})
+    assert.match(empty, /Internal BisTrack Handoff/)
+  })
+
+  it('includes title and source-of-truth note', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /Internal BisTrack Handoff/)
+    assert.match(text, /BisTrack remains the official quote/i)
+  })
+
+  it('includes customer/project header when present', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /CUSTOMER/)
+    assert.match(text, /Test Customer/)
+    assert.match(text, /555-0100/)
+    assert.match(text, /12 Oak Ln, Rockford IL/)
+  })
+
+  it('includes gate status and gate fields', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /QUOTE PREP GATE/)
+    assert.match(text, /Status: Ready to build in BisTrack/i)
+    assert.match(text, /Quote type: Planning \/ ballpark/)
+    assert.match(text, /Verification owner: Drew/)
+    assert.match(text, /Next step: Call Liam\./)
+  })
+
+  it('includes Lens facts section', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /SETUP \+ GOAL LENS/)
+    assert.match(text, /Customer goal:/)
+    assert.match(text, /Setup type:/)
+  })
+
+  it('includes proposed line items with safe fields and review state', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /PROPOSED LINE ITEMS/)
+    assert.match(text, /Whisper Flex 12/)
+    assert.match(text, /Part: T1009898-12/)
+    assert.match(text, /Brand: Empire/)
+    assert.match(text, /Source basis: From price list \/ manual/)
+    assert.match(text, /Review status: Ready for BisTrack/)
+    assert.match(text, /Flags: SKU \/ part confirmed, Field rule checked/)
+  })
+
+  it('includes Field Rules summary block', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /FIELD RULES/)
+    assert.match(text, /\[SATISFIED\]/)
+  })
+
+  it('includes missing / next actions when present', () => {
+    const file = {
+      customerName: 'X', customerPhone: '5',
+      // missing goal, missing setup type — should produce next actions
+      quotePrepLines: [{ id: '1', name: 'a', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+      quotePrepQuoteType: 'planning',
+    }
+    const view = projectBisTrackHandoff(file)
+    const text = formatBisTrackHandoffAsText(view)
+    assert.match(text, /MISSING \/ NEXT ACTIONS/)
+    assert.match(text, /\(Open Setup \+ Goal Lens\)/)
+  })
+
+  it('omits empty sections', () => {
+    const text = formatBisTrackHandoffAsText({
+      title: 'Internal BisTrack Handoff',
+      subtitle: 'sub',
+      customer: { customerName: '', contact: '', projectAddress: '' },
+      gate: null,
+      lensFacts: [],
+      lineItems: [],
+      fieldRules: { items: [], counts: {} },
+      nextActions: [],
+      warnings: [],
+      sourceNote: 'x',
+    })
+    assert.equal(/QUOTE PREP GATE/.test(text), false)
+    assert.equal(/SETUP \+ GOAL LENS/.test(text), false)
+    assert.equal(/PROPOSED LINE ITEMS/.test(text), false)
+    assert.equal(/FIELD RULES/.test(text), false)
+    assert.equal(/MISSING \/ NEXT ACTIONS/.test(text), false)
+    assert.equal(/CUSTOMER\n/.test(text), false)
+  })
+
+  it('output is plain text — no HTML tags or Markdown tables', () => {
+    const view = projectBisTrackHandoff(readyFile())
+    const text = formatBisTrackHandoffAsText(view)
+    assert.equal(/<\w+[^>]*>/.test(text), false, 'should not contain HTML tags')
+    assert.equal(/^\|.*\|$/m.test(text), false, 'should not contain Markdown tables')
+  })
+
+  it('never includes banned customer-facing phrases', () => {
+    const banned = [/ready to send/i, /proposal ready/i, /customer ready/i, /\bapproved\b/i]
+    const variants = [
+      formatBisTrackHandoffAsText(projectBisTrackHandoff({})),
+      formatBisTrackHandoffAsText(projectBisTrackHandoff(readyFile())),
+      formatBisTrackHandoffAsText(projectBisTrackHandoff({
+        customerName: 'X',
+        quotePrepLines: [{ id: '1', name: 'a', reviewStatus: 'do_not_use_yet' }],
+      })),
+    ]
+    for (const text of variants) {
+      for (const re of banned) {
+        assert.equal(re.test(text), false, `banned phrase in:\n${text}`)
+      }
+    }
+  })
+
+  it('strips/omits sensitive keys and poisoned values', () => {
+    const view = projectBisTrackHandoff({
+      customerName: 'X', customerPhone: '5',
+      cost: 999, margin: 0.5, buyPrice: 100, supplierTotal: 200,
+      bistrackConfidence: '0.9', ocrConfidence: '0.7', rawOcr: 'noise',
+      salesRank: 1, productRank: 2,
+      quotePrepLines: [{
+        id: '1', name: 'Bad line', cost: 9999, margin: 0.4, buyPrice: 50,
+        rawOcr: 'leak', bistrackConfidence: '0.5',
+      }],
+    })
+    const text = formatBisTrackHandoffAsText(view).toLowerCase()
+    for (const phrase of [
+      'cost:', 'margin:', 'buy price', 'supplier total',
+      'raw ocr', 'raw pdf', 'bistrack confidence',
+      'fuzzy match', 'ocr confidence', 'sales rank', 'product rank',
+    ]) {
+      assert.equal(text.includes(phrase), false, `leaked phrase: ${phrase}`)
+    }
   })
 })

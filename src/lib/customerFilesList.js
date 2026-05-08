@@ -13,6 +13,26 @@
 import { projectCustomerFileForDisplay } from './customerFileView.js'
 import { isSensitiveKey } from './salesOsStorageSchema.js'
 import { SETUP_TYPE_LABELS } from './setupGoalLens.js'
+import { projectQuotePrepGateStatus, GATE_STATUS } from './quotePrepGate.js'
+
+// Compact filter buckets for the Customer Files list. "all" is the
+// default; "notStarted" matches files with no proposed lines (gate ===
+// draft AND total === 0). The rest map 1:1 to gate status.
+export const QUOTE_PREP_FILTER_VALUES = Object.freeze([
+  'all',
+  'notStarted',
+  'needsVerification',
+  'ready',
+])
+
+export const QUOTE_PREP_FILTER_LABELS = Object.freeze({
+  all: 'All',
+  notStarted: 'Not started / draft',
+  needsVerification: 'Needs verification',
+  ready: 'Ready to build in BisTrack',
+})
+
+const DEFAULT_QUOTE_PREP_FILTER = 'all'
 
 const SAFE_LIST_KEYS = new Set([
   'id',
@@ -27,6 +47,7 @@ const SAFE_LIST_KEYS = new Set([
   'visitedAt',
   'opportunityId',
   'searchHay',
+  'quotePrep',
 ])
 
 function pickContact(file) {
@@ -74,6 +95,17 @@ export function projectCustomerFileForList(rawFile = {}) {
     display.opportunityId,
   ].filter(Boolean).join(' \n ').toLowerCase()
 
+  // Quote Prep status — reuse the existing display projection. Counts +
+  // status flow from evaluateQuotePrepGate, so the list and the file
+  // detail card never disagree.
+  const gateStatus = projectQuotePrepGateStatus(rawFile, { reasonLimit: 0 })
+  const quotePrep = Object.freeze({
+    status: gateStatus.status,
+    label: gateStatus.label,
+    hasLines: gateStatus.hasLines,
+    counts: gateStatus.counts,
+  })
+
   const row = {
     id: display.id,
     customerName: display.customerName || '',
@@ -87,6 +119,7 @@ export function projectCustomerFileForList(rawFile = {}) {
     visitedAt: display.visitedAt || '',
     opportunityId: display.opportunityId || '',
     searchHay,
+    quotePrep,
   }
 
   // Final defensive sweep — never expose a sensitive key.
@@ -127,4 +160,21 @@ export function searchCustomerFilesList(rows = [], query = '') {
   const q = String(query || '').trim().toLowerCase()
   if (!q) return rows
   return rows.filter((r) => r.searchHay && r.searchHay.includes(q))
+}
+
+// Filter rows by quote prep status bucket. Unknown buckets fall back to
+// "all" so the screen never displays an empty list because of a bad value.
+export function filterCustomerFilesListByQuotePrep(rows = [], filter = DEFAULT_QUOTE_PREP_FILTER) {
+  const key = QUOTE_PREP_FILTER_VALUES.includes(filter) ? filter : DEFAULT_QUOTE_PREP_FILTER
+  if (key === 'all') return rows
+  return rows.filter((r) => {
+    const qp = r && r.quotePrep
+    if (!qp) return false
+    if (key === 'notStarted') {
+      return qp.status === GATE_STATUS.draft || (qp.counts && qp.counts.total === 0)
+    }
+    if (key === 'needsVerification') return qp.status === GATE_STATUS.needsVerification
+    if (key === 'ready') return qp.status === GATE_STATUS.ready
+    return true
+  })
 }

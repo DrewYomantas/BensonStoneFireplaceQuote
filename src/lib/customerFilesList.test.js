@@ -5,6 +5,8 @@ import {
   projectCustomerFilesList,
   recentCustomerFiles,
   searchCustomerFilesList,
+  filterCustomerFilesListByQuotePrep,
+  QUOTE_PREP_FILTER_VALUES,
 } from './customerFilesList.js'
 import { createMemoryEngine, createSalesOsStorage } from './salesOsStorage.js'
 import {
@@ -262,5 +264,122 @@ describe('listCustomerFilesDurable → projectCustomerFilesList round-trip', () 
     const rows = projectCustomerFilesList(raw)
     assert.deepEqual(rows.map((r) => r.id), ['cf-2', 'cf-3', 'cf-1'])
     assert.deepEqual(rows.map((r) => r.customerName), ['B', 'C', 'A'])
+  })
+})
+
+describe('customerFilesList — quotePrep status + filter (Milestone 14)', () => {
+  function readyFile(extra = {}) {
+    return {
+      id: 'cf-ready',
+      customerName: 'Ready Customer',
+      customerPhone: '5550001',
+      customerGoal: 'More heat',
+      lensSetupType: 'masonry-fireplace',
+      lensFuelGasPresent: 'yes',
+      quotePrepQuoteType: 'planning',
+      quotePrepLines: [
+        { id: 'l1', name: 'Line', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' },
+      ],
+      ...extra,
+    }
+  }
+
+  it('row carries a quotePrep block with status, label, hasLines, counts', () => {
+    const row = projectCustomerFileForList(readyFile())
+    assert.ok(row.quotePrep, 'quotePrep missing')
+    assert.equal(row.quotePrep.status, 'ready')
+    assert.equal(row.quotePrep.label, 'Ready to build in BisTrack')
+    assert.equal(row.quotePrep.hasLines, true)
+    assert.equal(row.quotePrep.counts.total, 1)
+    assert.equal(row.quotePrep.counts.readyForBistrack, 1)
+  })
+
+  it('not-started file gets draft status with hasLines false', () => {
+    const row = projectCustomerFileForList({ id: 'cf-empty', customerName: 'Empty', customerPhone: '5' })
+    assert.equal(row.quotePrep.status, 'draft')
+    assert.equal(row.quotePrep.hasLines, false)
+    assert.equal(row.quotePrep.counts.total, 0)
+  })
+
+  it('filter "all" returns every row', () => {
+    const rows = projectCustomerFilesList([
+      readyFile(),
+      { id: 'cf-empty', customerName: 'Empty', customerPhone: '5' },
+    ])
+    assert.equal(filterCustomerFilesListByQuotePrep(rows, 'all').length, 2)
+  })
+
+  it('filter "ready" returns only ready files', () => {
+    const rows = projectCustomerFilesList([
+      readyFile(),
+      { id: 'cf-empty', customerName: 'Empty', customerPhone: '5' },
+    ])
+    const out = filterCustomerFilesListByQuotePrep(rows, 'ready')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].customerName, 'Ready Customer')
+  })
+
+  it('filter "notStarted" returns drafts/empty files', () => {
+    const rows = projectCustomerFilesList([
+      readyFile(),
+      { id: 'cf-empty', customerName: 'Empty', customerPhone: '5' },
+    ])
+    const out = filterCustomerFilesListByQuotePrep(rows, 'notStarted')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].customerName, 'Empty')
+  })
+
+  it('filter "needsVerification" returns only needs-verification files', () => {
+    const rows = projectCustomerFilesList([
+      readyFile(),
+      {
+        id: 'cf-mid', customerName: 'Mid', customerPhone: '5',
+        // line exists but quote type unknown → needs verification
+        quotePrepLines: [{ id: 'l1', name: 'Line', sourceBasis: 'manual_entry', reviewStatus: 'ready_for_bistrack' }],
+        customerGoal: 'g', lensSetupType: 'masonry-fireplace',
+      },
+    ])
+    const out = filterCustomerFilesListByQuotePrep(rows, 'needsVerification')
+    assert.equal(out.length, 1)
+    assert.equal(out[0].customerName, 'Mid')
+  })
+
+  it('search and filter compose: search narrows then filter narrows', () => {
+    const rows = projectCustomerFilesList([
+      readyFile({ customerName: 'Ready Anna' }),
+      readyFile({ id: 'cf-ready-2', customerName: 'Ready Bob' }),
+      { id: 'cf-anna-empty', customerName: 'Empty Anna', customerPhone: '5' },
+    ])
+    const searched = searchCustomerFilesList(rows, 'anna')
+    const filtered = filterCustomerFilesListByQuotePrep(searched, 'ready')
+    assert.equal(filtered.length, 1)
+    assert.equal(filtered[0].customerName, 'Ready Anna')
+  })
+
+  it('unknown filter values fall back to "all"', () => {
+    const rows = projectCustomerFilesList([
+      readyFile(),
+      { id: 'cf-empty', customerName: 'Empty', customerPhone: '5' },
+    ])
+    assert.equal(filterCustomerFilesListByQuotePrep(rows, 'totally-bogus').length, rows.length)
+  })
+
+  it('filter values list is exposed for the UI', () => {
+    assert.ok(QUOTE_PREP_FILTER_VALUES.includes('all'))
+    assert.ok(QUOTE_PREP_FILTER_VALUES.includes('ready'))
+    assert.ok(QUOTE_PREP_FILTER_VALUES.includes('needsVerification'))
+    assert.ok(QUOTE_PREP_FILTER_VALUES.includes('notStarted'))
+  })
+
+  it('quotePrep block does not surface sensitive keys', () => {
+    const row = projectCustomerFileForList({
+      ...readyFile(),
+      cost: 9999, margin: 0.5, supplierTotal: 100,
+      bistrackConfidence: '0.7', rawOcr: 'noise',
+    })
+    const flat = JSON.stringify(row.quotePrep).toLowerCase()
+    for (const phrase of ['"cost"', '"margin"', '"suppliertotal"', '"rawocr"', '"bistrackconfidence"']) {
+      assert.equal(flat.includes(phrase), false, `leaked: ${phrase}`)
+    }
   })
 })

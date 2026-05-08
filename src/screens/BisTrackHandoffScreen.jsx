@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { getCustomerFileDurable } from '../lib/customerFileDurable.js'
-import { projectBisTrackHandoff } from '../lib/bisTrackHandoff.js'
+import {
+  projectBisTrackHandoff,
+  formatBisTrackHandoffAsText,
+} from '../lib/bisTrackHandoff.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
 
 function gateBadge(status) {
@@ -275,6 +278,8 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [copyState, setCopyState] = useState({ kind: 'idle', message: '' })
+  const fallbackTextareaRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -302,6 +307,33 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
   }, [fileId])
 
   const view = useMemo(() => (file ? projectBisTrackHandoff(file) : null), [file])
+  const handoffText = useMemo(() => (view ? formatBisTrackHandoffAsText(view) : ''), [view])
+
+  async function handleCopy() {
+    if (!handoffText) return
+    setCopyState({ kind: 'idle', message: '' })
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(handoffText)
+        setCopyState({ kind: 'ok', message: 'Copied internal handoff' })
+        setTimeout(() => setCopyState((s) => (s.kind === 'ok' ? { kind: 'idle', message: '' } : s)), 2500)
+        return
+      }
+      throw new Error('Clipboard API unavailable')
+    } catch {
+      setCopyState({
+        kind: 'fallback',
+        message: 'Clipboard blocked — select the text below and copy manually.',
+      })
+      // Best-effort: highlight the textarea once it renders.
+      setTimeout(() => {
+        const el = fallbackTextareaRef.current
+        if (el && el.select) {
+          try { el.select() } catch { /* selection not critical */ }
+        }
+      }, 50)
+    }
+  }
 
   let body
   if (missing || !fileId) {
@@ -333,6 +365,36 @@ export default function BisTrackHandoffScreen({ fileId, onBack, onOpenLens, onOp
       <div style={{ padding: '24px 28px 28px' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gap: 18 }}>
           <HeaderCard view={view} />
+          <section className="card-flat" style={{ padding: 14 }}>
+            <div className="hstack" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <span className="eyebrow eyebrow-ink">COPY HANDOFF</span>
+              <span className="spacer" />
+              <button type="button" className="btn btn-quiet" onClick={handleCopy} disabled={!handoffText}>
+                Copy Handoff
+              </button>
+            </div>
+            <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
+              Plain text for your own notes — paste into BisTrack or a chat to Liam. Internal prep only.
+            </p>
+            {copyState.kind === 'ok' && (
+              <p className="body-sm" style={{ marginTop: 6, color: 'var(--brass)' }}>
+                {copyState.message}
+              </p>
+            )}
+            {copyState.kind === 'fallback' && (
+              <div style={{ marginTop: 6 }}>
+                <p className="body-sm" style={{ color: 'var(--ember)' }}>{copyState.message}</p>
+                <textarea
+                  ref={fallbackTextareaRef}
+                  className="field"
+                  readOnly
+                  rows={10}
+                  value={handoffText}
+                  style={{ marginTop: 6, width: '100%', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
+                />
+              </div>
+            )}
+          </section>
           {view.warnings.length > 0 && (
             <section className="card-flat" style={{ padding: 14, borderLeft: '3px solid var(--ember)' }}>
               <span className="eyebrow eyebrow-ember">WATCH-OUTS</span>
