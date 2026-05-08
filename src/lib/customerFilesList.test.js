@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   projectCustomerFileForList,
   projectCustomerFilesList,
+  recentCustomerFiles,
   searchCustomerFilesList,
 } from './customerFilesList.js'
 import { createMemoryEngine, createSalesOsStorage } from './salesOsStorage.js'
@@ -180,6 +181,72 @@ describe('searchCustomerFilesList', () => {
 
   it('no matches → empty array', () => {
     assert.deepEqual(searchCustomerFilesList(sampleRows, 'zzz-nothing'), [])
+  })
+})
+
+describe('recentCustomerFiles — Today projection', () => {
+  const fixtures = [
+    { id: 'cf-1', customerName: 'A', updatedAt: '2026-05-01T10:00:00Z' },
+    { id: 'cf-2', customerName: 'B', updatedAt: '2026-05-08T10:00:00Z' },
+    { id: 'cf-3', customerName: 'C', updatedAt: '2026-05-04T10:00:00Z' },
+    { id: 'cf-4', customerName: 'D', updatedAt: '2026-05-07T10:00:00Z' },
+    { id: 'cf-5', customerName: 'E', updatedAt: '2026-05-02T10:00:00Z' },
+    { id: 'cf-6', customerName: 'F', updatedAt: '2026-05-06T10:00:00Z' },
+  ]
+
+  it('returns most-recently-updated first', () => {
+    const out = recentCustomerFiles(fixtures, 3)
+    assert.deepEqual(out.map((r) => r.id), ['cf-2', 'cf-4', 'cf-6'])
+  })
+
+  it('caps at the requested limit (default 4)', () => {
+    assert.equal(recentCustomerFiles(fixtures).length, 4)
+    assert.equal(recentCustomerFiles(fixtures, 5).length, 5)
+    assert.equal(recentCustomerFiles(fixtures, 100).length, fixtures.length)
+  })
+
+  it('treats invalid limit as zero (returns empty array)', () => {
+    assert.deepEqual(recentCustomerFiles(fixtures, 0), [])
+    assert.deepEqual(recentCustomerFiles(fixtures, -2), [])
+    assert.deepEqual(recentCustomerFiles(fixtures, NaN), [])
+  })
+
+  it('empty durable list returns empty array', () => {
+    assert.deepEqual(recentCustomerFiles([], 4), [])
+    assert.deepEqual(recentCustomerFiles(null, 4), [])
+  })
+
+  it('preserves the file id so Today can route to detail', () => {
+    const out = recentCustomerFiles([
+      { id: 'cf-keep', customerName: 'Keep', updatedAt: '2026-05-08T10:00:00Z' },
+    ], 4)
+    assert.equal(out[0].id, 'cf-keep')
+  })
+
+  it('survives missing optional fields', () => {
+    const out = recentCustomerFiles([
+      { id: 'cf-bare', customerName: 'Bare' },
+    ], 4)
+    assert.equal(out.length, 1)
+    assert.equal(out[0].customerName, 'Bare')
+  })
+
+  it('does not surface sensitive keys', () => {
+    const out = recentCustomerFiles([{
+      id: 'cf-1', customerName: 'X', updatedAt: '2026-05-08T10:00:00Z',
+      cost: 1, margin: 0.4, buyPrice: 50, supplierTotal: 500,
+      rawOcr: 'r', rawPdf: 'r', bistrackConfidence: 0.7,
+      fuzzyMatchConfidence: 0.9, ocrConfidence: 0.5,
+      salesRank: 1, productRank: 2,
+    }], 4)
+    for (const k of [
+      'cost', 'margin', 'buyPrice', 'supplierTotal',
+      'rawOcr', 'rawPdf',
+      'bistrackConfidence', 'fuzzyMatchConfidence', 'ocrConfidence',
+      'salesRank', 'productRank',
+    ]) {
+      assert.equal(k in out[0], false, `${k} leaked into Today row`)
+    }
   })
 })
 

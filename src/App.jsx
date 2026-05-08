@@ -69,7 +69,11 @@ export default function App() {
       topActions={<BackstageBackup />}
     >
       {route.screen === 'today' && (
-        <TodayScreen onOpenStartVisit={() => navigate('visit')} onOpenFile={openFile} />
+        <TodayScreen
+          onOpenStartVisit={() => navigate('visit')}
+          onOpenFile={openFile}
+          onOpenFilesList={openFilesList}
+        />
       )}
       {route.screen === 'visit' && (
         <StartVisitScreen onCustomerFileCreated={onCustomerFileCreated} />

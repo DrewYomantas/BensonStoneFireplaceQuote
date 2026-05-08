@@ -1,6 +1,12 @@
+import { useEffect, useState } from 'react'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import TodayActionCard from '../components/today/TodayActionCard.jsx'
 import { badgesForFile } from '../lib/fieldRulesBadges.js'
+import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
+import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
+import { recentCustomerFiles } from '../lib/customerFilesList.js'
+
+const RECENT_LIMIT = 4
 
 const SAMPLE_FILES = [
   {
@@ -56,52 +62,202 @@ const SAMPLE_FILES = [
   },
 ]
 
-export default function TodayScreen({ onOpenStartVisit, onOpenFile }) {
+function formatStamp(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function RecentFileRow({ row, onOpen }) {
+  return (
+    <button
+      type="button"
+      className="card today-recent-row"
+      onClick={() => onOpen && onOpen(row.id)}
+      aria-label={`Open Customer File for ${row.customerName || 'unnamed customer'}`}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left',
+        padding: 14, marginTop: 10, cursor: 'pointer',
+        background: 'var(--paper)', border: '1px solid var(--rule)',
+        borderLeft: '3px solid var(--brass)',
+      }}
+    >
+      <div className="hstack">
+        <span className="eyebrow eyebrow-ink">{row.customerName || 'Unnamed customer'}</span>
+        <span className="spacer" />
+        {row.updatedAt && (
+          <span className="body-sm" style={{ color: 'var(--slate)' }}>
+            {formatStamp(row.updatedAt)}
+          </span>
+        )}
+      </div>
+      <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {row.contact && (
+          <span className="body-sm" style={{ color: 'var(--ink)' }}>{row.contact}</span>
+        )}
+        {row.projectAddress && (
+          <span className="body-sm" style={{ color: 'var(--slate)' }}>{row.projectAddress}</span>
+        )}
+        {row.lensSetupTypeLabel && (
+          <span className="source source-manual">{row.lensSetupTypeLabel.toUpperCase()}</span>
+        )}
+      </div>
+      {row.summary && (
+        <p className="body-sm" style={{ marginTop: 6 }}>{row.summary}</p>
+      )}
+    </button>
+  )
+}
+
+function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList }) {
+  if (state.kind === 'loading') {
+    return <p className="body-sm">Loading recent files…</p>
+  }
+  if (state.kind === 'error') {
+    return (
+      <div className="card" style={{ padding: 14, borderLeft: '3px solid var(--ember)' }}>
+        <span className="eyebrow eyebrow-ember">Storage error</span>
+        <p className="body-sm" style={{ marginTop: 4 }}>{state.error}</p>
+        <p className="body-sm" style={{ marginTop: 4, color: 'var(--slate)' }}>
+          Files stay on this tablet — try reloading.
+        </p>
+      </div>
+    )
+  }
+  if (state.kind === 'empty') {
+    return (
+      <div className="card-flat" style={{ padding: 16 }}>
+        <span className="eyebrow eyebrow-ink">No saved Customer Files yet</span>
+        <p className="body-sm" style={{ marginTop: 6 }}>
+          Files appear here after a Start Visit is created. Sample cards below
+          are training references only.
+        </p>
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
+            Start a visit
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <>
+      {state.rows.map((row) => (
+        <RecentFileRow key={row.id} row={row} onOpen={onOpenFile} />
+      ))}
+      <div style={{ marginTop: 10 }}>
+        <button type="button" className="btn btn-quiet" onClick={onOpenList}>
+          View all Customer Files →
+        </button>
+      </div>
+    </>
+  )
+}
+
+export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList }) {
+  const [recent, setRecent] = useState({ kind: 'loading' })
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const ready = await ensureSalesOsBoot()
+        if (cancelled) return
+        if (!ready.ok) {
+          setRecent({ kind: 'error', error: ready.error || 'Storage unavailable' })
+          return
+        }
+        const storage = getSalesOsStorage()
+        const raw = await listCustomerFilesDurable(storage)
+        if (cancelled) return
+        const rows = recentCustomerFiles(raw, RECENT_LIMIT)
+        setRecent(rows.length ? { kind: 'ok', rows } : { kind: 'empty' })
+      } catch (err) {
+        if (!cancelled) {
+          setRecent({ kind: 'error', error: err.message || String(err) })
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <>
       <div className="shell-content">
         <div style={{ padding: '24px 28px 28px' }}>
-          <div className="hstack">
-            <h2 className="serif-h h3">Good morning, Drew.</h2>
-            <span className="spacer" />
-            <span className="body-sm">14 active files · 4 need you today · 1 overdue</span>
-          </div>
+          <h2 className="serif-h h3">Good morning, Drew.</h2>
           <p className="body" style={{ marginTop: 4, color: 'var(--slate)' }}>
-            Two walk-ins on the books. Two promises from last week. The desk is calm.
+            Pick up where you left off, or start a new visit.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 22 }}>
-            {SAMPLE_FILES.map((f) => (
-              <TodayActionCard
-                key={f.id}
-                stamp={f.stamp}
-                state={f.state}
-                name={f.name}
-                note={f.note}
-                tag={f.tag}
-                source={f.source}
-                sourceLabel={f.sourceLabel}
-                nextAction={f.nextAction}
-                fieldRuleBadges={f.fieldRuleSample ? badgesForFile(f.fieldRuleSample) : []}
-                onOpen={() => onOpenFile && onOpenFile(f.id)}
+          <section style={{ marginTop: 20 }} aria-labelledby="today-recent-heading">
+            <div className="hstack">
+              <span id="today-recent-heading" className="eyebrow eyebrow-ember">RECENT CUSTOMER FILES</span>
+              <span className="spacer" />
+              {recent.kind === 'ok' && (
+                <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                  {recent.rows.length} most recent
+                </span>
+              )}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <RecentFilesPanel
+                state={recent}
+                onOpenFile={onOpenFile}
+                onOpenStartVisit={onOpenStartVisit}
+                onOpenList={onOpenFilesList}
               />
-            ))}
-          </div>
+            </div>
+          </section>
+
+          <section style={{ marginTop: 28 }} aria-labelledby="today-samples-heading">
+            <div className="hstack">
+              <span id="today-samples-heading" className="eyebrow eyebrow-ink">SAMPLE CARDS · TRAINING</span>
+              <span className="spacer" />
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Reference fixtures · not real customers
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 10 }}>
+              {SAMPLE_FILES.map((f) => (
+                <TodayActionCard
+                  key={f.id}
+                  stamp={f.stamp}
+                  state={f.state}
+                  name={f.name}
+                  note={f.note}
+                  tag={f.tag}
+                  source={f.source}
+                  sourceLabel={f.sourceLabel}
+                  nextAction={f.nextAction}
+                  fieldRuleBadges={f.fieldRuleSample ? badgesForFile(f.fieldRuleSample) : []}
+                  onOpen={() => onOpenFile && onOpenFile(f.id)}
+                />
+              ))}
+            </div>
+          </section>
         </div>
       </div>
       <NextActionBar
-        action="Call Karpinski before noon — the stone allowance was promised Friday."
-        why="7 days since last contact. Customer prefers phone."
-        blocking="Stone allowance number not finalised."
-        dontForget="Mention the home-measure window — easier to schedule on the call."
+        action="Reopen a recent file or start a new visit."
+        why="Today is the daily landing page — the work continues from a Customer File."
+        dontForget="Customer Files stay on this tablet. Backup from the top bar before closing."
         primary={
-          <button type="button" className="btn btn-primary" onClick={() => onOpenFile && onOpenFile('sample-karpinski')}>
-            Open Karpinski file
+          <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
+            Start a new visit
           </button>
         }
         secondary={
-          <button type="button" className="btn btn-quiet" onClick={onOpenStartVisit}>
-            Start a new visit
+          <button type="button" className="btn btn-quiet" onClick={onOpenFilesList}>
+            View all Customer Files
           </button>
         }
       />

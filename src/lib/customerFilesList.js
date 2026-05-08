@@ -113,6 +113,16 @@ export function projectCustomerFilesList(rawFiles = []) {
   return rows
 }
 
+// Today's "Recent Customer Files" projection — same row shape as the full
+// list, capped to the top N most-recently-updated files. Default 4 fits the
+// Today landing surface without crowding the sample/training cards below.
+export function recentCustomerFiles(rawFiles = [], limit = 4) {
+  const num = Number(limit)
+  if (!Number.isFinite(num) || num <= 0) return []
+  const safe = Math.floor(num)
+  return projectCustomerFilesList(rawFiles).slice(0, safe)
+}
+
 export function searchCustomerFilesList(rows = [], query = '') {
   const q = String(query || '').trim().toLowerCase()
   if (!q) return rows
