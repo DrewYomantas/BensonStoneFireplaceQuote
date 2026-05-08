@@ -25,6 +25,8 @@ const SAFE_KEYS = new Set([
   // Field Rules acknowledgements — internal-only facts that the Customer
   // File needs to remember so the safety layer clears across reloads.
   'zcGasInsertAcknowledgedAt', 'zcGasInsertAcknowledgedBy',
+  // Quote / Prep (PR 8) — rep-only proposed line items + prep notes.
+  'quotePrepLines', 'quotePrepNotes', 'quotePrepUpdatedAt',
 ])
 
 export function projectCustomerFileForDisplay(file = {}) {

@@ -46,7 +46,7 @@ function PlaceholderCard({ title, body }) {
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep }) {
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -183,10 +183,31 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens }) {
           <ManagerReviewReasons />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, marginTop: 18 }}>
-          <PlaceholderCard
-            title="QUOTE / PROPOSAL"
-            body="Attach a BisTrack quote in Quote / Prep (next pass). The original BisTrack PDF stays as the canonical evidence document."
-          />
+          <section className="card" style={{ padding: 18 }}>
+            <div className="hstack">
+              <span className="eyebrow eyebrow-ember">QUOTE / PREP</span>
+              <span className="spacer" />
+              {Array.isArray(display.quotePrepLines) && display.quotePrepLines.length > 0 && (
+                <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                  {display.quotePrepLines.length} proposed line{display.quotePrepLines.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            <p className="body-sm" style={{ marginTop: 8 }}>
+              Rep-only workbench for proposed line items and prep notes. BisTrack
+              remains the source of truth for the official quote.
+            </p>
+            <div style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!fileId || !onOpenQuotePrep}
+                onClick={() => onOpenQuotePrep && onOpenQuotePrep(fileId)}
+              >
+                Open Quote / Prep
+              </button>
+            </div>
+          </section>
           <PlaceholderCard
             title="ACTIVITY"
             body={`Created ${new Date(display.createdAt).toLocaleDateString()}. Visit timeline lands in PR 2.`}

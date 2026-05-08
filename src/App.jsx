@@ -7,6 +7,7 @@ import StartVisitScreen from './screens/StartVisitScreen.jsx'
 import CustomerFileScreen from './screens/CustomerFileScreen.jsx'
 import CustomerFilesListScreen from './screens/CustomerFilesListScreen.jsx'
 import SetupGoalLensScreen from './screens/SetupGoalLensScreen.jsx'
+import QuotePrepScreen from './screens/QuotePrepScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
@@ -17,6 +18,7 @@ const TITLES = {
   filesList: 'Customer files',
   files: 'Customer file',
   lens: 'Setup + Goal Lens',
+  quotePrep: 'Quote / Prep',
   backstage: 'Backstage',
 }
 
@@ -26,6 +28,7 @@ const CRUMBS = {
   filesList: ['Customer files'],
   files: ['Customer files', 'File'],
   lens: ['Customer files', 'Setup + Goal Lens'],
+  quotePrep: ['Customer files', 'Quote / Prep'],
   backstage: ['Backstage'],
 }
 
@@ -56,13 +59,17 @@ export default function App() {
     setRoute({ screen: 'lens', fileId })
   }
 
+  function openQuotePrep(fileId) {
+    setRoute({ screen: 'quotePrep', fileId })
+  }
+
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
 
   return (
     <AppShell
-      active={route.screen === 'lens' || route.screen === 'filesList' ? 'files' : route.screen}
+      active={route.screen === 'lens' || route.screen === 'filesList' || route.screen === 'quotePrep' ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -89,12 +96,20 @@ export default function App() {
           fileId={route.fileId}
           onBack={openFilesList}
           onOpenLens={openLens}
+          onOpenQuotePrep={openQuotePrep}
         />
       )}
       {route.screen === 'lens' && (
         <SetupGoalLensScreen
           fileId={route.fileId}
           onBack={() => openFile(route.fileId)}
+        />
+      )}
+      {route.screen === 'quotePrep' && (
+        <QuotePrepScreen
+          fileId={route.fileId}
+          onBack={() => openFile(route.fileId)}
+          onOpenLens={openLens}
         />
       )}
       {route.screen === 'backstage' && (

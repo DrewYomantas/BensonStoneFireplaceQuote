@@ -113,6 +113,10 @@ const stringKeys = [
   // reloads. No customer-facing surface — these are internal facts.
   'zcGasInsertAcknowledgedAt',
   'zcGasInsertAcknowledgedBy',
+  // Quote / Prep workspace (PR 8) — rep-only prep notes + last-touched stamp.
+  // The proposed line items themselves live in the array store below.
+  'quotePrepNotes',
+  'quotePrepUpdatedAt',
   // Model tag / appliance verification
   'taggedModel',
   'taggedVendor',
@@ -155,6 +159,7 @@ const arrayKeys = [
   'followUpTasks',             // [{ id, label, dueAt, doneAt }]
   'notes',                     // [{ id, body, createdAt }]
   'lensConstructionFlags',     // [string] — selected coordination flags
+  'quotePrepLines',            // [{ id, name, description, brand, partNumber, category, quantity, customerSafeNotes, internalPrepNote }]
 ]
 
 function getStorage(storage = globalThis.localStorage) {
