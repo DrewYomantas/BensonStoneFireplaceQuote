@@ -7,6 +7,7 @@ import {
   commitBulkIntakeDrafts,
   STATUS_LABELS,
 } from '../lib/customerBulkIntake.js'
+import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
 
 // ---- Status badge ----------------------------------------------------------
 
@@ -136,6 +137,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   const [existingFiles, setExistingFiles] = useState([])
   const [extracting, setExtracting] = useState(false)
   const [fileName, setFileName] = useState('')
+  const [ocrProgress, setOcrProgress] = useState(null)
+  const [ocrNote, setOcrNote] = useState('')
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -157,6 +160,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     if (!file) return
     e.target.value = ''
     setErrorMsg('')
+    setOcrProgress(null)
+    setOcrNote('')
 
     const ext = file.name.split('.').pop().toLowerCase()
 
@@ -169,11 +174,24 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
       setFileName(file.name)
       setExtracting(true)
       try {
-        const { extractTextFromPdf } = await import('../lib/pdfTextExtraction.js')
-        const { rawText, embeddedTextLikelyMissing } = await extractTextFromPdf(file)
+        const { extractTextFromPdf, extractOcrFromPdf } = await import('../lib/pdfTextExtraction.js')
+        const { rawText, embeddedTextLikelyMissing, pageCount } = await extractTextFromPdf(file)
         if (embeddedTextLikelyMissing) {
-          setErrorMsg('This PDF appears to be an image scan with no readable text. Export your list as CSV instead.')
-          setFileName('')
+          const warning = ocrPageWarning(pageCount)
+          if (warning) setErrorMsg(warning)
+          const maxPages = Math.min(pageCount, OCR_PAGE_LIMIT)
+          setOcrProgress({ stage: 'ocr', pageNumber: 0, pageCount: maxPages })
+          const ocrResult = await extractOcrFromPdf(file, {
+            maxPages,
+            onProgress: (p) => setOcrProgress(p),
+          })
+          const text = ocrResult.rawText
+          setPasteText(text)
+          setOcrNote(
+            isOcrTextWeak(text)
+              ? 'OCR finished, but the result may need cleanup before parsing.'
+              : 'OCR complete. Review the extracted text before parsing.'
+          )
         } else {
           setPasteText(rawText)
         }
@@ -182,6 +200,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         setFileName('')
       } finally {
         setExtracting(false)
+        setOcrProgress(null)
       }
       return
     }
@@ -245,6 +264,17 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
   }
 
+  function downloadTemplate() {
+    const csv = 'name,phone,email,address,notes,goal\n'
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'bulk-import-template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function handleReset() {
     setPasteText('')
     setFileName('')
@@ -252,6 +282,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     setSelected(new Set())
     setImportResult(null)
     setErrorMsg('')
+    setOcrProgress(null)
+    setOcrNote('')
     setPhase('input')
   }
 
@@ -291,23 +323,43 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
               disabled={extracting}
             >
-              {extracting ? 'Reading PDF…' : 'Choose file…'}
+              {extracting ? 'Reading…' : 'Choose file…'}
             </button>
             {extracting && (
-              <span className="body-sm" style={{ color: 'var(--slate)' }}>Extracting text — this may take a moment…</span>
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                {ocrProgressLabel(ocrProgress)}
+              </span>
             )}
             {!extracting && fileName && (
               <span className="body-sm" style={{ color: 'var(--brass)' }}>{fileName}</span>
             )}
-            {!extracting && !fileName && rowsLoaded > 0 && (
+            {!extracting && ocrNote && (
+              <span
+                className="body-sm"
+                style={{ color: ocrNote.includes('cleanup') ? 'var(--ember-dark)' : 'var(--brass)' }}
+              >
+                {ocrNote}
+              </span>
+            )}
+            {!extracting && !fileName && !ocrNote && rowsLoaded > 0 && (
               <span className="body-sm" style={{ color: 'var(--slate)' }}>
                 {rowsLoaded} data row{rowsLoaded === 1 ? '' : 's'} loaded
               </span>
             )}
           </div>
-          <p className="body-sm" style={{ color: 'var(--slate)', marginTop: 6 }}>
-            CSV, TSV, TXT, or PDF (text-based). Recognized columns: name, phone, email, address, notes, goal.
-          </p>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
+            <p className="body-sm" style={{ color: 'var(--slate)', margin: 0 }}>
+              CSV, TSV, TXT, or PDF (text-based). Recognized columns: name, phone, email, address, notes, goal.
+            </p>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={downloadTemplate}
+              style={{ flexShrink: 0, fontSize: 12, padding: '3px 10px' }}
+            >
+              ↓ CSV template
+            </button>
+          </div>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -318,7 +370,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             id="bulk-paste-area"
             className="field"
             value={pasteText}
-            onChange={(e) => { setPasteText(e.target.value); setFileName('') }}
+            onChange={(e) => { setPasteText(e.target.value); setFileName(''); setOcrNote('') }}
             placeholder={'name,phone,email,address,notes\nSmith, John,815-555-0001,john@example.com,"123 Main St, Rockford"'}
             rows={6}
             style={{ marginTop: 8, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 13, resize: 'vertical' }}
