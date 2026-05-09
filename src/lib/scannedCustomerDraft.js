@@ -32,6 +32,11 @@ const REJECTED_NAME_TOKENS = new Set([
   'po', 'po number', 'page', 'date', 'phone', 'fax', 'email',
   'ship to', 'sold to', 'bill to', 'name', 'customer', 'client',
   'address', 'city', 'state', 'zip', 'service tech',
+  // Firebuilder / section-header words that whole-page OCR can produce as fake names.
+  'information', 'customer information', 'customer name',
+  'form', 'quote form', 'firebuilder form',
+  'product details', 'additional charges',
+  'sales person', 'salesperson',
 ])
 
 // Address fragments that belong to Benson Stone, not the customer.

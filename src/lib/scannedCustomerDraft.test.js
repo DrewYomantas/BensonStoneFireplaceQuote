@@ -638,3 +638,70 @@ describe('buildScannedCustomerDraft — ampersand in customer name', () => {
     assert.equal(fields.customerName, 'Dale & Tiff Linzmayer')
   })
 })
+
+// ---- Milestone 19.6.6: Firebuilder / section-header rejection ---------------
+
+describe('buildScannedCustomerDraft — reject Firebuilder section headers as customer name', () => {
+  it('rejects "Information" as customer name', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Information\nPhone: 815-555-0001\nsome extra text to trigger review threshold')
+    assert.notEqual(fields.customerName, 'Information')
+    assert.equal(fields.customerName, '')
+  })
+
+  it('rejects "Form" as customer name', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Form\nPhone: 815-555-0001\nsome extra text to trigger review threshold')
+    assert.notEqual(fields.customerName, 'Form')
+    assert.equal(fields.customerName, '')
+  })
+
+  it('rejects "Customer Information" from zone-header fallback', () => {
+    // Zone text contains only rejected header tokens — name must stay empty.
+    const text = '--- INVOICE ADDRESS ZONE ---\nCustomer Information\nForm'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.notEqual(fields.customerName, 'Customer Information')
+    assert.equal(fields.customerName, '')
+  })
+
+  it('rejects "Firebuilder Form" from zone-header fallback', () => {
+    // Zone text contains only rejected header tokens — name must stay empty.
+    const text = '--- INVOICE ADDRESS ZONE ---\nFirebuilder Form\nCustomer Information'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.notEqual(fields.customerName, 'Firebuilder Form')
+    assert.equal(fields.customerName, '')
+  })
+
+  it('does not break "Matt Fox"', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Matt Fox\nPhone: 815-555-0001')
+    assert.equal(fields.customerName, 'Matt Fox')
+  })
+
+  it('does not break "Tom Schloemer"', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Tom Schloemer\nPhone: 815-555-0001')
+    assert.equal(fields.customerName, 'Tom Schloemer')
+  })
+
+  it('does not break "Kate Schutt"', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Kate Schutt\nPhone: 815-555-0001')
+    assert.equal(fields.customerName, 'Kate Schutt')
+  })
+
+  it('does not break "Karen Mohr"', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Karen Mohr\nPhone: 815-555-0001')
+    assert.equal(fields.customerName, 'Karen Mohr')
+  })
+
+  it('shows "Customer name needs review" when Firebuilder headers are the only name candidates', () => {
+    const text = 'Firebuilder Form\nCustomer Information\nProduct Details\nAdditional Charges\nPhone: 815-555-0001\nsome extra filler text to exceed the review threshold minimum'
+    const { warnings } = buildScannedCustomerDraft(text)
+    assert.ok(warnings.some((w) => w.toLowerCase().includes('customer name')), `Expected name review warning, got: ${warnings}`)
+  })
+
+  it('no banned/sensitive leakage from Firebuilder page text', () => {
+    const text = 'Firebuilder Form\nCustomer Information\nSales Person: Internal Rep\nMargin: 30%\nProduct Details\nPhone: 815-555-0001'
+    const { fields } = buildScannedCustomerDraft(text)
+    for (const v of Object.values(fields)) {
+      assert.ok(!String(v).toLowerCase().includes('margin'), `Should not surface "margin": ${v}`)
+      assert.ok(!String(v).toLowerCase().includes('sales person'), `Should not surface "sales person": ${v}`)
+    }
+  })
+})
