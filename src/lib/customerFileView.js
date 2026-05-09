@@ -31,6 +31,8 @@ const SAFE_KEYS = new Set([
   'quotePrepQuoteType', 'quotePrepVerificationOwner',
   'quotePrepUnverifiedItems', 'quotePrepNextStep',
   'quotePrepGateUpdatedAt',
+  // Source provenance (Milestone 19.7) — intake origin metadata.
+  'sourceLabel', 'sourceTrail',
 ])
 
 export function projectCustomerFileForDisplay(file = {}) {

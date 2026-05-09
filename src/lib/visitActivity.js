@@ -23,6 +23,7 @@ export const ACTIVITY_KINDS = Object.freeze([
   'manual_note',
   'bulk_imported',
   'scan_imported',
+  'scanned_packet_imported',
 ])
 
 export const ACTIVITY_KIND_LABELS = Object.freeze({
@@ -35,6 +36,7 @@ export const ACTIVITY_KIND_LABELS = Object.freeze({
   manual_note: 'Note',
   bulk_imported: 'Bulk imported',
   scan_imported: 'Scan imported',
+  scanned_packet_imported: 'Packet imported',
 })
 
 const ACTIVITY_KIND_SET = new Set(ACTIVITY_KINDS)

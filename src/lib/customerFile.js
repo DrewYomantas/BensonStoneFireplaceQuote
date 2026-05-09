@@ -154,6 +154,8 @@ const stringKeys = [
   'handoffSummary',
   // Pricing
   'pricingConfirmedAt',
+  // Source provenance (Milestone 19.7)
+  'sourceLabel',   // e.g. 'Imported from scanned packet'
 ]
 
 const arrayKeys = [
@@ -167,6 +169,7 @@ const arrayKeys = [
   'notes',                     // [{ id, body, createdAt }]
   'lensConstructionFlags',     // [string] — selected coordination flags
   'quotePrepLines',            // [{ id, name, description, brand, partNumber, category, quantity, customerSafeNotes, internalPrepNote }]
+  'sourceTrail',               // [{ sourceFileName, pageNumbers, detectedDocTypes, quoteNumbers, orderNumbers, importedAt }]
 ]
 
 function getStorage(storage = globalThis.localStorage) {

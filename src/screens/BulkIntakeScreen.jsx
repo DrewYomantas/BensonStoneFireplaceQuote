@@ -28,9 +28,14 @@ import {
   createPageItem,
   updatePageItem as updatePageItemFn,
   pageItemCountLabel,
-  detectPageGroupSuggestions,
 } from '../lib/bulkIntakePageQueue.js'
 import { detectDocType, DOC_TYPE_LABELS } from '../lib/scanDocTypeDetector.js'
+import {
+  suggestPageGroups,
+  buildPacketGroupDraft,
+  commitPacketGroupDraft,
+  revalidatePacketGroupDraft,
+} from '../lib/scannedPacketGroups.js'
 
 // ---- Row-level status badge (for review rows) --------------------------------
 
@@ -164,28 +169,36 @@ function QueueRow({ item, isActive, onActivate, onRemove }) {
 
 // ---- Page list row (multi-page scanned PDF) ---------------------------------
 
-function PageRow({ page, isActive, onActivate }) {
+function PageRow({ page, isActive, onActivate, isSelected, onToggleSelect }) {
   const docLabel = DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'
   const countLabel = pageItemCountLabel(page)
   const customerName = page.draftSummary?.customerName || page.scanDraftFields?.customerName || ''
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onActivate(page.id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onActivate(page.id) }}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
-        cursor: 'pointer', borderRadius: 6, marginBottom: 3,
+        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px',
+        borderRadius: 6, marginBottom: 3,
         background: isActive ? 'var(--stone-100)' : 'transparent',
         borderLeft: isActive ? '3px solid var(--brass)' : '3px solid transparent',
       }}
     >
-      <div style={{ width: 26, flexShrink: 0, textAlign: 'right' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>{page.pageNumber}</span>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <input
+        type="checkbox"
+        checked={isSelected}
+        onChange={(e) => { e.stopPropagation(); onToggleSelect(page.id) }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ flexShrink: 0, accentColor: 'var(--brass)', width: 14, height: 14, cursor: 'pointer', marginTop: 1 }}
+        aria-label={`Select page ${page.pageNumber} for packet`}
+      />
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onActivate(page.id)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onActivate(page.id) }}
+        style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>{page.pageNumber}</span>
           <span style={{ fontSize: 11, color: 'var(--slate)' }}>{docLabel}</span>
           <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '1px 5px' }}>
             {PAGE_STATUS_LABELS[page.status]}
@@ -714,6 +727,88 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
   }
 
+  // ---- Packet group handlers -------------------------------------------------
+
+  function handleTogglePageSelect(pageId) {
+    if (!activeItem) return
+    const current = activeItem.selectedPageIds || []
+    const has = current.includes(pageId)
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        selectedPageIds: has ? current.filter((id) => id !== pageId) : [...current, pageId],
+      }),
+    )
+  }
+
+  function handleBuildPacketGroupDraft() {
+    if (!activeItem) return
+    const selectedPages = (activeItem.pageItems || []).filter((p) =>
+      (activeItem.selectedPageIds || []).includes(p.id),
+    )
+    if (!selectedPages.length) return
+    const draft = buildPacketGroupDraft(selectedPages, {
+      sourceFileName: activeItem.fileName,
+      existingFiles,
+    })
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        packetGroupDraft: draft,
+        activePageId: null,
+      }),
+    )
+    setGlobalError('')
+  }
+
+  function handleUpdatePacketDraftField(key, value) {
+    if (!activeItem || !activeItem.packetGroupDraft) return
+    const updated = revalidatePacketGroupDraft(
+      { ...activeItem.packetGroupDraft, [key]: value },
+      existingFiles,
+    )
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { packetGroupDraft: updated }))
+  }
+
+  function handleClearPacketGroupDraft() {
+    if (!activeItem) return
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { packetGroupDraft: null }))
+    setGlobalError('')
+  }
+
+  async function handleImportPacketGroupDraft() {
+    if (!activeItem || !activeItem.packetGroupDraft || importing) return
+    const draft = activeItem.packetGroupDraft
+    if (!draft.customerName) { setGlobalError('Customer name is required before importing.'); return }
+    setImporting(true)
+    setGlobalError('')
+    try {
+      const ready = await ensureSalesOsBoot()
+      if (!ready.ok) { setGlobalError(ready.error || 'Storage unavailable'); return }
+      const storage = getSalesOsStorage()
+      const imported = await commitPacketGroupDraft(draft, storage)
+      const freshFiles = await listCustomerFilesDurable(storage)
+      setExistingFiles(freshFiles)
+      setQueue((prev) => {
+        const it = prev.find((q) => q.id === activeItem.id)
+        if (!it) return prev
+        const selectedIds = it.selectedPageIds || []
+        const updatedPageItems = (it.pageItems || []).map((p) =>
+          selectedIds.includes(p.id)
+            ? { ...p, status: PAGE_STATUS.imported, importedCount: 1, importedFileId: imported.id }
+            : p,
+        )
+        return updateQueueItem(prev, activeItem.id, {
+          packetGroupDraft: null,
+          selectedPageIds: [],
+          pageItems: updatedPageItems,
+        })
+      })
+    } catch (err) {
+      setGlobalError(err.message || String(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   function handleUpdateActiveText(text) {
     if (!activeItem) return
     setQueue((prev) => updateQueueItem(prev, activeItem.id, { extractedText: text }))
@@ -741,6 +836,101 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     a.download = 'bulk-import-template.csv'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // ---- Packet group draft panel ----------------------------------------------
+
+  function renderPacketGroupDraftPanel() {
+    const draft = activeItem && activeItem.packetGroupDraft
+    if (!draft) return null
+    const canImport = Boolean(draft.customerName)
+    const hasDupWarning = draft.warnings.some((w) => w.toLowerCase().includes('duplicate'))
+    const LS = { fontSize: 10 }
+    const FS = { marginTop: 4, width: '100%' }
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span className="eyebrow eyebrow-ink">SUGGESTED PACKET</span>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 11 }} onClick={handleClearPacketGroupDraft}>
+            Cancel
+          </button>
+        </div>
+
+        <div className="card-flat" style={{ padding: '8px 12px', marginBottom: 10 }}>
+          <p className="body-sm" style={{ color: 'var(--slate)' }}>
+            Pages: {draft.pageNumbers.join(', ')}
+          </p>
+          {draft.detectedDocTypes.length > 0 && (
+            <p className="body-sm" style={{ color: 'var(--slate)', marginTop: 2 }}>
+              Types: {draft.detectedDocTypes.map((t) => DOC_TYPE_LABELS[t] || t).join(', ')}
+            </p>
+          )}
+          {draft.quoteNumbers.length > 0 && (
+            <p className="body-sm" style={{ color: 'var(--slate)', marginTop: 2 }}>
+              Quote #: {draft.quoteNumbers.join(', ')}
+            </p>
+          )}
+        </div>
+
+        {draft.warnings.length > 0 && (
+          <div className="card" style={{ padding: 8, marginBottom: 10, borderLeft: `3px solid ${hasDupWarning ? 'var(--ember-dark)' : 'var(--ember)'}` }}>
+            {draft.warnings.map((w, i) => (
+              <p key={i} className="body-sm" style={{ color: 'var(--ember-dark)', margin: i > 0 ? '4px 0 0' : 0 }}>{w}</p>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px', marginBottom: 10 }}>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>NAME</label>
+            <input className="field" value={draft.customerName} onChange={(e) => handleUpdatePacketDraftField('customerName', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>PHONE</label>
+            <input className="field" value={draft.phone} onChange={(e) => handleUpdatePacketDraftField('phone', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>EMAIL</label>
+            <input className="field" value={draft.email} onChange={(e) => handleUpdatePacketDraftField('email', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>ADDRESS</label>
+            <input className="field" value={draft.address} onChange={(e) => handleUpdatePacketDraftField('address', e.target.value)} style={FS} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="eyebrow eyebrow-ink" style={LS}>NOTES</label>
+          <textarea
+            className="field"
+            value={draft.notes}
+            onChange={(e) => handleUpdatePacketDraftField('notes', e.target.value)}
+            rows={2}
+            style={{ marginTop: 4, width: '100%', resize: 'vertical' }}
+          />
+        </div>
+
+        {globalError && (
+          <div className="card" style={{ padding: 8, marginBottom: 8, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ fontSize: 12 }}
+            onClick={handleImportPacketGroupDraft}
+            disabled={importing || !canImport}
+          >
+            {importing ? 'Importing…' : 'Import packet →'}
+          </button>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleClearPacketGroupDraft}>
+            Clear draft
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // ---- Pages phase (multi-page scanned PDF) ----------------------------------
@@ -934,9 +1124,11 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   function renderPagesPhase() {
     const pages = activeItem.pageItems || []
     const activePage = pages.find((p) => p.id === activeItem.activePageId) || null
-    const pagesWithDrafts = pages.filter((p) => p.draftSummary)
-    const suggestions = detectPageGroupSuggestions(pagesWithDrafts)
+    const selectedPageIds = activeItem.selectedPageIds || []
+    const selectedCount = selectedPageIds.length
+    const suggestions = suggestPageGroups(pages)
     const importedCount = pages.filter((p) => p.status === PAGE_STATUS.imported).length
+    const hasPacketDraft = Boolean(activeItem.packetGroupDraft)
 
     return (
       <div>
@@ -950,9 +1142,15 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
           {importedCount > 0 && (
             <span className="body-sm" style={{ color: 'var(--brass)' }}>{importedCount} imported</span>
           )}
+          {selectedCount > 0 && !hasPacketDraft && (
+            <span className="body-sm" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+              {selectedCount} selected
+            </span>
+          )}
         </div>
-        {suggestions.length > 0 && (
-          <div className="card" style={{ padding: '8px 12px', marginBottom: 12, borderLeft: '3px solid var(--brass)' }}>
+
+        {suggestions.length > 0 && !hasPacketDraft && (
+          <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderLeft: '3px solid var(--brass)' }}>
             {suggestions.map((s, i) => (
               <p key={i} className="body-sm" style={{ color: 'var(--slate)', margin: i > 0 ? '4px 0 0' : 0 }}>
                 {s.label}
@@ -960,30 +1158,53 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             ))}
           </div>
         )}
+
+        {selectedCount > 0 && !hasPacketDraft && (
+          <div style={{ marginBottom: 10 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ fontSize: 12 }}
+              onClick={handleBuildPacketGroupDraft}
+            >
+              Create packet draft from {selectedCount} page{selectedCount === 1 ? '' : 's'} →
+            </button>
+          </div>
+        )}
+
         {activeItem.errorMessage && (
           <div className="card" style={{ padding: '6px 12px', marginBottom: 10, borderLeft: '3px solid var(--ember)' }}>
             <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>{activeItem.errorMessage}</p>
           </div>
         )}
+
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-          <div style={{ width: 210, flexShrink: 0, maxHeight: '65vh', overflowY: 'auto' }}>
+          <div style={{ width: 220, flexShrink: 0, maxHeight: '65vh', overflowY: 'auto' }}>
             {pages.map((page) => (
               <PageRow
                 key={page.id}
                 page={page}
-                isActive={page.id === activeItem.activePageId}
-                onActivate={handleActivatePage}
+                isActive={!hasPacketDraft && page.id === activeItem.activePageId}
+                onActivate={hasPacketDraft ? () => {} : handleActivatePage}
+                isSelected={selectedPageIds.includes(page.id)}
+                onToggleSelect={handleTogglePageSelect}
               />
             ))}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {activePage ? renderPageDetail(activePage) : (
-              <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 8 }}>
-                Select a page to review it.
-              </p>
-            )}
+            {hasPacketDraft
+              ? renderPacketGroupDraftPanel()
+              : activePage
+                ? renderPageDetail(activePage)
+                : (
+                  <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 8 }}>
+                    Select a page to review it, or check multiple pages to create a packet.
+                  </p>
+                )
+            }
           </div>
         </div>
+
         {importedCount > 0 && onOpenFilesList && (
           <button
             type="button"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DOC_TYPE_LABELS } from '../lib/scanDocTypeDetector.js'
 import CustomerFileHeader from '../components/file/CustomerFileHeader.jsx'
 import FactRow from '../components/file/FactRow.jsx'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
@@ -24,6 +25,57 @@ import {
   clearFollowUpForFile,
   describeFollowUp,
 } from '../lib/visitActivity.js'
+
+function SourceTrailCard({ file }) {
+  const trail = Array.isArray(file.sourceTrail) && file.sourceTrail.length > 0
+    ? file.sourceTrail[0]
+    : null
+  if (!file.sourceLabel && !trail) return null
+  return (
+    <section className="card-flat" style={{ padding: '12px 16px' }}>
+      <span className="eyebrow eyebrow-ink">SOURCE TRAIL</span>
+      <div style={{ marginTop: 8 }}>
+        {file.sourceLabel && (
+          <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 4 }}>
+            {file.sourceLabel}
+          </p>
+        )}
+        {trail && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px' }}>
+            {trail.sourceFileName && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                File: {trail.sourceFileName}
+              </span>
+            )}
+            {Array.isArray(trail.pageNumbers) && trail.pageNumbers.length > 0 && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Pages: {trail.pageNumbers.join(', ')}
+              </span>
+            )}
+            {Array.isArray(trail.detectedDocTypes) && trail.detectedDocTypes.length > 0 && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Types: {trail.detectedDocTypes.map((t) => DOC_TYPE_LABELS[t] || t).join(', ')}
+              </span>
+            )}
+            {Array.isArray(trail.quoteNumbers) && trail.quoteNumbers.length > 0 && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Quote #: {trail.quoteNumbers.join(', ')}
+              </span>
+            )}
+            {trail.importedAt && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Imported: {(() => {
+                  try { return new Date(trail.importedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) }
+                  catch { return trail.importedAt }
+                })()}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
 
 function FactsCard({ file }) {
   const lensFacts = lensFactsForDisplay(file)
@@ -529,6 +581,11 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             disabled={!fileId}
           />
         </div>
+        {(display.sourceLabel || (Array.isArray(display.sourceTrail) && display.sourceTrail.length > 0)) && (
+          <div style={{ marginTop: 18 }}>
+            <SourceTrailCard file={display} />
+          </div>
+        )}
       </div>
     )
   }
