@@ -152,3 +152,28 @@ describe('buildBensonQuoteDraftFromZones', () => {
     assert.equal(typeof fields.quoteNumber, 'string')
   })
 })
+
+describe('looksLikeName — zip code rejection', () => {
+  it('does not extract "Walworth, Wisconsin 53184" as a name', () => {
+    const text = 'Invoice Address\nWalworth, Wisconsin 53184\nTom Schlemer\n262-903-1109'
+    assert.equal(parseBensonInvoiceAddressZone(text).customerName, 'Tom Schlemer')
+  })
+  it('does not extract a line ending with a 5-digit zip as a name', () => {
+    const text = 'Invoice Address\nSome City 60601\nJane Doe\n555-000-1234'
+    assert.equal(parseBensonInvoiceAddressZone(text).customerName, 'Jane Doe')
+  })
+})
+
+describe('parseBensonMetadataZone — OCR noise', () => {
+  it('extracts quote number when "Q" is misread as "O" (Ouote No)', () => {
+    const text = 'Ouote No: 70655\nQuote Date: 11/10/2025'
+    assert.equal(parseBensonMetadataZone(text).quoteNumber, '70655')
+  })
+})
+
+describe('parseBensonDeliveryAddressZone — same as invoice address', () => {
+  it('extracts the street line even when delivery matches invoice address', () => {
+    const text = 'Delivery Address\nW6302 N Walworth Rd\nWalworth, WI 53184'
+    assert.equal(parseBensonDeliveryAddressZone(text).deliveryAddress, 'W6302 N Walworth Rd')
+  })
+})

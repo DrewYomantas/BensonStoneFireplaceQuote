@@ -42,7 +42,7 @@ import {
 } from '../lib/scannedPacketGroups.js'
 
 // Doc types that typically carry a BisTrack quote number.
-const BENSON_QUOTE_DOC_TYPES = new Set(['benson_quote', 'firebuilder_quote'])
+const BENSON_QUOTE_DOC_TYPES = new Set(['benson_quote'])
 
 // ---- Row-level status badge (for review rows) --------------------------------
 

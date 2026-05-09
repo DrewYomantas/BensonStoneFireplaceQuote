@@ -140,7 +140,7 @@ function extractEmail(text) {
 
 // Using literal space (not \s) so the capture group cannot consume newlines and
 // eat the next labeled line in the same match.
-const NAME_LABEL_RE = /(?:customer|client|name|contact|bill\s*to|sold\s*to|ship\s*to|attention|attn|dear|prepared\s*for)[\s:]+([A-Z][a-zA-Z ',.]{1,50})/gim
+const NAME_LABEL_RE = /(?:customer|client|name|contact|bill\s*to|sold\s*to|ship\s*to|attention|attn|dear|prepared\s*for)[\s:]+([A-Z][a-zA-Z ',.&]{1,50})/gim
 
 // Label on its own line, customer name on the next line.
 const INVOICE_ADDRESS_NEXT_LINE_RE = /(?:invoice\s*address|bill\s*address)[\s:]*\n+([^\n]+)/i

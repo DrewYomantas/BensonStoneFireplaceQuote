@@ -31,7 +31,8 @@ const SKIP_DELIVERY_RE = [
 ]
 
 const PHONE_RE = /\b(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b/
-const QUOTE_NUM_ZONE_RE = /quote\s*no\.?\s*[:#\s]+(\d{3,8})/i
+// Allow "Ouote" as an OCR-noise variant of "Quote" (Q misread as O).
+const QUOTE_NUM_ZONE_RE = /(?:quote|ouote)\s*no\.?\s*[:#\s]*(\d{3,8})/i
 const QUOTE_DATE_ZONE_RE = /quote\s*date\s*[:#\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i
 
 // Label words that would appear at the start of a field-label line — not a name.
@@ -62,6 +63,8 @@ function looksLikeName(line) {
   if (STORE_HINTS.test(trimmed)) return false
   // Reject city/state/zip lines (e.g. "Walworth, WI 53184")
   if (/,\s*[A-Z]{2}\s+\d{5}/.test(trimmed)) return false
+  // Reject lines ending with a zip code — handles full state names like "Walworth, Wisconsin 53184"
+  if (/\b\d{5}(-\d{4})?\s*$/.test(trimmed)) return false
   const words = trimmed.split(/\s+/)
   if (words.length > 5) return false
   if (!/^[A-Z]/.test(words[0])) return false

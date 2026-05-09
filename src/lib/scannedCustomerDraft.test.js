@@ -630,3 +630,11 @@ describe('buildScannedCustomerDraft — customer name review warning', () => {
     assert.ok(!warnings.some((w) => w.toLowerCase().includes('customer name')), `Should not warn on trivial text`)
   })
 })
+
+describe('buildScannedCustomerDraft — ampersand in customer name', () => {
+  it('extracts "Dale & Tiff Linzmayer" when labeled Customer:', () => {
+    const text = 'Customer: Dale & Tiff Linzmayer\nPhone: 815-555-0001\nService Order #12345'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.equal(fields.customerName, 'Dale & Tiff Linzmayer')
+  })
+})
