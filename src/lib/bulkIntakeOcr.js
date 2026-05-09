@@ -17,6 +17,7 @@ export function ocrPageWarning(pageCount) {
 // Human-readable status label for an in-progress OCR tick.
 export function ocrProgressLabel(progress) {
   if (!progress) return 'Extracting text…'
+  if (progress.stage === 'loading-engine') return 'Loading OCR engine — first run may take a moment…'
   if (progress.stage === 'rendering') {
     return `Preparing page ${progress.pageNumber} of ${progress.pageCount}…`
   }

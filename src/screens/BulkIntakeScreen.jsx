@@ -9,6 +9,11 @@ import {
 } from '../lib/customerBulkIntake.js'
 import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
 import {
+  buildScannedCustomerDraft,
+  detectScannedDraftWarnings,
+  commitScannedDraft,
+} from '../lib/scannedCustomerDraft.js'
+import {
   QUEUE_STATUS,
   QUEUE_STATUS_LABELS,
   QUEUE_STATUS_CLS,
@@ -168,6 +173,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   const [globalError, setGlobalError] = useState('')
   const [existingFiles, setExistingFiles] = useState([])
   const [importing, setImporting] = useState(false)
+  const [showScanOcrText, setShowScanOcrText] = useState(false)
   const fileInputRef = useRef(null)
   const addMoreRef = useRef(null)
 
@@ -200,6 +206,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
 
   useEffect(() => {
     setGlobalError('')
+    setShowScanOcrText(false)
   }, [activeId])
 
   function readFileAsText(file) {
@@ -420,6 +427,63 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
   }
 
+  function handleBuildScanDraft() {
+    if (!activeItem) return
+    const { fields, warnings } = buildScannedCustomerDraft(
+      activeItem.extractedText,
+      { existingFiles },
+    )
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        phase: 'scan-draft',
+        status: QUEUE_STATUS.parsed,
+        scanDraftFields: fields,
+        scanDraftWarnings: warnings,
+      }),
+    )
+    setGlobalError('')
+  }
+
+  function handleUpdateScanDraftField(key, value) {
+    if (!activeItem) return
+    const updated = { ...(activeItem.scanDraftFields || {}), [key]: value }
+    const warnings = detectScannedDraftWarnings(updated, existingFiles)
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        scanDraftFields: updated,
+        scanDraftWarnings: warnings,
+      }),
+    )
+  }
+
+  async function handleImportScanDraft() {
+    if (!activeItem || importing) return
+    const fields = activeItem.scanDraftFields || {}
+    if (!fields.customerName) { setGlobalError('Name is required before importing.'); return }
+    setImporting(true)
+    setGlobalError('')
+    try {
+      const ready = await ensureSalesOsBoot()
+      if (!ready.ok) { setGlobalError(ready.error || 'Storage unavailable'); return }
+      const storage = getSalesOsStorage()
+      const file = await commitScannedDraft(fields, storage)
+      const freshFiles = await listCustomerFilesDurable(storage)
+      setExistingFiles(freshFiles)
+      setQueue((prev) =>
+        updateQueueItem(prev, activeItem.id, {
+          phase: 'result',
+          status: QUEUE_STATUS.imported,
+          importedCount: 1,
+          importResult: { imported: [file], errors: [] },
+        }),
+      )
+    } catch (err) {
+      setGlobalError(err.message || String(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   function handleUpdateActiveText(text) {
     if (!activeItem) return
     setQueue((prev) => updateQueueItem(prev, activeItem.id, { extractedText: text }))
@@ -447,6 +511,110 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     a.download = 'bulk-import-template.csv'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // ---- Scan draft phase ------------------------------------------------------
+
+  function renderScanDraftPhase() {
+    const fields = activeItem.scanDraftFields || {
+      customerName: '', customerPhone: '', customerEmail: '',
+      projectAddress: '', quoteNumber: '', quoteDate: '', existingNotes: '',
+    }
+    const warnings = activeItem.scanDraftWarnings || []
+    const canImport = Boolean(fields.customerName)
+    const FIELD_STYLE = { marginTop: 4, width: '100%' }
+    const LABEL_STYLE = { fontSize: 10 }
+    return (
+      <div>
+        <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 12 }}>
+          OCR finished. Review before importing.
+        </p>
+        {warnings.length > 0 && (
+          <div className="card" style={{ padding: 10, marginBottom: 14, borderLeft: '3px solid var(--ember-dark)' }}>
+            {warnings.map((w, i) => (
+              <p key={i} className="body-sm" style={{ color: 'var(--ember-dark)', margin: i > 0 ? '4px 0 0' : 0 }}>{w}</p>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginBottom: 14 }}>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>NAME</label>
+            <input className="field" value={fields.customerName} onChange={(e) => handleUpdateScanDraftField('customerName', e.target.value)} style={FIELD_STYLE} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>PHONE</label>
+            <input className="field" value={fields.customerPhone} onChange={(e) => handleUpdateScanDraftField('customerPhone', e.target.value)} style={FIELD_STYLE} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>EMAIL</label>
+            <input className="field" value={fields.customerEmail} onChange={(e) => handleUpdateScanDraftField('customerEmail', e.target.value)} style={FIELD_STYLE} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>ADDRESS</label>
+            <input className="field" value={fields.projectAddress} onChange={(e) => handleUpdateScanDraftField('projectAddress', e.target.value)} style={FIELD_STYLE} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>QUOTE NUMBER</label>
+            <input className="field" value={fields.quoteNumber} onChange={(e) => handleUpdateScanDraftField('quoteNumber', e.target.value)} style={FIELD_STYLE} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>QUOTE DATE</label>
+            <input className="field" value={fields.quoteDate} onChange={(e) => handleUpdateScanDraftField('quoteDate', e.target.value)} style={FIELD_STYLE} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="eyebrow eyebrow-ink" style={LABEL_STYLE}>NOTES</label>
+          <textarea
+            className="field"
+            value={fields.existingNotes}
+            onChange={(e) => handleUpdateScanDraftField('existingNotes', e.target.value)}
+            rows={3}
+            style={{ marginTop: 4, width: '100%', resize: 'vertical' }}
+          />
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            style={{ fontSize: 12, padding: '3px 10px' }}
+            onClick={() => setShowScanOcrText((s) => !s)}
+          >
+            {showScanOcrText ? '▲ Hide extracted text' : '▼ Show extracted text / Edit OCR text'}
+          </button>
+          {showScanOcrText && (
+            <textarea
+              className="field"
+              value={activeItem.extractedText}
+              onChange={(e) => handleUpdateActiveText(e.target.value)}
+              rows={8}
+              style={{ marginTop: 8, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical' }}
+            />
+          )}
+        </div>
+        {globalError && (
+          <div className="card" style={{ padding: 10, marginBottom: 10, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleImportScanDraft}
+            disabled={importing || !canImport}
+          >
+            {importing ? 'Importing…' : 'Import this draft →'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            onClick={handleParseActive}
+          >
+            Parse as table instead
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // ---- Active panel content --------------------------------------------------
@@ -532,18 +700,32 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
             </div>
           )}
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               className="btn btn-primary"
               onClick={handleParseActive}
               disabled={!canParse}
             >
-              Parse and review →
+              Parse as table / list →
             </button>
+            {activeItem.fileType === 'pdf' && (
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={handleBuildScanDraft}
+                disabled={!canParse}
+              >
+                Build customer draft from this scan
+              </button>
+            )}
           </div>
         </div>
       )
+    }
+
+    if (phase === 'scan-draft') {
+      return renderScanDraftPhase()
     }
 
     if (phase === 'review') {

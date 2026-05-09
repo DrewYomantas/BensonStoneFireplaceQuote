@@ -60,10 +60,12 @@ export function createQueueItem(fileName) {
     errorMessage: '',
     parsedRowCount: 0,
     importedCount: 0,
-    phase: 'input',       // 'input' | 'review' | 'result'
+    phase: 'input',       // 'input' | 'review' | 'scan-draft' | 'result'
     draftRows: [],
     selectedIds: [],      // array of selected row _ids (converted to Set in screen)
     importResult: null,
+    scanDraftFields: null,    // populated when phase === 'scan-draft'
+    scanDraftWarnings: [],
   }
 }
 

@@ -90,6 +90,7 @@ export async function extractOcrFromPdf(file, options = {}) {
   throwIfAborted(signal)
   const images = await renderPdfPagesToImages(file, { maxPages, onProgress, signal })
   throwIfAborted(signal)
+  onProgress?.({ stage: 'loading-engine' })
   const { createWorker } = await import('tesseract.js')
   const worker = await createWorker('eng')
   const pages = []
