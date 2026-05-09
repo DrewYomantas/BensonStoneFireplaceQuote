@@ -139,10 +139,10 @@ Customer-facing copy (proposals, disclaimers, warm recap, goal summary): do not 
 
 React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `bulkIntake`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
 - `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
 - `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
-- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `BulkIntakeScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
@@ -250,6 +250,16 @@ Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuo
 Two intentional violations exist; `npm run lint` reports both. Leave alone in unrelated work:
 - `src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter — fixing it would change a public function signature.
 - `src/lib/customerPipelineCsv.js` `parseCsv` line 24 has an irregular-whitespace character — see the "CSV Parsing — Intentional Lenience" section below for why.
+
+## Bulk Intake — Multi-File Queue
+
+`BulkIntakeScreen` manages a session-only queue of files (CSV, TSV, TXT, PDF). Each item tracks extraction state independently; only one item is active at a time.
+
+- `src/lib/bulkIntakeQueue.js` — pure queue helpers: `QUEUE_STATUS` enum, `createQueueItem`, `updateQueueItem`, `queueItemCountLabel`, `hasUnfinishedItems`. Queue items **never** store File objects, raw bytes, OCR images, or local file paths.
+- `src/lib/bulkIntakeOcr.js` — pure OCR quality helpers: `isOcrTextWeak` (true when non-whitespace chars < 80), `ocrPageWarning` (warns when page count > `OCR_PAGE_LIMIT = 8`), `ocrProgressLabel`.
+- PDFs: `extractTextFromPdf` first; if `embeddedTextLikelyMissing`, fall through to `extractOcrFromPdf` (Tesseract). Result lands in `item.extractedText` — editable before parse. Weak OCR → `needs-cleanup` status.
+- After each import, `existingFiles` is refreshed from storage so duplicate detection works across files in the same session.
+- `selectedIds` is stored as an array on the queue item (not a Set) to avoid Set-in-state issues; converted to a Set via `useMemo` in the screen.
 
 ## CSV Parsing — Intentional Lenience
 
