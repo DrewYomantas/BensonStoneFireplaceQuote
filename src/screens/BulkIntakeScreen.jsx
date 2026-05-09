@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
@@ -8,8 +8,16 @@ import {
   STATUS_LABELS,
 } from '../lib/customerBulkIntake.js'
 import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
+import {
+  QUEUE_STATUS,
+  QUEUE_STATUS_LABELS,
+  QUEUE_STATUS_CLS,
+  createQueueItem,
+  updateQueueItem,
+  queueItemCountLabel,
+} from '../lib/bulkIntakeQueue.js'
 
-// ---- Status badge ----------------------------------------------------------
+// ---- Row-level status badge (for review rows) --------------------------------
 
 const STATUS_CLS = {
   ready: 'source source-verified',
@@ -26,18 +34,12 @@ function StatusBadge({ status }) {
   return <span className={cls}>{label.toUpperCase()}</span>
 }
 
-// ---- Compact ready row (one line) ------------------------------------------
+// ---- Compact ready row -------------------------------------------------------
 
 function ReadyRow({ row, checked, onToggle }) {
   const contact = [row.customerPhone, row.customerEmail].filter(Boolean).join(' · ')
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '6px 0',
-        borderBottom: '1px solid var(--stone-150)',
-      }}
-    >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--stone-150)' }}>
       <input
         type="checkbox"
         checked={checked}
@@ -45,35 +47,19 @@ function ReadyRow({ row, checked, onToggle }) {
         style={{ flexShrink: 0, accentColor: 'var(--brass)', width: 16, height: 16 }}
         aria-label={`Select ${row.customerName} for import`}
       />
-      <span
-        className="body-sm"
-        style={{
-          fontWeight: 600, color: 'var(--ink)',
-          flex: '0 0 200px', overflow: 'hidden',
-          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}
-      >
+      <span className="body-sm" style={{ fontWeight: 600, color: 'var(--ink)', flex: '0 0 200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {row.customerName}
       </span>
-      <span className="body-sm" style={{ color: 'var(--slate)', flex: 1, minWidth: 0 }}>
-        {contact}
-      </span>
+      <span className="body-sm" style={{ color: 'var(--slate)', flex: 1, minWidth: 0 }}>{contact}</span>
     </div>
   )
 }
 
-// ---- Issue row (needs a decision) ------------------------------------------
+// ---- Issue row (needs a decision) -------------------------------------------
 
 function IssueRow({ row, checked, disabled, onToggle }) {
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        padding: '8px 0',
-        borderBottom: '1px solid var(--stone-150)',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--stone-150)', opacity: disabled ? 0.5 : 1 }}>
       <input
         type="checkbox"
         checked={checked}
@@ -112,7 +98,56 @@ function IssueRow({ row, checked, disabled, onToggle }) {
   )
 }
 
-// ---- Default selection logic -----------------------------------------------
+// ---- Queue sidebar row -------------------------------------------------------
+
+function QueueRow({ item, isActive, onActivate, onRemove }) {
+  const countLabel = queueItemCountLabel(item)
+  const busy = item.status === QUEUE_STATUS.extracting || item.status === QUEUE_STATUS.ocrRunning
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onActivate(item.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onActivate(item.id) }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer',
+        background: isActive ? 'var(--stone-100)' : 'transparent', borderRadius: 6,
+        borderLeft: isActive ? '3px solid var(--brass)' : '3px solid transparent', minWidth: 0,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {item.fileName || 'Pasted text'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+          <span className={QUEUE_STATUS_CLS[item.status]} style={{ fontSize: 10, padding: '1px 5px' }}>
+            {QUEUE_STATUS_LABELS[item.status]}
+          </span>
+          {countLabel && <span style={{ fontSize: 11, color: 'var(--slate)' }}>{countLabel}</span>}
+        </div>
+        {busy && item.progressLabel && (
+          <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 2 }}>{item.progressLabel}</div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onRemove(item.id) }}
+        disabled={busy}
+        style={{
+          flexShrink: 0, background: 'none', border: 'none',
+          cursor: busy ? 'not-allowed' : 'pointer',
+          color: 'var(--slate-soft)', fontSize: 16, padding: '2px 4px', lineHeight: 1,
+          opacity: busy ? 0.4 : 1,
+        }}
+        aria-label={`Remove ${item.fileName || 'file'} from queue`}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
+// ---- Default selection logic ------------------------------------------------
 
 function defaultSelected(rows) {
   const s = new Set()
@@ -124,22 +159,30 @@ function defaultSelected(rows) {
   return s
 }
 
-// ---- Screen ----------------------------------------------------------------
+// ---- Screen -----------------------------------------------------------------
 
 export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
+  const [queue, setQueue] = useState([])
+  const [activeId, setActiveId] = useState(null)
   const [pasteText, setPasteText] = useState('')
-  const [phase, setPhase] = useState('input')    // 'input' | 'review' | 'result'
-  const [draftRows, setDraftRows] = useState([])
-  const [selected, setSelected] = useState(new Set())
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [globalError, setGlobalError] = useState('')
   const [existingFiles, setExistingFiles] = useState([])
-  const [extracting, setExtracting] = useState(false)
-  const [fileName, setFileName] = useState('')
-  const [ocrProgress, setOcrProgress] = useState(null)
-  const [ocrNote, setOcrNote] = useState('')
+  const [importing, setImporting] = useState(false)
   const fileInputRef = useRef(null)
+  const addMoreRef = useRef(null)
+
+  const activeItem = useMemo(
+    () => queue.find((item) => item.id === activeId) || null,
+    [queue, activeId],
+  )
+  const activeSelectedSet = useMemo(
+    () => new Set(activeItem?.selectedIds || []),
+    [activeItem?.selectedIds],
+  )
+  const activeSelectedCount = useMemo(
+    () => (activeItem?.draftRows || []).filter((r) => activeSelectedSet.has(r._id)).length,
+    [activeItem?.draftRows, activeSelectedSet],
+  )
 
   useEffect(() => {
     ;(async () => {
@@ -155,113 +198,244 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     })()
   }, [])
 
-  async function handleFileChange(e) {
-    const file = e.target.files && e.target.files[0]
-    if (!file) return
-    e.target.value = ''
-    setErrorMsg('')
-    setOcrProgress(null)
-    setOcrNote('')
+  useEffect(() => {
+    setGlobalError('')
+  }, [activeId])
 
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result || '')
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsText(file)
+    })
+  }
+
+  async function processOneFile(file, itemId) {
     const ext = file.name.split('.').pop().toLowerCase()
 
     if (ext === 'xlsx' || ext === 'xls') {
-      setErrorMsg('Excel files cannot be read directly. In Excel: File → Save As → CSV (.csv), then upload the CSV.')
+      setQueue((prev) =>
+        updateQueueItem(prev, itemId, {
+          status: QUEUE_STATUS.error,
+          errorMessage: 'Excel files cannot be read directly. In Excel: File → Save As → CSV (.csv), then upload the CSV.',
+        }),
+      )
       return
     }
 
     if (ext === 'pdf') {
-      setFileName(file.name)
-      setExtracting(true)
+      setQueue((prev) =>
+        updateQueueItem(prev, itemId, { status: QUEUE_STATUS.extracting, progressLabel: 'Reading PDF…' }),
+      )
       try {
         const { extractTextFromPdf, extractOcrFromPdf } = await import('../lib/pdfTextExtraction.js')
         const { rawText, embeddedTextLikelyMissing, pageCount } = await extractTextFromPdf(file)
         if (embeddedTextLikelyMissing) {
-          const warning = ocrPageWarning(pageCount)
-          if (warning) setErrorMsg(warning)
+          const pageWarn = ocrPageWarning(pageCount)
           const maxPages = Math.min(pageCount, OCR_PAGE_LIMIT)
-          setOcrProgress({ stage: 'ocr', pageNumber: 0, pageCount: maxPages })
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, {
+              status: QUEUE_STATUS.ocrRunning,
+              progressLabel: ocrProgressLabel({ stage: 'ocr', pageNumber: 0, pageCount: maxPages }),
+              errorMessage: pageWarn || '',
+            }),
+          )
           const ocrResult = await extractOcrFromPdf(file, {
             maxPages,
-            onProgress: (p) => setOcrProgress(p),
+            onProgress: (p) =>
+              setQueue((prev) => updateQueueItem(prev, itemId, { progressLabel: ocrProgressLabel(p) })),
           })
           const text = ocrResult.rawText
-          setPasteText(text)
-          setOcrNote(
-            isOcrTextWeak(text)
-              ? 'OCR finished, but the result may need cleanup before parsing.'
-              : 'OCR complete. Review the extracted text before parsing.'
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, {
+              extractedText: text,
+              status: isOcrTextWeak(text) ? QUEUE_STATUS.needsCleanup : QUEUE_STATUS.readyToParse,
+              progressLabel: '',
+            }),
           )
         } else {
-          setPasteText(rawText)
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, {
+              extractedText: rawText,
+              status: QUEUE_STATUS.readyToParse,
+              progressLabel: '',
+            }),
+          )
         }
       } catch (err) {
-        setErrorMsg('Could not read PDF: ' + (err.message || 'Unknown error'))
-        setFileName('')
-      } finally {
-        setExtracting(false)
-        setOcrProgress(null)
+        setQueue((prev) =>
+          updateQueueItem(prev, itemId, {
+            status: QUEUE_STATUS.error,
+            errorMessage: 'Could not read PDF: ' + (err.message || 'Unknown error'),
+            progressLabel: '',
+          }),
+        )
       }
       return
     }
 
     // CSV / TSV / TXT
-    setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = (ev) => setPasteText(ev.target.result || '')
-    reader.readAsText(file)
+    setQueue((prev) =>
+      updateQueueItem(prev, itemId, { status: QUEUE_STATUS.extracting, progressLabel: 'Reading…' }),
+    )
+    try {
+      const text = await readFileAsText(file)
+      setQueue((prev) =>
+        updateQueueItem(prev, itemId, {
+          extractedText: text,
+          status: QUEUE_STATUS.readyToParse,
+          progressLabel: '',
+        }),
+      )
+    } catch (err) {
+      setQueue((prev) =>
+        updateQueueItem(prev, itemId, {
+          status: QUEUE_STATUS.error,
+          errorMessage: 'Could not read file: ' + (err.message || 'Unknown error'),
+          progressLabel: '',
+        }),
+      )
+    }
   }
 
-  function handleParse() {
-    setErrorMsg('')
+  async function processFiles(fileList) {
+    const files = Array.from(fileList)
+    if (!files.length) return
+    const newItems = files.map((f) => createQueueItem(f.name))
+    const wasEmpty = queue.length === 0
+    setQueue((prev) => [...prev, ...newItems])
+    if (wasEmpty) setActiveId(newItems[0].id)
+    for (let i = 0; i < files.length; i++) {
+      await processOneFile(files[i], newItems[i].id)
+    }
+  }
+
+  function handleFileInputChange(e) {
+    const files = e.target.files
+    if (!files || !files.length) return
+    e.target.value = ''
+    setGlobalError('')
+    processFiles(files)
+  }
+
+  function handlePasteQueue() {
     const text = pasteText.trim()
-    if (!text) { setErrorMsg('Paste or upload text to parse.'); return }
+    if (!text) { setGlobalError('Paste text before parsing.'); return }
     const rows = buildBulkIntakeReview(text, existingFiles)
-    if (!rows.length) { setErrorMsg('No data rows found. Check that your text has a header row and at least one data row.'); return }
-    setDraftRows(rows)
-    setSelected(defaultSelected(rows))
-    setPhase('review')
+    if (!rows.length) {
+      setGlobalError('No data rows found. Check that your text has a header row and at least one data row.')
+      return
+    }
+    const defaultSel = defaultSelected(rows)
+    const base = createQueueItem('Pasted text')
+    const item = {
+      ...base,
+      fileType: 'paste',
+      extractedText: text,
+      phase: 'review',
+      status: QUEUE_STATUS.parsed,
+      draftRows: rows,
+      selectedIds: Array.from(defaultSel),
+      parsedRowCount: rows.length,
+    }
+    setQueue([item])
+    setActiveId(item.id)
+    setPasteText('')
+    setGlobalError('')
   }
 
-  function toggleRow(id) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  function handleParseActive() {
+    if (!activeItem) return
+    const text = activeItem.extractedText.trim()
+    if (!text) { setGlobalError('No text to parse — edit the extracted text.'); return }
+    const rows = buildBulkIntakeReview(text, existingFiles)
+    if (!rows.length) {
+      setGlobalError('No data rows found. Check that your text has a header row and at least one data row.')
+      return
+    }
+    const defaultSel = defaultSelected(rows)
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        phase: 'review',
+        status: QUEUE_STATUS.parsed,
+        draftRows: rows,
+        selectedIds: Array.from(defaultSel),
+        parsedRowCount: rows.length,
+      }),
+    )
+    setGlobalError('')
   }
 
-  function selectAll() {
-    const eligible = draftRows.filter((r) => r.status !== 'missing-name').map((r) => r._id)
-    setSelected(new Set(eligible))
+  function handleToggleRow(rowId) {
+    if (!activeItem) return
+    const has = activeItem.selectedIds.includes(rowId)
+    setQueue((prev) =>
+      updateQueueItem(prev, activeItem.id, {
+        selectedIds: has
+          ? activeItem.selectedIds.filter((id) => id !== rowId)
+          : [...activeItem.selectedIds, rowId],
+      }),
+    )
   }
 
-  function deselectAll() {
-    setSelected(new Set())
+  function handleSelectAll() {
+    if (!activeItem) return
+    const eligible = (activeItem.draftRows || [])
+      .filter((r) => r.status !== 'missing-name')
+      .map((r) => r._id)
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { selectedIds: eligible }))
   }
 
-  async function handleImport() {
-    if (importing) return
-    const toImport = draftRows.filter((r) => selected.has(r._id))
-    if (!toImport.length) { setErrorMsg('No rows selected. Check the boxes next to the rows you want to import.'); return }
+  function handleDeselectAll() {
+    if (!activeItem) return
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { selectedIds: [] }))
+  }
+
+  async function handleImportActive() {
+    if (!activeItem || importing) return
+    const toImport = (activeItem.draftRows || []).filter((r) => activeSelectedSet.has(r._id))
+    if (!toImport.length) { setGlobalError('No rows selected.'); return }
     setImporting(true)
-    setErrorMsg('')
+    setGlobalError('')
     try {
       const ready = await ensureSalesOsBoot()
-      if (!ready.ok) { setErrorMsg(ready.error || 'Storage unavailable'); return }
+      if (!ready.ok) { setGlobalError(ready.error || 'Storage unavailable'); return }
       const storage = getSalesOsStorage()
       const result = await commitBulkIntakeDrafts(toImport, storage)
-      setImportResult(result)
-      if (result.imported.length > 0) {
-        setExistingFiles((prev) => [...prev, ...result.imported])
-      }
-      setPhase('result')
+      const freshFiles = await listCustomerFilesDurable(storage)
+      setExistingFiles(freshFiles)
+      setQueue((prev) =>
+        updateQueueItem(prev, activeItem.id, {
+          phase: 'result',
+          status: QUEUE_STATUS.imported,
+          importedCount: result.imported.length,
+          importResult: result,
+        }),
+      )
     } catch (err) {
-      setErrorMsg(err.message || String(err))
+      setGlobalError(err.message || String(err))
     } finally {
       setImporting(false)
     }
+  }
+
+  function handleUpdateActiveText(text) {
+    if (!activeItem) return
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { extractedText: text }))
+  }
+
+  function handleRemoveFromQueue(id) {
+    const remaining = queue.filter((item) => item.id !== id)
+    setQueue(remaining)
+    if (id === activeId) setActiveId(remaining.length > 0 ? remaining[0].id : null)
+  }
+
+  function handleStartOver() {
+    setQueue([])
+    setActiveId(null)
+    setPasteText('')
+    setGlobalError('')
   }
 
   function downloadTemplate() {
@@ -275,45 +449,245 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     URL.revokeObjectURL(url)
   }
 
-  function handleReset() {
-    setPasteText('')
-    setFileName('')
-    setDraftRows([])
-    setSelected(new Set())
-    setImportResult(null)
-    setErrorMsg('')
-    setOcrProgress(null)
-    setOcrNote('')
-    setPhase('input')
+  // ---- Active panel content --------------------------------------------------
+
+  function renderActiveContent() {
+    if (!activeItem) {
+      return (
+        <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 32 }}>
+          Select a file from the queue to review it.
+        </p>
+      )
+    }
+
+    const { status, phase, errorMessage } = activeItem
+
+    if (status === QUEUE_STATUS.waiting) {
+      return (
+        <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 32 }}>In queue…</p>
+      )
+    }
+
+    if (status === QUEUE_STATUS.extracting || status === QUEUE_STATUS.ocrRunning) {
+      return (
+        <div style={{ paddingTop: 24 }}>
+          <p className="body-sm" style={{ color: 'var(--slate)' }}>
+            {activeItem.progressLabel || 'Processing…'}
+          </p>
+          {errorMessage && (
+            <p className="body-sm" style={{ color: 'var(--ember-dark)', marginTop: 8 }}>{errorMessage}</p>
+          )}
+        </div>
+      )
+    }
+
+    if (status === QUEUE_STATUS.error) {
+      return (
+        <div style={{ paddingTop: 8 }}>
+          <div className="card" style={{ padding: 12, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{errorMessage || 'An error occurred.'}</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            style={{ marginTop: 12 }}
+            onClick={() => handleRemoveFromQueue(activeItem.id)}
+          >
+            Remove from queue
+          </button>
+        </div>
+      )
+    }
+
+    if (phase === 'input') {
+      const isWeak = status === QUEUE_STATUS.needsCleanup
+      const canParse = activeItem.extractedText.trim().length > 0
+      return (
+        <div>
+          {errorMessage && (
+            <div className="card" style={{ padding: 10, marginBottom: 12, borderLeft: '3px solid var(--ember)' }}>
+              <p className="body-sm" style={{ color: 'var(--ink)' }}>{errorMessage}</p>
+            </div>
+          )}
+          {isWeak && (
+            <div className="card" style={{ padding: 10, marginBottom: 12, borderLeft: '3px solid var(--ember-dark)' }}>
+              <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>
+                OCR finished, but the result may need cleanup before parsing. Edit the text below if needed.
+              </p>
+            </div>
+          )}
+          <label htmlFor={`text-${activeItem.id}`} className="eyebrow eyebrow-ink">
+            EXTRACTED TEXT
+          </label>
+          <textarea
+            id={`text-${activeItem.id}`}
+            className="field"
+            value={activeItem.extractedText}
+            onChange={(e) => handleUpdateActiveText(e.target.value)}
+            rows={10}
+            style={{ marginTop: 8, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 13, resize: 'vertical' }}
+          />
+          {globalError && (
+            <div className="card" style={{ padding: 10, margin: '10px 0', borderLeft: '3px solid var(--ember)' }}>
+              <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+            </div>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleParseActive}
+              disabled={!canParse}
+            >
+              Parse and review →
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (phase === 'review') {
+      const issueRows = (activeItem.draftRows || []).filter((r) => r.status !== 'ready')
+      const readyRows = (activeItem.draftRows || []).filter((r) => r.status === 'ready')
+      return (
+        <div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+            <span className="body-sm" style={{ color: 'var(--slate)' }}>
+              {(activeItem.draftRows || []).length} rows parsed
+            </span>
+            {readyRows.length > 0 && (
+              <span className="body-sm" style={{ color: 'var(--brass)' }}>· {readyRows.length} ready</span>
+            )}
+            {issueRows.length > 0 && (
+              <span className="body-sm" style={{ color: 'var(--ember-dark)' }}>
+                · {issueRows.length} {issueRows.length === 1 ? 'needs a decision' : 'need a decision'}
+              </span>
+            )}
+            <span className="body-sm" style={{ color: 'var(--slate)' }}>· {activeSelectedCount} selected</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <button type="button" className="btn btn-quiet" style={{ padding: '4px 10px' }} onClick={handleSelectAll}>
+              Select all importable
+            </button>
+            <button type="button" className="btn btn-quiet" style={{ padding: '4px 10px' }} onClick={handleDeselectAll}>
+              Deselect all
+            </button>
+          </div>
+
+          {globalError && (
+            <div className="card" style={{ padding: 10, marginBottom: 12, borderLeft: '3px solid var(--ember)' }}>
+              <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+            </div>
+          )}
+
+          {issueRows.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <span className="eyebrow eyebrow-ember">NEEDS A DECISION ({issueRows.length})</span>
+              <div style={{ marginTop: 6 }}>
+                {issueRows.map((row) => (
+                  <IssueRow
+                    key={row._id}
+                    row={row}
+                    checked={activeSelectedSet.has(row._id)}
+                    disabled={row.status === 'missing-name'}
+                    onToggle={handleToggleRow}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {readyRows.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <span className="eyebrow eyebrow-ink">READY TO IMPORT ({readyRows.length})</span>
+              <div style={{ marginTop: 6 }}>
+                {readyRows.map((row) => (
+                  <ReadyRow
+                    key={row._id}
+                    row={row}
+                    checked={activeSelectedSet.has(row._id)}
+                    onToggle={handleToggleRow}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleImportActive}
+              disabled={importing || activeSelectedCount === 0}
+            >
+              {importing ? 'Importing…' : `Import ${activeSelectedCount} selected`}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (phase === 'result') {
+      const { imported = [], errors = [] } = activeItem.importResult || {}
+      return (
+        <div style={{ maxWidth: 480 }}>
+          <div className="card-flat" style={{ padding: '20px 22px', marginBottom: 16 }}>
+            <p style={{ fontSize: 36, fontWeight: 700, color: 'var(--brass)', lineHeight: 1.1, margin: 0 }}>
+              {imported.length}
+            </p>
+            <p className="body-sm" style={{ color: 'var(--ink)', marginTop: 6, fontWeight: 600 }}>
+              Customer {imported.length === 1 ? 'File' : 'Files'} imported
+            </p>
+            {errors.length > 0 && (
+              <p className="body-sm" style={{ color: 'var(--ember-dark)', marginTop: 8 }}>
+                {errors.length} row{errors.length === 1 ? '' : 's'} could not be imported
+              </p>
+            )}
+          </div>
+          {errors.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <span className="eyebrow eyebrow-ember">ERRORS</span>
+              <div style={{ marginTop: 6 }}>
+                {errors.map((e, i) => (
+                  <p key={i} className="body-sm" style={{ color: 'var(--ember-dark)', padding: '3px 0' }}>
+                    {e.draft?.customerName || `Row ${i + 1}`}: {e.error}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+          {onOpenFilesList && (
+            <button type="button" className="btn btn-primary" onClick={onOpenFilesList}>
+              View Customer Files →
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    return null
   }
 
-  const selectedCount = draftRows.filter((r) => selected.has(r._id)).length
+  // ---- Empty state -----------------------------------------------------------
 
-  // ---- Render ----
-
-  let body
-
-  if (phase === 'input') {
-    const rowsLoaded = pasteText.trim()
-      ? pasteText.split('\n').filter((l) => l.trim()).length - 1
-      : 0
-
-    body = (
+  function renderEmptyState() {
+    return (
       <div style={{ maxWidth: 720 }}>
         <h2 className="serif-h h2">Bulk Import.</h2>
         <p className="lede" style={{ marginTop: 4 }}>
-          Paste a customer list, upload a CSV, or upload a PDF. Review every row before importing.
+          Upload one or more files, or paste a customer list. Review every row before importing.
         </p>
         <hr className="rule-brass" style={{ margin: '20px 0' }} />
 
         <div style={{ marginBottom: 20 }}>
-          <span className="eyebrow eyebrow-ink">UPLOAD A FILE</span>
+          <span className="eyebrow eyebrow-ink">UPLOAD FILES</span>
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               accept=".csv,.tsv,.txt,.pdf,.xlsx,.xls"
-              onChange={handleFileChange}
+              onChange={handleFileInputChange}
               style={{ display: 'none' }}
               id="bulk-file-picker"
             />
@@ -321,45 +695,21 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               type="button"
               className="btn btn-quiet"
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              disabled={extracting}
             >
-              {extracting ? 'Reading…' : 'Choose file…'}
+              Choose files…
             </button>
-            {extracting && (
-              <span className="body-sm" style={{ color: 'var(--slate)' }}>
-                {ocrProgressLabel(ocrProgress)}
-              </span>
-            )}
-            {!extracting && fileName && (
-              <span className="body-sm" style={{ color: 'var(--brass)' }}>{fileName}</span>
-            )}
-            {!extracting && ocrNote && (
-              <span
-                className="body-sm"
-                style={{ color: ocrNote.includes('cleanup') ? 'var(--ember-dark)' : 'var(--brass)' }}
-              >
-                {ocrNote}
-              </span>
-            )}
-            {!extracting && !fileName && !ocrNote && rowsLoaded > 0 && (
-              <span className="body-sm" style={{ color: 'var(--slate)' }}>
-                {rowsLoaded} data row{rowsLoaded === 1 ? '' : 's'} loaded
-              </span>
-            )}
-          </div>
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <p className="body-sm" style={{ color: 'var(--slate)', margin: 0 }}>
-              CSV, TSV, TXT, or PDF (text-based). Recognized columns: name, phone, email, address, notes, goal.
-            </p>
             <button
               type="button"
               className="btn btn-quiet"
               onClick={downloadTemplate}
-              style={{ flexShrink: 0, fontSize: 12, padding: '3px 10px' }}
+              style={{ fontSize: 12, padding: '3px 10px' }}
             >
               ↓ CSV template
             </button>
           </div>
+          <p className="body-sm" style={{ color: 'var(--slate)', marginTop: 8 }}>
+            CSV, TSV, TXT, or PDF. Recognized columns: name, phone, email, address, notes, goal.
+          </p>
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -370,186 +720,124 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             id="bulk-paste-area"
             className="field"
             value={pasteText}
-            onChange={(e) => { setPasteText(e.target.value); setFileName(''); setOcrNote('') }}
+            onChange={(e) => { setPasteText(e.target.value); setGlobalError('') }}
             placeholder={'name,phone,email,address,notes\nSmith, John,815-555-0001,john@example.com,"123 Main St, Rockford"'}
             rows={6}
             style={{ marginTop: 8, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 13, resize: 'vertical' }}
           />
         </div>
 
-        {errorMsg && (
+        {globalError && (
           <div className="card" style={{ padding: 12, marginBottom: 16, borderLeft: '3px solid var(--ember)' }}>
-            <p className="body-sm" style={{ color: 'var(--ink)' }}>{errorMsg}</p>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
           </div>
         )}
 
         <button
           type="button"
           className="btn btn-primary"
-          onClick={handleParse}
-          disabled={!pasteText.trim() || extracting}
+          onClick={handlePasteQueue}
+          disabled={!pasteText.trim()}
         >
           Parse and review →
         </button>
       </div>
     )
-  } else if (phase === 'review') {
-    const issueRows = draftRows.filter((r) => r.status !== 'ready')
-    const readyRows = draftRows.filter((r) => r.status === 'ready')
+  }
 
-    body = (
-      <div style={{ maxWidth: 800 }}>
-        <div className="hstack" style={{ flexWrap: 'wrap', gap: 10 }}>
-          <h2 className="serif-h h2" style={{ margin: 0 }}>Review rows.</h2>
-          <span className="spacer" />
-          <button type="button" className="btn btn-quiet" onClick={handleReset}>
-            ← Start over
-          </button>
-        </div>
+  // ---- Queue mode layout -----------------------------------------------------
 
-        {/* Summary + selection controls */}
-        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          <span className="body-sm" style={{ color: 'var(--slate)' }}>{draftRows.length} rows parsed</span>
-          {readyRows.length > 0 && (
-            <span className="body-sm" style={{ color: 'var(--brass)' }}>
-              · {readyRows.length} ready
-            </span>
-          )}
-          {issueRows.length > 0 && (
-            <span className="body-sm" style={{ color: 'var(--ember-dark)' }}>
-              · {issueRows.length} {issueRows.length === 1 ? 'needs a decision' : 'need a decision'}
-            </span>
-          )}
-          <span className="body-sm" style={{ color: 'var(--slate)' }}>· {selectedCount} selected</span>
-        </div>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-          <button type="button" className="btn btn-quiet" style={{ padding: '4px 10px' }} onClick={selectAll}>
-            Select all importable
-          </button>
-          <button type="button" className="btn btn-quiet" style={{ padding: '4px 10px' }} onClick={deselectAll}>
-            Deselect all
-          </button>
-        </div>
-
-        {errorMsg && (
-          <div className="card" style={{ padding: 12, margin: '12px 0', borderLeft: '3px solid var(--ember)' }}>
-            <p className="body-sm" style={{ color: 'var(--ink)' }}>{errorMsg}</p>
+  function renderQueueMode() {
+    const allDone = queue.every(
+      (item) => item.status === QUEUE_STATUS.imported || item.status === QUEUE_STATUS.error,
+    )
+    return (
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1100 }}>
+        {/* Sidebar */}
+        <div style={{ width: 260, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>FILES ({queue.length})</span>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              style={{ fontSize: 11, padding: '2px 8px' }}
+              onClick={() => addMoreRef.current && addMoreRef.current.click()}
+            >
+              + Add more
+            </button>
+            <input
+              ref={addMoreRef}
+              type="file"
+              multiple
+              accept=".csv,.tsv,.txt,.pdf,.xlsx,.xls"
+              onChange={handleFileInputChange}
+              style={{ display: 'none' }}
+            />
           </div>
-        )}
 
-        {/* Issues — grouped at top for quick decisions */}
-        {issueRows.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <span className="eyebrow eyebrow-ember">
-              NEEDS A DECISION ({issueRows.length})
-            </span>
-            <div style={{ marginTop: 6 }}>
-              {issueRows.map((row) => (
-                <IssueRow
-                  key={row._id}
-                  row={row}
-                  checked={selected.has(row._id)}
-                  disabled={row.status === 'missing-name'}
-                  onToggle={toggleRow}
-                />
-              ))}
-            </div>
+          <div style={{ maxHeight: '60vh', overflowY: 'auto', marginBottom: 12 }}>
+            {queue.map((item) => (
+              <QueueRow
+                key={item.id}
+                item={item}
+                isActive={item.id === activeId}
+                onActivate={setActiveId}
+                onRemove={handleRemoveFromQueue}
+              />
+            ))}
           </div>
-        )}
 
-        {/* Ready rows — compact, one line each */}
-        {readyRows.length > 0 && (
-          <div style={{ marginTop: issueRows.length > 0 ? 20 : 16 }}>
-            <span className="eyebrow eyebrow-ink">READY TO IMPORT ({readyRows.length})</span>
-            <div style={{ marginTop: 6 }}>
-              {readyRows.map((row) => (
-                <ReadyRow
-                  key={row._id}
-                  row={row}
-                  checked={selected.has(row._id)}
-                  onToggle={toggleRow}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginTop: 20, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             type="button"
-            className="btn btn-primary"
-            onClick={handleImport}
-            disabled={importing || selectedCount === 0}
+            className="btn btn-quiet"
+            style={{ width: '100%', fontSize: 12 }}
+            onClick={handleStartOver}
           >
-            {importing ? 'Importing…' : `Import ${selectedCount} selected`}
-          </button>
-          <button type="button" className="btn btn-quiet" onClick={handleReset}>
             Start over
           </button>
-        </div>
-      </div>
-    )
-  } else {
-    // result phase — summary only, no row sprawl
-    const { imported = [], errors = [] } = importResult || {}
-    body = (
-      <div style={{ maxWidth: 560 }}>
-        <h2 className="serif-h h2">Import complete.</h2>
-        <hr className="rule-brass" style={{ margin: '16px 0' }} />
 
-        <div className="card-flat" style={{ padding: '20px 22px' }}>
-          <p style={{ fontSize: 36, fontWeight: 700, color: 'var(--brass)', lineHeight: 1.1, margin: 0 }}>
-            {imported.length}
-          </p>
-          <p className="body-sm" style={{ color: 'var(--ink)', marginTop: 6, fontWeight: 600 }}>
-            Customer {imported.length === 1 ? 'File' : 'Files'} imported
-          </p>
-          {errors.length > 0 && (
-            <p className="body-sm" style={{ color: 'var(--ember-dark)', marginTop: 8 }}>
-              {errors.length} row{errors.length === 1 ? '' : 's'} could not be imported
-            </p>
-          )}
-        </div>
-
-        {errors.length > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <span className="eyebrow eyebrow-ember">ERRORS</span>
-            <div style={{ marginTop: 6 }}>
-              {errors.map((e, i) => (
-                <p key={i} className="body-sm" style={{ color: 'var(--ember-dark)', padding: '3px 0' }}>
-                  {e.draft?.customerName || `Row ${i + 1}`}: {e.error}
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginTop: 22, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {onOpenFilesList && (
-            <button type="button" className="btn btn-primary" onClick={onOpenFilesList}>
+          {allDone && onOpenFilesList && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%', marginTop: 8, fontSize: 12 }}
+              onClick={onOpenFilesList}
+            >
               View Customer Files →
             </button>
           )}
-          <button type="button" className="btn btn-quiet" onClick={handleReset}>
-            Import more
-          </button>
+        </div>
+
+        {/* Active panel */}
+        <div style={{ flex: 1, minWidth: 0, maxWidth: 780 }}>
+          {activeItem && (
+            <h3
+              className="serif-h h3"
+              style={{ margin: '0 0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {activeItem.fileName || 'Pasted text'}
+            </h3>
+          )}
+          {renderActiveContent()}
         </div>
       </div>
     )
   }
 
+  // ---- Render ----------------------------------------------------------------
+
   return (
     <>
       <div className="shell-content">
-        <div style={{ padding: '24px 28px 40px', maxWidth: 1080, margin: '0 auto' }}>
-          {body}
+        <div style={{ padding: '24px 28px 40px' }}>
+          {queue.length === 0 ? renderEmptyState() : renderQueueMode()}
         </div>
       </div>
       <NextActionBar
         action={
-          phase === 'result'
-            ? 'Open Customer Files to start a visit or add setup details.'
-            : 'Issues are grouped at the top. Decide on each, then import the rest.'
+          queue.length === 0
+            ? 'Issues are grouped at the top. Decide on each, then import the rest.'
+            : 'Click a file in the queue to review and import it.'
         }
         why="Imported files appear in Customer Files and Today. Nothing is sent. BisTrack is not touched."
         dontForget="Start a Visit for a walk-in customer — bulk import is for batching known contacts."
