@@ -321,17 +321,21 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               isMultiPage: true,
               phase: 'pages',
               pageItems: initialPageItems,
-              progressLabel: `Scanning page 1 of ${pageLimit}…`,
+              progressLabel: 'Preparing pages…',
               errorMessage: pageWarn || '',
             }),
           )
           await extractOcrPageByPage(file, {
             maxPages: pageLimit,
             onProgress: (prog) => {
+              if (prog.stage === 'loading-engine') {
+                setQueue((prev) =>
+                  updateQueueItem(prev, itemId, { progressLabel: ocrProgressLabel(prog) }),
+                )
+                return
+              }
               if (prog.stage === 'rendering' || prog.stage === 'ocr') {
-                const label = prog.stage === 'rendering'
-                  ? `Preparing page ${prog.pageNumber} of ${prog.pageCount}…`
-                  : `Scanning page ${prog.pageNumber} of ${prog.pageCount}…`
+                const label = ocrProgressLabel(prog)
                 setQueue((prev) => {
                   const it = prev.find((q) => q.id === itemId)
                   if (!it) return prev

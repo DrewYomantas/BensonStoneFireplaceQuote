@@ -52,11 +52,29 @@ describe('ocrPageWarning', () => {
     const warn = ocrPageWarning(20)
     assert.ok(warn.includes('20'), 'should mention 20 pages')
   })
+  it('includes timing guidance so the user knows to wait', () => {
+    const warn = ocrPageWarning(OCR_PAGE_LIMIT + 1)
+    const lower = warn.toLowerCase()
+    assert.ok(lower.includes('minute') || lower.includes('few'), 'should set time expectations')
+  })
+  it('mentions large packet', () => {
+    const warn = ocrPageWarning(15)
+    assert.ok(warn.toLowerCase().includes('large') || warn.toLowerCase().includes('packet'), 'should say large packet')
+  })
 })
 
 describe('ocrProgressLabel', () => {
   it('null progress returns default', () => {
     assert.equal(ocrProgressLabel(null), 'Extracting text…')
+  })
+  it('loading-engine stage returns OCR engine message', () => {
+    const label = ocrProgressLabel({ stage: 'loading-engine' })
+    const lower = label.toLowerCase()
+    assert.ok(lower.includes('ocr') || lower.includes('engine'), 'should mention OCR engine')
+  })
+  it('loading-engine message does not include page numbers', () => {
+    const label = ocrProgressLabel({ stage: 'loading-engine' })
+    assert.ok(!label.includes('page 0') && !label.includes('page 1'), 'should not reference a page')
   })
   it('rendering stage shows page numbers', () => {
     const label = ocrProgressLabel({ stage: 'rendering', pageNumber: 2, pageCount: 5 })

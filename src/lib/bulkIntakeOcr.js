@@ -9,7 +9,7 @@ export function isOcrTextWeak(rawText) {
 // Returns a warning string when a PDF exceeds OCR_PAGE_LIMIT, null otherwise.
 export function ocrPageWarning(pageCount) {
   if (pageCount > OCR_PAGE_LIMIT) {
-    return `This PDF has ${pageCount} pages. Only the first ${OCR_PAGE_LIMIT} will be scanned.`
+    return `Large packet detected — ${pageCount} pages. Scanning the first ${OCR_PAGE_LIMIT}. This may take a few minutes. You can keep this screen open while pages scan.`
   }
   return null
 }
