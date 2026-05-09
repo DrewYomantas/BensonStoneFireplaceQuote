@@ -51,6 +51,8 @@ export function createPageItem(pageNumber, pageCount, parentFileId) {
     progressLabel: '',
     detectedDocType: 'unknown',
     autoExtract: null,
+    zoneResult: null,
+    scanDraftTemplateHint: null,
     draftSummary: null,
     importedCount: 0,
     importedFileId: '',

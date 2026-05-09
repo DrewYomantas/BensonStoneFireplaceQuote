@@ -298,7 +298,7 @@ export async function extractOcrPageByPage(file, options = {}) {
       const confidence = Math.round(result.data?.confidence || 0)
       const pageResult = { pageNumber, pageCount: totalPages, text, confidence }
       pages.push(pageResult)
-      onPageComplete?.(pageResult)
+      await onPageComplete?.({ ...pageResult, dataUrl, worker })
     }
   } finally {
     await worker.terminate()

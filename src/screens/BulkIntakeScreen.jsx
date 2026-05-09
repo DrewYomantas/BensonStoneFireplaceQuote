@@ -31,6 +31,10 @@ import {
 } from '../lib/bulkIntakePageQueue.js'
 import { detectDocType, DOC_TYPE_LABELS } from '../lib/scanDocTypeDetector.js'
 import {
+  extractBensonQuoteZoneTexts,
+  buildBensonQuoteDraftFromZones,
+} from '../lib/bensonQuoteTemplateReader.js'
+import {
   suggestPageGroups,
   buildPacketGroupDraft,
   commitPacketGroupDraft,
@@ -393,7 +397,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
                 })
               }
             },
-            onPageComplete: ({ pageNumber, text }) => {
+            onPageComplete: async ({ pageNumber, text, dataUrl, worker }) => {
               const pageId = pageIdMap[pageNumber]
               const docType = detectDocType(text)
               const weak = isOcrTextWeak(text)
@@ -412,6 +416,21 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
                   }),
                 })
               })
+              if (BENSON_QUOTE_DOC_TYPES.has(docType) && dataUrl && worker) {
+                try {
+                  const zoneTexts = await extractBensonQuoteZoneTexts(dataUrl, worker)
+                  const zoneResult = buildBensonQuoteDraftFromZones(zoneTexts)
+                  setQueue((prev) => {
+                    const it = prev.find((q) => q.id === itemId)
+                    if (!it) return prev
+                    return updateQueueItem(prev, itemId, {
+                      pageItems: updatePageItemFn(it.pageItems, pageId, { zoneResult }),
+                    })
+                  })
+                } catch {
+                  // Zone OCR failed — autoExtract (whole-page) is still set.
+                }
+              }
             },
           })
           setQueue((prev) =>
@@ -691,7 +710,15 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
 
     let autoDraft = null
     if (shouldAutoBuild) {
-      autoDraft = buildScannedCustomerDraft(page.extractedText, { existingFiles })
+      if (page.zoneResult) {
+        autoDraft = {
+          fields: page.zoneResult.fields,
+          warnings: detectScannedDraftWarnings(page.zoneResult.fields, existingFiles),
+          templateHint: page.zoneResult.templateHint,
+        }
+      } else {
+        autoDraft = buildScannedCustomerDraft(page.extractedText, { existingFiles })
+      }
     }
 
     setQueue((prev) => {
@@ -703,6 +730,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
           status: PAGE_STATUS.draftBuilt,
           scanDraftFields: autoDraft.fields,
           scanDraftWarnings: autoDraft.warnings,
+          scanDraftTemplateHint: autoDraft.templateHint || null,
         })
       }
       return updateQueueItem(prev, activeItem.id, { activePageId: pageId, pageItems })
@@ -974,7 +1002,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
           })
         }
       },
-      onPageComplete: ({ pageNumber, text }) => {
+      onPageComplete: async ({ pageNumber, text, dataUrl, worker }) => {
         const pageId = pageIdMap[pageNumber]
         const docType = detectDocType(text)
         const weak = isOcrTextWeak(text)
@@ -992,6 +1020,21 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             }),
           })
         })
+        if (BENSON_QUOTE_DOC_TYPES.has(docType) && dataUrl && worker) {
+          try {
+            const zoneTexts = await extractBensonQuoteZoneTexts(dataUrl, worker)
+            const zoneResult = buildBensonQuoteDraftFromZones(zoneTexts)
+            setQueue((prev) => {
+              const it = prev.find((q) => q.id === itemId)
+              if (!it) return prev
+              return updateQueueItem(prev, itemId, {
+                pageItems: updatePageItemFn(it.pageItems, pageId, { zoneResult }),
+              })
+            })
+          } catch {
+            // Zone OCR failed — autoExtract (whole-page) is still set.
+          }
+        }
       },
     })
     setQueue((prev) =>
@@ -1136,6 +1179,13 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             <p className="body-sm" style={{ color: 'var(--slate)' }}>
               OCR returned little text — this may be a photo or blank page. Fields may be incomplete. You can still enter details manually.
             </p>
+          </div>
+        )}
+
+        {/* Benson quote template hint */}
+        {page.scanDraftTemplateHint && (
+          <div className="card" style={{ padding: '6px 12px', marginBottom: 10, borderLeft: '3px solid var(--stone-200)' }}>
+            <p className="body-sm" style={{ color: 'var(--slate)', margin: 0 }}>{page.scanDraftTemplateHint}</p>
           </div>
         )}
 
