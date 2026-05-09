@@ -101,7 +101,7 @@ function FileRow({ row, onOpen }) {
   )
 }
 
-export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, onOpenBulkIntake }) {
+export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, onOpenAddQuote }) {
   const [rows, setRows] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [query, setQuery] = useState('')
@@ -261,19 +261,23 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, 
         </div>
       </div>
       <NextActionBar
-        action={isEmpty ? 'Start a visit to create the first Customer File.' : 'Open a file or start a new visit.'}
+        action={isEmpty ? 'Add a quote PDF or start a visit to create the first Customer File.' : 'Open a file, add a new quote PDF, or start a visit.'}
         why="Customer Files are the central object — every visit, lens, and follow-up lives on one."
         primary={
-          <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
-            Start a visit
-          </button>
+          onOpenAddQuote ? (
+            <button type="button" className="btn btn-primary" onClick={onOpenAddQuote}>
+              Add Quote PDF
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
+              Start a visit
+            </button>
+          )
         }
         secondary={
-          onOpenBulkIntake ? (
-            <button type="button" className="btn btn-quiet" onClick={onOpenBulkIntake}>
-              Bulk import
-            </button>
-          ) : null
+          <button type="button" className="btn btn-quiet" onClick={onOpenStartVisit}>
+            Start a visit
+          </button>
         }
       />
     </>

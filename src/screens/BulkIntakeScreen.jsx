@@ -1803,9 +1803,10 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   function renderEmptyState() {
     return (
       <div style={{ maxWidth: 720 }}>
-        <h2 className="serif-h h2">Bulk Import.</h2>
+        <h2 className="serif-h h2">Old Quote Batch Cleanup.</h2>
         <p className="lede" style={{ marginTop: 4 }}>
-          Upload one or more files, or paste a customer list. Review every row before importing.
+          For older multi-quote packets and contact lists. Daily intake should
+          start from <em>Add Quote PDF</em>.
         </p>
         <hr className="rule-brass" style={{ margin: '20px 0' }} />
 

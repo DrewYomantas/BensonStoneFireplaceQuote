@@ -11,6 +11,7 @@ import QuotePrepScreen from './screens/QuotePrepScreen.jsx'
 import BisTrackHandoffScreen from './screens/BisTrackHandoffScreen.jsx'
 import ProposalPreviewScreen from './screens/ProposalPreviewScreen.jsx'
 import BulkIntakeScreen from './screens/BulkIntakeScreen.jsx'
+import SingleQuoteIntakeScreen from './screens/SingleQuoteIntakeScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
@@ -24,7 +25,8 @@ const TITLES = {
   quotePrep: 'Quote / Prep',
   handoff: 'Internal BisTrack Handoff',
   proposalPreview: 'Proposal Preview',
-  bulkIntake: 'Bulk Import',
+  bulkIntake: 'Old Quote Batch Cleanup',
+  addQuote: 'Add Quote PDF',
   backstage: 'Backstage',
 }
 
@@ -37,7 +39,8 @@ const CRUMBS = {
   quotePrep: ['Customer files', 'Quote / Prep'],
   handoff: ['Customer files', 'Internal BisTrack Handoff'],
   proposalPreview: ['Customer files', 'Proposal Preview'],
-  bulkIntake: ['Bulk Import'],
+  bulkIntake: ['Backstage', 'Old Quote Batch Cleanup'],
+  addQuote: ['Add Quote PDF'],
   backstage: ['Backstage'],
 }
 
@@ -84,13 +87,17 @@ export default function App() {
     setRoute({ screen: 'bulkIntake', fileId: null })
   }
 
+  function openAddQuote() {
+    setRoute({ screen: 'addQuote', fileId: null })
+  }
+
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
 
   return (
     <AppShell
-      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview', 'bulkIntake'].includes(route.screen) ? 'files' : route.screen}
+      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview', 'bulkIntake', 'addQuote'].includes(route.screen) ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -101,7 +108,7 @@ export default function App() {
           onOpenStartVisit={() => navigate('visit')}
           onOpenFile={openFile}
           onOpenFilesList={openFilesList}
-          onOpenBulkIntake={openBulkIntake}
+          onOpenAddQuote={openAddQuote}
         />
       )}
       {route.screen === 'visit' && (
@@ -111,7 +118,7 @@ export default function App() {
         <CustomerFilesListScreen
           onOpenFile={openFile}
           onOpenStartVisit={() => navigate('visit')}
-          onOpenBulkIntake={openBulkIntake}
+          onOpenAddQuote={openAddQuote}
         />
       )}
       {route.screen === 'files' && (
@@ -157,12 +164,22 @@ export default function App() {
       )}
       {route.screen === 'bulkIntake' && (
         <BulkIntakeScreen
-          onBack={openFilesList}
+          onBack={() => navigate('backstage')}
           onOpenFilesList={openFilesList}
         />
       )}
+      {route.screen === 'addQuote' && (
+        <SingleQuoteIntakeScreen
+          onCustomerFileCreated={onCustomerFileCreated}
+          onOpenBatchCleanup={openBulkIntake}
+          onBack={() => navigate('today')}
+        />
+      )}
       {route.screen === 'backstage' && (
-        <BackstageScreen onBack={() => navigate('today')} />
+        <BackstageScreen
+          onBack={() => navigate('today')}
+          onOpenBatchCleanup={openBulkIntake}
+        />
       )}
     </AppShell>
   )

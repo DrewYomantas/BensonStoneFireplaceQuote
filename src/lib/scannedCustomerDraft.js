@@ -373,6 +373,92 @@ export function detectScannedDraftWarnings(draft, existingFiles = []) {
   return warnings
 }
 
+// ---- Single Quote Intake commit ---------------------------------------------
+
+// Build a safe Customer File payload from a single quote PDF intake. Pure —
+// strips raw bytes / paths / OCR debug fields and only emits whitelisted
+// metadata. Tested directly so the safety contract is enforceable without
+// touching IndexedDB.
+export function buildSingleQuoteIntakePayload({
+  fields = {},
+  sourceFileName = '',
+  detectedDocType = '',
+  pageCount = 0,
+  now = new Date(),
+} = {}) {
+  const ts = new Date(now)
+  const stamp = ts.getTime().toString(36)
+  const rand = Math.random().toString(36).slice(2, 5)
+  const id = `cf-quote-${stamp}-${rand}`
+
+  const customerName = safe(fields.customerName)
+  const customerPhone = safe(fields.customerPhone)
+  const customerEmail = safe(fields.customerEmail)
+  const projectAddress = safe(fields.projectAddress)
+  const quoteNumber = safe(fields.quoteNumber)
+  const quoteDate = safe(fields.quoteDate)
+  const extraNotes = safe(fields.notes || fields.existingNotes || '')
+
+  const noteParts = []
+  if (quoteNumber) noteParts.push(`Quote #${quoteNumber}`)
+  if (quoteDate) noteParts.push(`Date: ${quoteDate}`)
+  if (extraNotes) noteParts.push(extraNotes)
+
+  const trail = {
+    sourceFileName: safe(sourceFileName),
+    pageNumbers: [1],
+    importedAt: ts.toISOString(),
+  }
+  if (detectedDocType) trail.detectedDocTypes = [safe(detectedDocType)]
+  if (quoteNumber) trail.quoteNumbers = [quoteNumber]
+  if (Number.isFinite(pageCount) && pageCount > 0) trail.pageCount = pageCount
+
+  return {
+    id,
+    customerName,
+    customerPhone,
+    customerEmail,
+    projectAddress,
+    existingNotes: noteParts.join('\n') || '',
+    customerGoal: '',
+    sourceLabel: 'Quote PDF intake',
+    sourceTrail: [trail],
+  }
+}
+
+// Commit a single quote PDF intake as a new Customer File. Saves the safe
+// payload built above and best-effort appends a `scan_imported` activity.
+// Never creates quote prep lines, proposal content, or BisTrack writes.
+export async function commitSingleQuoteIntakeDraft({
+  fields,
+  sourceFileName = '',
+  detectedDocType = '',
+  pageCount = 0,
+  storage,
+  now = new Date(),
+}) {
+  if (!fields || !fields.customerName) throw new Error('Customer name is required.')
+  if (!storage) throw new Error('Storage is required.')
+  const ts = new Date(now)
+  const payload = buildSingleQuoteIntakePayload({
+    fields, sourceFileName, detectedDocType, pageCount, now: ts,
+  })
+  const file = await saveCustomerFileDurable(storage, payload, ts)
+  try {
+    const summaryParts = ['Customer file created from quote PDF intake.']
+    if (payload.sourceTrail[0].sourceFileName) {
+      summaryParts.push(`Source: ${payload.sourceTrail[0].sourceFileName}`)
+    }
+    await appendActivityForFile(storage, file.id, {
+      kind: 'scan_imported',
+      summary: summaryParts.join(' '),
+    }, ts)
+  } catch {
+    // Activity is best-effort.
+  }
+  return file
+}
+
 // ---- Commit -----------------------------------------------------------------
 
 // Import a single scanned draft as a new Customer File. Never merges or

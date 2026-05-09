@@ -1,7 +1,7 @@
 import FieldRulesAdmin from '../components/backstage/FieldRulesAdmin.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 
-export default function BackstageScreen({ onBack }) {
+export default function BackstageScreen({ onBack, onOpenBatchCleanup }) {
   return (
     <>
       <div className="shell-content">
@@ -13,6 +13,25 @@ export default function BackstageScreen({ onBack }) {
           </p>
           <hr className="rule-brass" style={{ margin: '20px 0' }} />
           <FieldRulesAdmin />
+
+          {onOpenBatchCleanup && (
+            <section className="card-flat" style={{ marginTop: 24, padding: 18 }}>
+              <span className="eyebrow eyebrow-ink">OLD QUOTE BATCH CLEANUP</span>
+              <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
+                For older multi-quote packets and contact lists. Not the daily
+                path — most days start with <em>Add Quote PDF</em>.
+              </p>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  onClick={onOpenBatchCleanup}
+                >
+                  Open Old Quote Batch Cleanup
+                </button>
+              </div>
+            </section>
+          )}
         </div>
       </div>
       <NextActionBar

@@ -98,7 +98,7 @@ function RecentFileRow({ row, onOpen }) {
   )
 }
 
-function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onOpenBulkIntake }) {
+function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onOpenAddQuote }) {
   if (state.kind === 'loading') {
     return <p className="body-sm">Loading recent files…</p>
   }
@@ -118,17 +118,17 @@ function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onO
       <div className="card-flat" style={{ padding: 16 }}>
         <span className="eyebrow eyebrow-ink">No saved Customer Files yet</span>
         <p className="body-sm" style={{ marginTop: 6 }}>
-          Start a visit to create the first Customer File, or bulk import a list of existing contacts.
+          Add a quote PDF to start a Customer File, or open a brand-new visit.
         </p>
         <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
-            Start a visit
-          </button>
-          {onOpenBulkIntake && (
-            <button type="button" className="btn btn-quiet" onClick={onOpenBulkIntake}>
-              Bulk import contacts
+          {onOpenAddQuote && (
+            <button type="button" className="btn btn-primary" onClick={onOpenAddQuote}>
+              Add Quote PDF
             </button>
           )}
+          <button type="button" className="btn btn-quiet" onClick={onOpenStartVisit}>
+            Start a visit
+          </button>
           {onOpenList && (
             <button type="button" className="btn btn-quiet" onClick={onOpenList}>
               View all Customer Files
@@ -152,7 +152,7 @@ function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onO
   )
 }
 
-export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenBulkIntake }) {
+export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenAddQuote }) {
   const [recent, setRecent] = useState({ kind: 'loading' })
 
   useEffect(() => {
@@ -208,7 +208,7 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
                 onOpenFile={onOpenFile}
                 onOpenStartVisit={onOpenStartVisit}
                 onOpenList={onOpenFilesList}
-                onOpenBulkIntake={onOpenBulkIntake}
+                onOpenAddQuote={onOpenAddQuote}
               />
             </div>
           </section>
@@ -216,18 +216,29 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
         </div>
       </div>
       <NextActionBar
-        action="Reopen a recent file or start a new visit."
-        why="Today is the daily landing page — the work continues from a Customer File."
+        action="Add a quote PDF, reopen a recent file, or start a new visit."
+        why="Most days start with one quote PDF — the customer file builds from there."
         dontForget="Customer Files stay on this tablet. Backup from the top bar before closing."
         primary={
-          <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
-            Start a new visit
-          </button>
+          onOpenAddQuote ? (
+            <button type="button" className="btn btn-primary" onClick={onOpenAddQuote}>
+              Add Quote PDF
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary" onClick={onOpenStartVisit}>
+              Start a new visit
+            </button>
+          )
         }
         secondary={
-          <button type="button" className="btn btn-quiet" onClick={onOpenFilesList}>
-            View all Customer Files
-          </button>
+          <>
+            <button type="button" className="btn btn-quiet" onClick={onOpenStartVisit}>
+              Start a new visit
+            </button>
+            <button type="button" className="btn btn-quiet" onClick={onOpenFilesList}>
+              View all Customer Files
+            </button>
+          </>
         }
       />
     </>
