@@ -244,6 +244,9 @@ Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuo
 - The Benson Stone store address ("Rockford, IL 61104", "Co Rockford", etc.) frequently bleeds into customer slots — `STORE_HINT` in `bisTrackScanParser.js` and the `STORE_VALUE` scrub in the merge helpers must catch the variants Tesseract actually produces, not just clean strings.
 - Per-zone Tesseract `setParameters` may throw on unknown keys in older builds — wrap in try/catch and degrade per-key.
 - Real-world scan PDFs are gitignored (private customer data). Validation = `npm test` + `npm run build` + targeted `eslint <changed files>`. No browser preview against real fixtures.
+- `extractOcrPageByPage` (in `pdfTextExtraction.js`) creates one Tesseract worker for the whole file, renders each page to canvas at 2.25×, OCRs it, then sets `canvas.width = 0` to free GPU memory before moving to the next page. Do not skip the canvas discard — 100+ page PDFs will OOM otherwise.
+- Tesseract WASM emits `Image too small to scale!!` and `Line cannot be recognized!!` to console on thin/photo regions. These are internal Tesseract errors, not application bugs — do not add error handling for them.
+- `scan_imported` must be registered in `ACTIVITY_KINDS` in `visitActivity.js`. If missing, `normalizeActivityEvent` silently returns null and activity records are dropped with no error.
 
 ## Pre-existing Lint Debt
 
@@ -256,8 +259,11 @@ Two intentional violations exist; `npm run lint` reports both. Leave alone in un
 `BulkIntakeScreen` manages a session-only queue of files (CSV, TSV, TXT, PDF). Each item tracks extraction state independently; only one item is active at a time.
 
 - `src/lib/bulkIntakeQueue.js` — pure queue helpers: `QUEUE_STATUS` enum, `createQueueItem`, `updateQueueItem`, `queueItemCountLabel`, `hasUnfinishedItems`. Queue items **never** store File objects, raw bytes, OCR images, or local file paths.
+- `src/lib/bulkIntakePageQueue.js` — page item model for multi-page scanned PDFs: `PAGE_STATUS` enum (waiting → ocr-running → needs-cleanup → ready-to-review → draft-built → imported / reference-only / error), `createPageItem`, `updatePageItem`, `pageItemCountLabel`, `detectPageGroupSuggestions` (adjacent-page same_quote / same_customer hints).
+- `src/lib/scanDocTypeDetector.js` — deterministic keyword-only doc type detection. Seven types: `benson_quote`, `service_order`, `firebuilder_quote`, `install_job_sheet`, `field_measure_checklist`, `photo_or_sketch`, `unknown`. `PHOTO_THRESHOLD = 25` non-whitespace chars → `photo_or_sketch`. Rules evaluated in order; `field_measure_checklist` is first so it beats `benson_quote` when both match.
 - `src/lib/bulkIntakeOcr.js` — pure OCR quality helpers: `isOcrTextWeak` (true when non-whitespace chars < 80), `ocrPageWarning` (warns when page count > `OCR_PAGE_LIMIT = 8`), `ocrProgressLabel`.
 - PDFs: `extractTextFromPdf` first; if `embeddedTextLikelyMissing`, fall through to `extractOcrFromPdf` (Tesseract). Result lands in `item.extractedText` — editable before parse. Weak OCR → `needs-cleanup` status.
+- Multi-page scanned PDFs: if `embeddedTextLikelyMissing && pageCount > 1`, switches to `phase: 'pages'` — `extractOcrPageByPage` runs one page at a time, page items stored in `item.pageItems[]`. Each page independently reviewable, importable, or markable reference-only. Page list renders immediately and updates incrementally as OCR completes (`phase === 'pages'` check is before status guards in `renderActiveContent`).
 - After each import, `existingFiles` is refreshed from storage so duplicate detection works across files in the same session.
 - `selectedIds` is stored as an array on the queue item (not a Set) to avoid Set-in-state issues; converted to a Set via `useMemo` in the screen.
 
