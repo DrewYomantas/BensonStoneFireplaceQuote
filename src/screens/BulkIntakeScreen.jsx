@@ -471,8 +471,10 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   }
 
   function handleFileInputChange(e) {
-    const files = e.target.files
-    if (!files || !files.length) return
+    // Array.from copies the FileList before clearing — input.value = '' destroys
+    // the live FileList reference, so processFiles must receive a real array.
+    const files = Array.from(e.target.files)
+    if (!files.length) return
     e.target.value = ''
     setGlobalError('')
     processFiles(files)
