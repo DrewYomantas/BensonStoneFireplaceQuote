@@ -69,6 +69,7 @@ export function createQueueItem(fileName) {
     // Page-split mode (multi-page scanned PDFs):
     isMultiPage: false,        // true when OCR'd page-by-page
     pageItems: [],             // array of page item objects
+    totalPageCount: 0,         // full page count of the source PDF (may exceed pageItems.length)
     activePageId: null,        // which page is currently open in the detail panel
     selectedPageIds: [],       // page IDs checked for packet grouping
     packetGroupDraft: null,    // current open packet group draft (one at a time)

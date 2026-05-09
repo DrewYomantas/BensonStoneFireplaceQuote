@@ -254,11 +254,13 @@ export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
 // OCR a PDF page by page, calling onPageComplete after each page so callers
 // can update UI incrementally. Images are discarded after OCR — not stored.
 export async function extractOcrPageByPage(file, options = {}) {
-  const { maxPages = Infinity, onProgress, onPageComplete, signal } = options
+  const { maxPages = Infinity, startPage = 1, onProgress, onPageComplete, signal } = options
   throwIfAborted(signal)
   onProgress?.({ stage: 'loading-pdf' })
   const pdf = await loadPdf(file)
-  const pageLimit = Math.min(pdf.numPages, maxPages)
+  const totalPages = pdf.numPages
+  const firstPage = Math.max(1, Math.floor(startPage) || 1)
+  const lastPage = Math.min(totalPages, firstPage - 1 + (maxPages === Infinity ? totalPages : maxPages))
   throwIfAborted(signal)
   onProgress?.({ stage: 'loading-engine' })
   const { createWorker } = await import('tesseract.js')
@@ -272,9 +274,9 @@ export async function extractOcrPageByPage(file, options = {}) {
   }
 
   try {
-    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber += 1) {
       throwIfAborted(signal)
-      onProgress?.({ stage: 'rendering', pageNumber, pageCount: pageLimit })
+      onProgress?.({ stage: 'rendering', pageNumber, pageCount: totalPages })
       const page = await pdf.getPage(pageNumber)
       const viewport = page.getViewport({ scale: 2.25 })
       const canvas = document.createElement('canvas')
@@ -284,7 +286,7 @@ export async function extractOcrPageByPage(file, options = {}) {
       await page.render({ canvasContext: ctx, viewport }).promise
       throwIfAborted(signal)
 
-      onProgress?.({ stage: 'ocr', pageNumber, pageCount: pageLimit })
+      onProgress?.({ stage: 'ocr', pageNumber, pageCount: totalPages })
       const dataUrl = canvas.toDataURL('image/png')
       // Release canvas memory immediately after capturing data URL.
       canvas.width = 0
@@ -294,7 +296,7 @@ export async function extractOcrPageByPage(file, options = {}) {
       throwIfAborted(signal)
       const text = result.data?.text || ''
       const confidence = Math.round(result.data?.confidence || 0)
-      const pageResult = { pageNumber, pageCount: pageLimit, text, confidence }
+      const pageResult = { pageNumber, pageCount: totalPages, text, confidence }
       pages.push(pageResult)
       onPageComplete?.(pageResult)
     }
@@ -306,6 +308,7 @@ export async function extractOcrPageByPage(file, options = {}) {
     pages,
     rawText: pages.map((p) => p.text).join('\n\n'),
     pageCount: pages.length,
+    totalPageCount: totalPages,
     extractionSource: 'ocr-page-by-page',
   }
 }

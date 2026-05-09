@@ -4,6 +4,7 @@ import {
   isOcrTextWeak,
   ocrPageWarning,
   ocrProgressLabel,
+  pageBatchLabel,
   OCR_PAGE_LIMIT,
 } from './bulkIntakeOcr.js'
 
@@ -60,6 +61,27 @@ describe('ocrPageWarning', () => {
   it('mentions large packet', () => {
     const warn = ocrPageWarning(15)
     assert.ok(warn.toLowerCase().includes('large') || warn.toLowerCase().includes('packet'), 'should say large packet')
+  })
+})
+
+describe('pageBatchLabel', () => {
+  it('returns plain page count when total equals batch', () => {
+    assert.equal(pageBatchLabel(8, 8), '8 pages')
+  })
+  it('returns plain page count when total is 0 / undefined', () => {
+    assert.equal(pageBatchLabel(8, 0), '8 pages')
+    assert.equal(pageBatchLabel(8, undefined), '8 pages')
+  })
+  it('returns "Showing first N of M pages" when truncated', () => {
+    assert.equal(pageBatchLabel(8, 106), 'Showing first 8 of 106 pages')
+  })
+  it('singular "page" when batchSize is 1', () => {
+    assert.equal(pageBatchLabel(1, 1), '1 page')
+  })
+  it('includes both counts when truncated', () => {
+    const label = pageBatchLabel(8, 50)
+    assert.ok(label.includes('8'), 'should mention batch size')
+    assert.ok(label.includes('50'), 'should mention total')
   })
 })
 

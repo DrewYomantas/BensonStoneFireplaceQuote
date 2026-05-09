@@ -6,10 +6,19 @@ export function isOcrTextWeak(rawText) {
   return rawText.replace(/\s+/g, '').length < 80
 }
 
+// Returns a compact label describing how many pages are showing vs. the total.
+// "Showing first 8 of 106 pages" when truncated; "8 pages" when all are shown.
+export function pageBatchLabel(batchSize, totalCount) {
+  if (!totalCount || totalCount <= batchSize) {
+    return `${batchSize} page${batchSize === 1 ? '' : 's'}`
+  }
+  return `Showing first ${batchSize} of ${totalCount} pages`
+}
+
 // Returns a warning string when a PDF exceeds OCR_PAGE_LIMIT, null otherwise.
 export function ocrPageWarning(pageCount) {
   if (pageCount > OCR_PAGE_LIMIT) {
-    return `Large packet detected — ${pageCount} pages. Scanning the first ${OCR_PAGE_LIMIT}. This may take a few minutes. You can keep this screen open while pages scan.`
+    return `Large packet — ${pageCount} pages total. Processing the first ${OCR_PAGE_LIMIT} pages. This may take a few minutes.`
   }
   return null
 }

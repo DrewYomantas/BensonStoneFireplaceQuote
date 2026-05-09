@@ -7,7 +7,7 @@ import {
   commitBulkIntakeDrafts,
   STATUS_LABELS,
 } from '../lib/customerBulkIntake.js'
-import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
+import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, pageBatchLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
 import {
   buildScannedCustomerDraft,
   detectScannedDraftWarnings,
@@ -172,7 +172,12 @@ function QueueRow({ item, isActive, onActivate, onRemove }) {
 function PageRow({ page, isActive, onActivate, isSelected, onToggleSelect }) {
   const docLabel = DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'
   const countLabel = pageItemCountLabel(page)
-  const customerName = page.draftSummary?.customerName || page.scanDraftFields?.customerName || ''
+  // Prefer committed draft fields, then auto-extracted preview, then nothing.
+  const displayName = page.scanDraftFields?.customerName || page.autoExtract?.customerName || ''
+  const displayQuote = page.scanDraftFields?.quoteNumber || page.autoExtract?.quoteNumber || ''
+  // Show a short "needs review" hint for pages with missing critical fields (after OCR done).
+  const isDone = page.status !== PAGE_STATUS.waiting && page.status !== PAGE_STATUS.ocrRunning
+  const hasIssue = isDone && page.autoExtract && !displayName
   return (
     <div
       style={{
@@ -198,16 +203,26 @@ function PageRow({ page, isActive, onActivate, isSelected, onToggleSelect }) {
         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>{page.pageNumber}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>Pg {page.pageNumber}</span>
           <span style={{ fontSize: 11, color: 'var(--slate)' }}>{docLabel}</span>
           <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '1px 5px' }}>
             {PAGE_STATUS_LABELS[page.status]}
           </span>
           {countLabel && <span style={{ fontSize: 11, color: 'var(--brass)' }}>{countLabel}</span>}
         </div>
-        {customerName && (
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {customerName}
+        {displayName && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {displayName}
+          </div>
+        )}
+        {displayQuote && (
+          <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>
+            Quote #{displayQuote}
+          </div>
+        )}
+        {hasIssue && (
+          <div style={{ fontSize: 10, color: 'var(--slate-soft)', marginTop: 1 }}>
+            Review — name not found
           </div>
         )}
         {page.status === PAGE_STATUS.ocrRunning && page.progressLabel && (
@@ -243,6 +258,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   const [showPageOcrText, setShowPageOcrText] = useState(false)
   const fileInputRef = useRef(null)
   const addMoreRef = useRef(null)
+  // File objects held here (not in queue items) so "Process next batch" can re-read them.
+  const fileRegistryRef = useRef(new Map())
 
   const activeItem = useMemo(
     () => queue.find((item) => item.id === activeId) || null,
@@ -331,6 +348,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               isMultiPage: true,
               phase: 'pages',
               pageItems: initialPageItems,
+              totalPageCount: pageCount,
               progressLabel: 'Preparing pages…',
               errorMessage: pageWarn || '',
             }),
@@ -369,6 +387,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               const pageId = pageIdMap[pageNumber]
               const docType = detectDocType(text)
               const weak = isOcrTextWeak(text)
+              // Auto-extract fields for page list preview (non-intrusive — not the draft form).
+              const { fields: autoExtract } = buildScannedCustomerDraft(text)
               setQueue((prev) => {
                 const it = prev.find((q) => q.id === itemId)
                 if (!it) return prev
@@ -376,6 +396,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
                   pageItems: updatePageItemFn(it.pageItems, pageId, {
                     extractedText: text,
                     detectedDocType: docType,
+                    autoExtract,
                     status: weak ? PAGE_STATUS.needsCleanup : PAGE_STATUS.readyToReview,
                     progressLabel: '',
                   }),
@@ -466,6 +487,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     setQueue((prev) => [...prev, ...newItems])
     if (wasEmpty) setActiveId(newItems[0].id)
     for (let i = 0; i < files.length; i++) {
+      fileRegistryRef.current.set(newItems[i].id, files[i])
       await processOneFile(files[i], newItems[i].id)
     }
   }
@@ -837,16 +859,94 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   }
 
   function handleRemoveFromQueue(id) {
+    fileRegistryRef.current.delete(id)
     const remaining = queue.filter((item) => item.id !== id)
     setQueue(remaining)
     if (id === activeId) setActiveId(remaining.length > 0 ? remaining[0].id : null)
   }
 
   function handleStartOver() {
+    fileRegistryRef.current.clear()
     setQueue([])
     setActiveId(null)
     setPasteText('')
     setGlobalError('')
+  }
+
+  async function handleProcessNextBatch(itemId) {
+    const file = fileRegistryRef.current.get(itemId)
+    if (!file) return
+    const item = queue.find((q) => q.id === itemId)
+    if (!item) return
+    const alreadyProcessed = item.pageItems.length
+    const total = item.totalPageCount || alreadyProcessed
+    if (alreadyProcessed >= total) return
+    const nextStart = alreadyProcessed + 1
+    const nextLimit = Math.min(total, alreadyProcessed + OCR_PAGE_LIMIT)
+    const newPageItems = Array.from(
+      { length: nextLimit - alreadyProcessed },
+      (_, i) => createPageItem(nextStart + i, total, itemId),
+    )
+    const pageIdMap = {}
+    for (const p of newPageItems) pageIdMap[p.pageNumber] = p.id
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === itemId)
+      if (!it) return prev
+      return updateQueueItem(prev, itemId, {
+        status: QUEUE_STATUS.ocrRunning,
+        pageItems: [...it.pageItems, ...newPageItems],
+        progressLabel: `Loading pages ${nextStart}–${nextLimit}…`,
+      })
+    })
+    const { extractOcrPageByPage } = await import('../lib/pdfTextExtraction.js')
+    await extractOcrPageByPage(file, {
+      startPage: nextStart,
+      maxPages: OCR_PAGE_LIMIT,
+      onProgress: (prog) => {
+        if (prog.stage === 'loading-pdf' || prog.stage === 'loading-engine') {
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, { progressLabel: ocrProgressLabel(prog) }),
+          )
+          return
+        }
+        if (prog.stage === 'rendering' || prog.stage === 'ocr') {
+          const label = ocrProgressLabel(prog)
+          setQueue((prev) => {
+            const it = prev.find((q) => q.id === itemId)
+            if (!it) return prev
+            return updateQueueItem(prev, itemId, {
+              progressLabel: label,
+              pageItems: updatePageItemFn(it.pageItems, pageIdMap[prog.pageNumber], {
+                status: PAGE_STATUS.ocrRunning,
+                progressLabel: label,
+              }),
+            })
+          })
+        }
+      },
+      onPageComplete: ({ pageNumber, text }) => {
+        const pageId = pageIdMap[pageNumber]
+        const docType = detectDocType(text)
+        const weak = isOcrTextWeak(text)
+        const { fields: autoExtract } = buildScannedCustomerDraft(text)
+        setQueue((prev) => {
+          const it = prev.find((q) => q.id === itemId)
+          if (!it) return prev
+          return updateQueueItem(prev, itemId, {
+            pageItems: updatePageItemFn(it.pageItems, pageId, {
+              extractedText: text,
+              detectedDocType: docType,
+              autoExtract,
+              status: weak ? PAGE_STATUS.needsCleanup : PAGE_STATUS.readyToReview,
+              progressLabel: '',
+            }),
+          })
+        })
+      },
+    })
+    setQueue((prev) =>
+      updateQueueItem(prev, itemId, { status: QUEUE_STATUS.parsed, progressLabel: '' }),
+    )
   }
 
   function downloadTemplate() {
@@ -1152,13 +1252,19 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     const importedCount = pages.filter((p) => p.status === PAGE_STATUS.imported).length
     const hasPacketDraft = Boolean(activeItem.packetGroupDraft)
 
+    const totalPageCount = activeItem.totalPageCount || pages.length
+    const isTruncated = totalPageCount > pages.length
+    const nextBatchStart = pages.length + 1
+    const nextBatchEnd = Math.min(totalPageCount, pages.length + OCR_PAGE_LIMIT)
+    const isOcrActive = activeItem.status === QUEUE_STATUS.ocrRunning
+
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span className="body-sm" style={{ color: 'var(--slate)' }}>
-            {pages.length} page{pages.length === 1 ? '' : 's'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span className="body-sm" style={{ color: 'var(--slate)', fontWeight: 600 }}>
+            {pageBatchLabel(pages.length, totalPageCount)}
           </span>
-          {activeItem.status === QUEUE_STATUS.ocrRunning && (
+          {isOcrActive && (
             <span className="body-sm" style={{ color: 'var(--slate)' }}>{activeItem.progressLabel}</span>
           )}
           {importedCount > 0 && (
@@ -1170,6 +1276,22 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             </span>
           )}
         </div>
+
+        {isTruncated && !isOcrActive && (
+          <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              style={{ fontSize: 12 }}
+              onClick={() => handleProcessNextBatch(activeItem.id)}
+            >
+              Process pages {nextBatchStart}–{nextBatchEnd} →
+            </button>
+            <span className="body-sm" style={{ color: 'var(--slate-soft)' }}>
+              {totalPageCount - pages.length} more page{totalPageCount - pages.length === 1 ? '' : 's'} not yet scanned
+            </span>
+          </div>
+        )}
 
         {suggestions.length > 0 && !hasPacketDraft && (
           <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderLeft: '3px solid var(--brass)' }}>
@@ -1195,8 +1317,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         )}
 
         {activeItem.errorMessage && (
-          <div className="card" style={{ padding: '6px 12px', marginBottom: 10, borderLeft: '3px solid var(--ember)' }}>
-            <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>{activeItem.errorMessage}</p>
+          <div className="card" style={{ padding: '6px 12px', marginBottom: 10, borderLeft: '3px solid var(--stone-200)' }}>
+            <p className="body-sm" style={{ color: 'var(--slate)' }}>{activeItem.errorMessage}</p>
           </div>
         )}
 
