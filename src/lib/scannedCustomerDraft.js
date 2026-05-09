@@ -31,7 +31,7 @@ const REJECTED_NAME_TOKENS = new Set([
   'quote no', 'quote date', 'taken by', 'sales rep',
   'po', 'po number', 'page', 'date', 'phone', 'fax', 'email',
   'ship to', 'sold to', 'bill to', 'name', 'customer', 'client',
-  'address', 'city', 'state', 'zip',
+  'address', 'city', 'state', 'zip', 'service tech',
 ])
 
 // Address fragments that belong to Benson Stone, not the customer.
@@ -97,7 +97,10 @@ function isRejectedPhone(digits) {
 
 function isRejectedQuoteNumber(candidate) {
   if (!candidate) return true
-  return REJECTED_QUOTE_RE.test(candidate.trim())
+  const trimmed = candidate.trim()
+  const lower = trimmed.toLowerCase()
+  if (lower === 'id' || lower === 'quotation') return true
+  return REJECTED_QUOTE_RE.test(trimmed)
 }
 
 // ---- Phone ------------------------------------------------------------------
@@ -267,14 +270,16 @@ export function buildScannedCustomerDraft(ocrText, options = {}) {
   // Name
   const rawName = extractName(text)
   const customerName = rawName || ''
-  // (extractName already rejects bad tokens; blank means nothing reliable found)
+  if (!customerName && text.replace(/\s+/g, '').length >= 80) {
+    extractionWarnings.push('Customer name needs review.')
+  }
 
   // Phone
   const rawPhone = extractPhoneRaw(text)
   let customerPhone = ''
   if (rawPhone) {
     if (isRejectedPhone(rawPhone.replace(/\D/g, ''))) {
-      extractionWarnings.push('Ignored Benson Stone company phone.')
+      extractionWarnings.push('Ignored company phone.')
     } else {
       customerPhone = rawPhone
     }
@@ -297,7 +302,7 @@ export function buildScannedCustomerDraft(ocrText, options = {}) {
   const rawServiceOrderNum = safe(extractServiceOrderNumber(text))
   let quoteNumber = rawQuoteNum ? safe(rawQuoteNum) : rawServiceOrderNum
   if (quoteNumber && isRejectedQuoteNumber(quoteNumber)) {
-    extractionWarnings.push('Quote number could not be read clearly.')
+    extractionWarnings.push('Quote number needs review.')
     quoteNumber = ''
   }
 

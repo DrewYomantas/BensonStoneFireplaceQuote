@@ -486,10 +486,10 @@ describe('buildScannedCustomerDraft — reject Benson Stone company phone', () =
     assert.notEqual(fields.customerPhone, '(815) 227-2000')
   })
 
-  it('warns when Benson phone is ignored', () => {
+  it('warns when company phone is ignored', () => {
     const text = '(815) 227-2000\nCustomer: Tom Smith'
     const { warnings } = buildScannedCustomerDraft(text)
-    assert.ok(warnings.some((w) => w.toLowerCase().includes('benson')), `Expected benson phone warning, got: ${warnings}`)
+    assert.ok(warnings.some((w) => w.toLowerCase().includes('company phone')), `Expected company phone warning, got: ${warnings}`)
   })
 
   it('keeps a real customer phone when present', () => {
@@ -583,5 +583,50 @@ describe('buildScannedCustomerDraft — invoice address block extraction', () =>
     const text = '--- INVOICE ADDRESS ZONE ---\n12345\nAlice Green\n456 Elm St'
     const { fields } = buildScannedCustomerDraft(text)
     assert.equal(fields.customerName, 'Alice Green')
+  })
+})
+
+// ---- Milestone 19.6.2 rejection additions ------------------------------------
+
+describe('buildScannedCustomerDraft — reject "Service Tech" as name', () => {
+  it('does not extract "Service Tech" as customer name', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Service Tech\nPhone: 815-555-0001')
+    assert.notEqual(fields.customerName, 'Service Tech')
+  })
+  it('extracts real name after skipping "Service Tech" label', () => {
+    const text = 'Service Tech: Jake\nCustomer: Maria Lopez\nPhone: 815-555-0001'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.equal(fields.customerName, 'Maria Lopez')
+  })
+})
+
+describe('buildScannedCustomerDraft — reject "ID" and "QUOTATION" as quote number', () => {
+  it('"ID" (2 chars) does not become a quote number — too short for quote pattern', () => {
+    const { fields } = buildScannedCustomerDraft('Quote: ID\nCustomer: Tom Smith\nPhone: 815-555-0001')
+    assert.equal(fields.quoteNumber, '')
+  })
+  it('rejects "QUOTATION" as a quote number (company name fragment)', () => {
+    const { fields } = buildScannedCustomerDraft('Order: Quotation\nCustomer: Jane Doe\nPhone: 815-555-0001')
+    assert.notEqual(fields.quoteNumber, 'Quotation')
+  })
+  it('warns when a company-name fragment matches as quote number (e.g. ENSON)', () => {
+    const { warnings } = buildScannedCustomerDraft('Quotation ENSON STONE\nCustomer: Test User\nPhone: 815-555-0001')
+    assert.ok(warnings.some((w) => w.toLowerCase().includes('quote number')), `Expected quote number warning, got: ${warnings}`)
+  })
+  it('still extracts a real numeric quote number', () => {
+    const { fields } = buildScannedCustomerDraft('Quote: 70655\nCustomer: Tom Schlemer\nPhone: 815-555-0001')
+    assert.equal(fields.quoteNumber, '70655')
+  })
+})
+
+describe('buildScannedCustomerDraft — customer name review warning', () => {
+  it('warns "Customer name needs review" when name is blank but text has content', () => {
+    const text = 'Quote: 70655\nDelivery Address: 456 Oak Ave, Loves Park, IL 61111\nPhone: 815-555-0001\nDate: 01/15/2025 some more text here to meet the threshold for a proper ocr page'
+    const { warnings } = buildScannedCustomerDraft(text)
+    assert.ok(warnings.some((w) => w.toLowerCase().includes('customer name')), `Expected name warning, got: ${warnings}`)
+  })
+  it('does not warn on empty/very short text', () => {
+    const { warnings } = buildScannedCustomerDraft('hi')
+    assert.ok(!warnings.some((w) => w.toLowerCase().includes('customer name')), `Should not warn on trivial text`)
   })
 })

@@ -7,7 +7,7 @@ import {
   commitBulkIntakeDrafts,
   STATUS_LABELS,
 } from '../lib/customerBulkIntake.js'
-import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, pageBatchLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
+import { isOcrTextWeak, ocrPageWarning, ocrProgressLabel, scanBatchLabel, OCR_PAGE_LIMIT } from '../lib/bulkIntakeOcr.js'
 import {
   buildScannedCustomerDraft,
   detectScannedDraftWarnings,
@@ -36,6 +36,9 @@ import {
   commitPacketGroupDraft,
   revalidatePacketGroupDraft,
 } from '../lib/scannedPacketGroups.js'
+
+// Doc types that typically carry a BisTrack quote number.
+const BENSON_QUOTE_DOC_TYPES = new Set(['benson_quote', 'firebuilder_quote'])
 
 // ---- Row-level status badge (for review rows) --------------------------------
 
@@ -172,12 +175,14 @@ function QueueRow({ item, isActive, onActivate, onRemove }) {
 function PageRow({ page, isActive, onActivate, isSelected, onToggleSelect }) {
   const docLabel = DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'
   const countLabel = pageItemCountLabel(page)
-  // Prefer committed draft fields, then auto-extracted preview, then nothing.
-  const displayName = page.scanDraftFields?.customerName || page.autoExtract?.customerName || ''
-  const displayQuote = page.scanDraftFields?.quoteNumber || page.autoExtract?.quoteNumber || ''
-  // Show a short "needs review" hint for pages with missing critical fields (after OCR done).
+  const draftName = page.scanDraftFields?.customerName || ''
+  const autoName = page.autoExtract?.customerName || ''
+  const displayName = draftName || autoName
+  const draftQuote = page.scanDraftFields?.quoteNumber || ''
+  const autoQuote = page.autoExtract?.quoteNumber || ''
+  const displayQuote = draftQuote || autoQuote
   const isDone = page.status !== PAGE_STATUS.waiting && page.status !== PAGE_STATUS.ocrRunning
-  const hasIssue = isDone && page.autoExtract && !displayName
+  const showQuoteRow = isDone && BENSON_QUOTE_DOC_TYPES.has(page.detectedDocType)
   return (
     <div
       style={{
@@ -203,30 +208,28 @@ function PageRow({ page, isActive, onActivate, isSelected, onToggleSelect }) {
         style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>Pg {page.pageNumber}</span>
-          <span style={{ fontSize: 11, color: 'var(--slate)' }}>{docLabel}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>Page {page.pageNumber}</span>
           <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '1px 5px' }}>
             {PAGE_STATUS_LABELS[page.status]}
           </span>
           {countLabel && <span style={{ fontSize: 11, color: 'var(--brass)' }}>{countLabel}</span>}
         </div>
-        {displayName && (
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {displayName}
+        <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>{docLabel}</div>
+        {isDone && (
+          <div style={{ fontSize: 11, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {displayName
+              ? <span style={{ color: 'var(--ink)', fontWeight: 600 }}>Customer: {displayName}</span>
+              : <span style={{ color: 'var(--slate-soft)' }}>Name needs review</span>
+            }
           </div>
         )}
-        {displayQuote && (
+        {showQuoteRow && (
           <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 1 }}>
-            Quote #{displayQuote}
-          </div>
-        )}
-        {hasIssue && (
-          <div style={{ fontSize: 10, color: 'var(--slate-soft)', marginTop: 1 }}>
-            Review — name not found
+            {displayQuote ? `Quote #${displayQuote}` : 'Quote # not found'}
           </div>
         )}
         {page.status === PAGE_STATUS.ocrRunning && page.progressLabel && (
-          <div style={{ fontSize: 10, color: 'var(--slate)' }}>{page.progressLabel}</div>
+          <div style={{ fontSize: 10, color: 'var(--slate)', marginTop: 1 }}>{page.progressLabel}</div>
         )}
       </div>
     </div>
@@ -256,10 +259,15 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   const [importing, setImporting] = useState(false)
   const [showScanOcrText, setShowScanOcrText] = useState(false)
   const [showPageOcrText, setShowPageOcrText] = useState(false)
+  const [activePagePreview, setActivePagePreview] = useState(null)
   const fileInputRef = useRef(null)
   const addMoreRef = useRef(null)
   // File objects held here (not in queue items) so "Process next batch" can re-read them.
   const fileRegistryRef = useRef(new Map())
+  // Cached page preview data URLs — memory only, never persisted.
+  const pagePreviewsRef = useRef(new Map())
+  // AbortController for in-flight preview renders.
+  const previewAbortRef = useRef(null)
 
   const activeItem = useMemo(
     () => queue.find((item) => item.id === activeId) || null,
@@ -289,6 +297,8 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   }, [])
 
   useEffect(() => {
+    if (previewAbortRef.current) { previewAbortRef.current.abort(); previewAbortRef.current = null }
+    setActivePagePreview(null)
     setGlobalError('')
     setShowScanOcrText(false)
   }, [activeId])
@@ -662,15 +672,69 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
 
   // ---- Page-level handlers ---------------------------------------------------
 
-  function handleActivatePage(pageId) {
+  async function handleActivatePage(pageId) {
     if (!activeItem) return
-    setQueue((prev) => updateQueueItem(prev, activeItem.id, { activePageId: pageId }))
     setShowPageOcrText(false)
     setGlobalError('')
+
+    // Cancel any in-flight preview render from a previous page.
+    if (previewAbortRef.current) { previewAbortRef.current.abort(); previewAbortRef.current = null }
+    setActivePagePreview(null)
+
+    const page = (activeItem.pageItems || []).find((p) => p.id === pageId)
+    const shouldAutoBuild = page
+      && !page.scanDraftFields
+      && page.status !== PAGE_STATUS.waiting
+      && page.status !== PAGE_STATUS.ocrRunning
+      && page.status !== PAGE_STATUS.imported
+      && page.status !== PAGE_STATUS.referenceOnly
+
+    let autoDraft = null
+    if (shouldAutoBuild) {
+      autoDraft = buildScannedCustomerDraft(page.extractedText, { existingFiles })
+    }
+
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === activeItem.id)
+      if (!it) return prev
+      let pageItems = it.pageItems
+      if (autoDraft) {
+        pageItems = updatePageItemFn(pageItems, pageId, {
+          status: PAGE_STATUS.draftBuilt,
+          scanDraftFields: autoDraft.fields,
+          scanDraftWarnings: autoDraft.warnings,
+        })
+      }
+      return updateQueueItem(prev, activeItem.id, { activePageId: pageId, pageItems })
+    })
+
+    // Render page preview from the original file (async, cancellable).
+    const file = fileRegistryRef.current.get(activeItem.id)
+    if (file && page) {
+      const cacheKey = `${activeItem.id}:${page.pageNumber}`
+      if (pagePreviewsRef.current.has(cacheKey)) {
+        setActivePagePreview(pagePreviewsRef.current.get(cacheKey))
+      } else {
+        const controller = new AbortController()
+        previewAbortRef.current = controller
+        try {
+          const { renderSinglePdfPage } = await import('../lib/pdfTextExtraction.js')
+          const dataUrl = await renderSinglePdfPage(file, page.pageNumber, { scale: 1.5, imageType: 'image/jpeg', signal: controller.signal })
+          if (!controller.signal.aborted) {
+            pagePreviewsRef.current.set(cacheKey, dataUrl)
+            setActivePagePreview(dataUrl)
+          }
+        } catch {
+          // Preview unavailable or aborted — not critical.
+        }
+      }
+    }
   }
 
   function handleDeactivatePage() {
     if (!activeItem) return
+    if (previewAbortRef.current) { previewAbortRef.current.abort(); previewAbortRef.current = null }
+    setActivePagePreview(null)
     setQueue((prev) => updateQueueItem(prev, activeItem.id, { activePageId: null }))
     setShowPageOcrText(false)
     setGlobalError('')
@@ -698,27 +762,6 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         pageItems: updatePageItemFn(it.pageItems, pageId, { extractedText: text }),
       })
     })
-  }
-
-  function handleBuildPageScanDraft(page) {
-    if (!activeItem || !page) return
-    const { fields, warnings } = buildScannedCustomerDraft(page.extractedText, { existingFiles })
-    setQueue((prev) => {
-      const it = prev.find((q) => q.id === activeItem.id)
-      if (!it) return prev
-      return updateQueueItem(prev, activeItem.id, {
-        pageItems: updatePageItemFn(it.pageItems, page.id, {
-          status: PAGE_STATUS.draftBuilt,
-          scanDraftFields: fields,
-          scanDraftWarnings: warnings,
-          draftSummary: {
-            customerName: fields.customerName,
-            quoteNumber: fields.quoteNumber,
-          },
-        }),
-      })
-    })
-    setGlobalError('')
   }
 
   function handleUpdatePageDraftField(pageId, key, value) {
@@ -860,13 +903,20 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
 
   function handleRemoveFromQueue(id) {
     fileRegistryRef.current.delete(id)
+    // Clear preview cache for all pages of this item.
+    for (const key of [...pagePreviewsRef.current.keys()]) {
+      if (key.startsWith(`${id}:`)) pagePreviewsRef.current.delete(key)
+    }
     const remaining = queue.filter((item) => item.id !== id)
     setQueue(remaining)
     if (id === activeId) setActiveId(remaining.length > 0 ? remaining[0].id : null)
   }
 
   function handleStartOver() {
+    if (previewAbortRef.current) { previewAbortRef.current.abort(); previewAbortRef.current = null }
     fileRegistryRef.current.clear()
+    pagePreviewsRef.current.clear()
+    setActivePagePreview(null)
     setQueue([])
     setActiveId(null)
     setPasteText('')
@@ -1064,13 +1114,32 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
     const warnings = page.scanDraftWarnings || []
     const canImport = Boolean(fields.customerName)
+    const isWeak = page.status === PAGE_STATUS.needsCleanup
     const FS = { marginTop: 4, width: '100%' }
     const LS = { fontSize: 10 }
     return (
       <div>
-        <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 10 }}>
-          OCR finished. Review before importing.
-        </p>
+        {/* Page preview image */}
+        {activePagePreview && (
+          <div style={{ marginBottom: 12, border: '1px solid var(--stone-150)', borderRadius: 6, overflow: 'hidden', lineHeight: 0, background: 'var(--stone-50)' }}>
+            <img
+              src={activePagePreview}
+              alt={`Page ${page.pageNumber} preview`}
+              style={{ width: '100%', maxHeight: 280, objectFit: 'contain', display: 'block' }}
+            />
+          </div>
+        )}
+
+        {/* Weak OCR banner */}
+        {isWeak && (
+          <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderLeft: '3px solid var(--stone-200)' }}>
+            <p className="body-sm" style={{ color: 'var(--slate)' }}>
+              OCR returned little text — this may be a photo or blank page. Fields may be incomplete. You can still enter details manually.
+            </p>
+          </div>
+        )}
+
+        {/* Warnings */}
         {warnings.length > 0 && (
           <div className="card" style={{ padding: 8, marginBottom: 10, borderLeft: '3px solid var(--ember-dark)' }}>
             {warnings.map((w, i) => (
@@ -1078,6 +1147,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
             ))}
           </div>
         )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px', marginBottom: 10 }}>
           <div>
             <label className="eyebrow eyebrow-ink" style={LS}>NAME</label>
@@ -1140,7 +1210,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handleImportPageDraft(page)} disabled={importing || !canImport}>
-            {importing ? 'Importing…' : 'Import this draft →'}
+            {importing ? 'Importing…' : 'Import customer file →'}
           </button>
           <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={() => handleMarkPageReferenceOnly(page.id)}>
             Mark reference only
@@ -1172,6 +1242,11 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     if (page.status === PAGE_STATUS.referenceOnly) {
       return (
         <div>
+          {activePagePreview && (
+            <div style={{ marginBottom: 10, border: '1px solid var(--stone-150)', borderRadius: 6, overflow: 'hidden', lineHeight: 0, background: 'var(--stone-50)' }}>
+              <img src={activePagePreview} alt={`Page ${page.pageNumber} preview`} style={{ width: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
+            </div>
+          )}
           <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 10 }}>
             Marked as reference only — no customer file will be created from this page.
           </p>
@@ -1181,66 +1256,24 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         </div>
       )
     }
-    if (page.status === PAGE_STATUS.draftBuilt) {
-      return renderPageDraftEditor(page)
-    }
-    const isWeak = page.status === PAGE_STATUS.needsCleanup
-    return (
-      <div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-          <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '2px 6px' }}>
-            {PAGE_STATUS_LABELS[page.status]}
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--slate)' }}>{DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'}</span>
-        </div>
-        {isWeak && (
-          <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderLeft: '3px solid var(--ember-dark)' }}>
-            <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>
-              OCR returned little text — this may be a photo, sketch, or low-quality scan.
-            </p>
-          </div>
-        )}
-        <div style={{ marginBottom: 10 }}>
-          <button
-            type="button"
-            className="btn btn-quiet"
-            style={{ fontSize: 11, padding: '2px 8px' }}
-            onClick={() => setShowPageOcrText((s) => !s)}
-          >
-            {showPageOcrText ? '▲ Hide extracted text' : '▼ Show / edit OCR text'}
-          </button>
-          {showPageOcrText && (
-            <textarea
-              className="field"
-              value={page.extractedText}
-              onChange={(e) => handleUpdatePageText(page.id, e.target.value)}
-              rows={8}
-              style={{ marginTop: 6, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical' }}
-            />
-          )}
-        </div>
-        {globalError && (
-          <div className="card" style={{ padding: 8, marginBottom: 8, borderLeft: '3px solid var(--ember)' }}>
-            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {page.status !== PAGE_STATUS.ocrRunning && page.status !== PAGE_STATUS.waiting && (
-            <>
-              <button type="button" className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handleBuildPageScanDraft(page)}>
-                Build customer draft
-              </button>
-              <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={() => handleMarkPageReferenceOnly(page.id)}>
-                Mark reference only
-              </button>
-            </>
-          )}
-          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleDeactivatePage}>
+    if (page.status === PAGE_STATUS.waiting || page.status === PAGE_STATUS.ocrRunning) {
+      return (
+        <div>
+          <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 6 }}>
+            {page.progressLabel || (page.status === PAGE_STATUS.waiting ? 'Waiting for scan…' : 'Scanning…')}
+          </p>
+          <p className="body-sm" style={{ color: 'var(--slate-soft)' }}>
+            This page will be ready to review when scanning completes.
+          </p>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12, marginTop: 12 }} onClick={handleDeactivatePage}>
             ← All pages
           </button>
         </div>
-      </div>
-    )
+      )
+    }
+    // For all other states (draftBuilt, needsCleanup, readyToReview), show the draft editor.
+    // handleActivatePage auto-builds the draft on activation, so scanDraftFields should be set.
+    return renderPageDraftEditor(page)
   }
 
   function renderPagesPhase() {
@@ -1254,27 +1287,30 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
 
     const totalPageCount = activeItem.totalPageCount || pages.length
     const isTruncated = totalPageCount > pages.length
-    const nextBatchStart = pages.length + 1
-    const nextBatchEnd = Math.min(totalPageCount, pages.length + OCR_PAGE_LIMIT)
     const isOcrActive = activeItem.status === QUEUE_STATUS.ocrRunning
 
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-          <span className="body-sm" style={{ color: 'var(--slate)', fontWeight: 600 }}>
-            {pageBatchLabel(pages.length, totalPageCount)}
-          </span>
-          {isOcrActive && (
-            <span className="body-sm" style={{ color: 'var(--slate)' }}>{activeItem.progressLabel}</span>
-          )}
-          {importedCount > 0 && (
-            <span className="body-sm" style={{ color: 'var(--brass)' }}>{importedCount} imported</span>
-          )}
-          {selectedCount > 0 && !hasPacketDraft && (
-            <span className="body-sm" style={{ color: 'var(--ink)', fontWeight: 600 }}>
-              {selectedCount} selected
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span className="body-sm" style={{ color: 'var(--slate)', fontWeight: 600 }}>
+              {scanBatchLabel(pages.length, totalPageCount, OCR_PAGE_LIMIT)}
             </span>
-          )}
+            {isOcrActive && (
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>{activeItem.progressLabel}</span>
+            )}
+            {importedCount > 0 && (
+              <span className="body-sm" style={{ color: 'var(--brass)' }}>{importedCount} imported</span>
+            )}
+            {selectedCount > 0 && !hasPacketDraft && (
+              <span className="body-sm" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                {selectedCount} selected
+              </span>
+            )}
+          </div>
+          <p className="body-sm" style={{ color: 'var(--slate-soft)', marginTop: 3 }}>
+            OCR may suggest fields. Review each page before importing. Nothing is sent. BisTrack is not touched.
+          </p>
         </div>
 
         {isTruncated && !isOcrActive && (
@@ -1285,7 +1321,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
               style={{ fontSize: 12 }}
               onClick={() => handleProcessNextBatch(activeItem.id)}
             >
-              Process pages {nextBatchStart}–{nextBatchEnd} →
+              Process next {Math.min(OCR_PAGE_LIMIT, totalPageCount - pages.length)} pages →
             </button>
             <span className="body-sm" style={{ color: 'var(--slate-soft)' }}>
               {totalPageCount - pages.length} more page{totalPageCount - pages.length === 1 ? '' : 's'} not yet scanned
@@ -1342,7 +1378,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
                 ? renderPageDetail(activePage)
                 : (
                   <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 8 }}>
-                    Select a page to review it, or check multiple pages to create a packet.
+                    Click a page to review it. OCR-suggested fields will open for editing. Import when the name looks right.
                   </p>
                 )
             }
@@ -1855,12 +1891,23 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         {/* Active panel */}
         <div style={{ flex: 1, minWidth: 0, maxWidth: 780 }}>
           {activeItem && (
-            <h3
-              className="serif-h h3"
-              style={{ margin: '0 0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
-              {activeItem.fileName || 'Pasted text'}
-            </h3>
+            activeItem.phase === 'pages'
+              ? (
+                <div style={{ marginBottom: 14 }}>
+                  <h3 className="serif-h h3" style={{ margin: '0 0 2px' }}>Scan Packet Review</h3>
+                  <p className="body-sm" style={{ color: 'var(--slate)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activeItem.fileName}
+                  </p>
+                </div>
+              )
+              : (
+                <h3
+                  className="serif-h h3"
+                  style={{ margin: '0 0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {activeItem.fileName || 'Pasted text'}
+                </h3>
+              )
           )}
           {renderActiveContent()}
         </div>
@@ -1880,11 +1927,13 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
       <NextActionBar
         action={
           queue.length === 0
-            ? 'Issues are grouped at the top. Decide on each, then import the rest.'
-            : 'Click a file in the queue to review and import it.'
+            ? 'Upload a CSV or scanned PDF packet to get started.'
+            : activeItem?.phase === 'pages'
+              ? 'Click a page, review the suggested fields, and import. OCR assists — you decide.'
+              : 'Click a file in the queue to review and import it.'
         }
         why="Imported files appear in Customer Files and Today. Nothing is sent. BisTrack is not touched."
-        dontForget="Start a Visit for a walk-in customer — bulk import is for batching known contacts."
+        dontForget="Start a Visit for a walk-in customer — bulk import is for batching contacts from a packet."
         primary={
           onBack ? (
             <button type="button" className="btn btn-quiet" onClick={onBack}>

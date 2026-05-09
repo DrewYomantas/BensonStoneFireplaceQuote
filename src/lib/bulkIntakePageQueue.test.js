@@ -105,6 +105,43 @@ describe('pageItemCountLabel', () => {
   })
 })
 
+// ---- Milestone 19.6.2 label correctness --------------------------------------
+
+describe('PAGE_STATUS_LABELS — Milestone 19.6.2 values', () => {
+  it('ready-to-review is "Needs review" — OCR done does not mean ready', () => {
+    assert.equal(PAGE_STATUS_LABELS['ready-to-review'], 'Needs review')
+  })
+  it('needs-cleanup is "Needs review"', () => {
+    assert.equal(PAGE_STATUS_LABELS['needs-cleanup'], 'Needs review')
+  })
+  it('draft-built is "Draft started" (not "Draft built")', () => {
+    assert.equal(PAGE_STATUS_LABELS['draft-built'], 'Draft started')
+  })
+})
+
+describe('PAGE_STATUS_CLS — Milestone 19.6.2 values', () => {
+  it('ready-to-review is source-said (amber) not source-verified', () => {
+    assert.equal(PAGE_STATUS_CLS['ready-to-review'], 'source source-said')
+  })
+  it('draft-built is source-said (human review still needed)', () => {
+    assert.equal(PAGE_STATUS_CLS['draft-built'], 'source source-said')
+  })
+  it('imported is source-verified', () => {
+    assert.equal(PAGE_STATUS_CLS['imported'], 'source source-verified')
+  })
+})
+
+describe('createPageItem — no image persistence', () => {
+  it('does not include imageDataUrl field', () => {
+    const p = createPageItem(1, 10, 'parent-1')
+    assert.ok(!('imageDataUrl' in p), 'page items must not persist image bytes')
+  })
+  it('autoExtract starts null', () => {
+    const p = createPageItem(1, 10, 'parent-1')
+    assert.equal(p.autoExtract, null)
+  })
+})
+
 describe('detectPageGroupSuggestions', () => {
   it('returns empty for empty array', () => {
     assert.deepEqual(detectPageGroupSuggestions([]), [])

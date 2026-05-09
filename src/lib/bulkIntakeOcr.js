@@ -15,6 +15,17 @@ export function pageBatchLabel(batchSize, totalCount) {
   return `Showing first ${batchSize} of ${totalCount} pages`
 }
 
+// "Pages 1–8 of 106 · Batch 1 of 14" for the Scan Packet Review header.
+// When all pages are loaded, returns "Pages 1–N" with no batch suffix.
+export function scanBatchLabel(processedCount, totalCount, batchSize) {
+  if (!totalCount || totalCount <= processedCount) {
+    return `Pages 1–${processedCount}`
+  }
+  const totalBatches = Math.ceil(totalCount / batchSize)
+  const currentBatch = Math.ceil(processedCount / batchSize)
+  return `Pages 1–${processedCount} of ${totalCount} · Batch ${currentBatch} of ${totalBatches}`
+}
+
 // Returns a warning string when a PDF exceeds OCR_PAGE_LIMIT, null otherwise.
 export function ocrPageWarning(pageCount) {
   if (pageCount > OCR_PAGE_LIMIT) {

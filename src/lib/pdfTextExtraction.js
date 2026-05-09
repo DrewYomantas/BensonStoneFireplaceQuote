@@ -313,6 +313,28 @@ export async function extractOcrPageByPage(file, options = {}) {
   }
 }
 
+// Render a single PDF page to a JPEG data URL for in-app preview.
+// Uses lower scale (1.5×) than OCR (2.25×) to keep memory light.
+// Does NOT persist the image — caller is responsible for memory management.
+export async function renderSinglePdfPage(file, pageNumber, options = {}) {
+  const { scale = 1.5, imageType = 'image/jpeg', quality = 0.8, signal } = options
+  throwIfAborted(signal)
+  const pdf = await loadPdf(file)
+  throwIfAborted(signal)
+  const page = await pdf.getPage(pageNumber)
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  canvas.width = Math.floor(viewport.width)
+  canvas.height = Math.floor(viewport.height)
+  await page.render({ canvasContext: ctx, viewport }).promise
+  throwIfAborted(signal)
+  const dataUrl = canvas.toDataURL(imageType, quality)
+  canvas.width = 0
+  canvas.height = 0
+  return dataUrl
+}
+
 export async function extractOcrFromImage(file, options = {}) {
   const { onProgress, signal } = options
   throwIfAborted(signal)

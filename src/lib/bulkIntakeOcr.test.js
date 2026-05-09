@@ -5,6 +5,7 @@ import {
   ocrPageWarning,
   ocrProgressLabel,
   pageBatchLabel,
+  scanBatchLabel,
   OCR_PAGE_LIMIT,
 } from './bulkIntakeOcr.js'
 
@@ -112,5 +113,33 @@ describe('ocrProgressLabel', () => {
   it('ocr stage with pageNumber 0 shows preparing', () => {
     const label = ocrProgressLabel({ stage: 'ocr', pageNumber: 0, pageCount: 4 })
     assert.ok(label.toLowerCase().includes('preparing'))
+  })
+})
+
+describe('scanBatchLabel', () => {
+  it('returns "Pages 1–N" when all pages loaded', () => {
+    assert.equal(scanBatchLabel(8, 8, 8), 'Pages 1–8')
+  })
+  it('returns "Pages 1–N" when totalCount is falsy', () => {
+    assert.equal(scanBatchLabel(8, 0, 8), 'Pages 1–8')
+    assert.equal(scanBatchLabel(8, undefined, 8), 'Pages 1–8')
+  })
+  it('returns batch label with total for truncated packet', () => {
+    const label = scanBatchLabel(8, 106, 8)
+    assert.ok(label.includes('Pages 1–8'), `expected "Pages 1–8" in "${label}"`)
+    assert.ok(label.includes('106'), `expected total "106" in "${label}"`)
+    assert.ok(label.includes('Batch 1'), `expected "Batch 1" in "${label}"`)
+  })
+  it('shows correct batch total for 106-page packet at 8 per batch', () => {
+    const label = scanBatchLabel(8, 106, 8)
+    assert.ok(label.includes('14'), `expected 14 total batches in "${label}"`)
+  })
+  it('shows batch 2 after second batch processed', () => {
+    const label = scanBatchLabel(16, 106, 8)
+    assert.ok(label.includes('Batch 2'), `expected "Batch 2" in "${label}"`)
+    assert.ok(label.includes('Pages 1–16'), `expected "Pages 1–16" in "${label}"`)
+  })
+  it('singular page count works', () => {
+    assert.equal(scanBatchLabel(1, 1, 8), 'Pages 1–1')
   })
 })
