@@ -42,8 +42,10 @@ function throwIfAborted(signal) {
   }
 }
 
-export async function extractTextFromPdf(file) {
+export async function extractTextFromPdf(file, options = {}) {
+  const { onProgress } = options
   const pdf = await loadPdf(file)
+  onProgress?.({ stage: 'pdf-loaded', pageCount: pdf.numPages })
   const pages = []
   for (let p = 1; p <= pdf.numPages; p += 1) {
     const page = await pdf.getPage(p)
@@ -254,6 +256,7 @@ export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
 export async function extractOcrPageByPage(file, options = {}) {
   const { maxPages = Infinity, onProgress, onPageComplete, signal } = options
   throwIfAborted(signal)
+  onProgress?.({ stage: 'loading-pdf' })
   const pdf = await loadPdf(file)
   const pageLimit = Math.min(pdf.numPages, maxPages)
   throwIfAborted(signal)

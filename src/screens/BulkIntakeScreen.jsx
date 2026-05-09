@@ -304,7 +304,17 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
       )
       try {
         const { extractTextFromPdf, extractOcrFromPdf, extractOcrPageByPage } = await import('../lib/pdfTextExtraction.js')
-        const { rawText, embeddedTextLikelyMissing, pageCount } = await extractTextFromPdf(file)
+        const { rawText, embeddedTextLikelyMissing, pageCount } = await extractTextFromPdf(file, {
+          onProgress: (prog) => {
+            if (prog.stage === 'pdf-loaded') {
+              setQueue((prev) =>
+                updateQueueItem(prev, itemId, {
+                  progressLabel: `Found ${prog.pageCount} page${prog.pageCount === 1 ? '' : 's'}…`,
+                }),
+              )
+            }
+          },
+        })
 
         if (embeddedTextLikelyMissing && pageCount > 1) {
           // Multi-page scanned packet → page-by-page OCR mode
@@ -328,6 +338,12 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
           await extractOcrPageByPage(file, {
             maxPages: pageLimit,
             onProgress: (prog) => {
+              if (prog.stage === 'loading-pdf') {
+                setQueue((prev) =>
+                  updateQueueItem(prev, itemId, { progressLabel: 'Loading PDF for scanning…' }),
+                )
+                return
+              }
               if (prog.stage === 'loading-engine') {
                 setQueue((prev) =>
                   updateQueueItem(prev, itemId, { progressLabel: ocrProgressLabel(prog) }),
@@ -1353,11 +1369,17 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
 
     if (status === QUEUE_STATUS.extracting || status === QUEUE_STATUS.ocrRunning) {
+      const isPdfReading = activeItem.fileType === 'pdf' && activeItem.progressLabel === 'Reading PDF…'
       return (
         <div style={{ paddingTop: 24 }}>
           <p className="body-sm" style={{ color: 'var(--slate)' }}>
             {activeItem.progressLabel || 'Processing…'}
           </p>
+          {isPdfReading && (
+            <p className="body-sm" style={{ color: 'var(--slate-soft)', marginTop: 6 }}>
+              Large files may take a moment to load.
+            </p>
+          )}
           {errorMessage && (
             <p className="body-sm" style={{ color: 'var(--ember-dark)', marginTop: 8 }}>{errorMessage}</p>
           )}
