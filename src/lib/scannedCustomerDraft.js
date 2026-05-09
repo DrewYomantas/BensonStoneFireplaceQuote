@@ -120,6 +120,27 @@ function extractAddress(text) {
   return safe(street[1].trim())
 }
 
+// ---- Delivery / project address ---------------------------------------------
+// Prefer the delivery or ship-to address as the project address on Benson quotes.
+
+const DELIVERY_ADDRESS_LABEL_RE = /(?:delivery\s*address|ship\s*to|deliver\s*to|delivery\s*to|project\s*address)[\s:]+([^\n]{3,80})/i
+
+function extractDeliveryAddress(text) {
+  const m = text.match(DELIVERY_ADDRESS_LABEL_RE)
+  if (!m) return ''
+  const candidate = normalizeScannedDraftField(m[1].split('\n')[0])
+  return safe(candidate)
+}
+
+// ---- Service order number ---------------------------------------------------
+
+const SERVICE_ORDER_RE = /(?:service\s*order|work\s*order|s\.?o\.?|service\s*ticket|ticket)\s*(?:no\.?|number|num)?\s*[#:\s]*([A-Z0-9/-]{2,20})/i
+
+function extractServiceOrderNumber(text) {
+  const m = text.match(SERVICE_ORDER_RE)
+  return m ? normalizeScannedDraftField(m[1]) : ''
+}
+
 // ---- Quote number -----------------------------------------------------------
 
 const QUOTE_NUM_RE = /(?:quote|quotation|order|job|estimate|invoice|bid|proposal|po)\s*(?:no\.?|number|#|num)?[:\s]+([A-Z0-9/-]{3,20})/i
@@ -162,12 +183,17 @@ export function buildScannedCustomerDraft(ocrText, options = {}) {
     return { fields: emptyFields(), warnings: ['OCR text was empty or missing.'] }
   }
   const text = String(ocrText)
+  // Prefer delivery/ship-to address as project address when available.
+  const deliveryAddr = extractDeliveryAddress(text)
+  const streetAddr = safe(extractAddress(text))
+  const serviceOrderNum = safe(extractServiceOrderNumber(text))
+  const quoteNum = safe(extractQuoteNumber(text))
   const fields = {
     customerName: safe(extractName(text)),
     customerPhone: extractPhone(text),
     customerEmail: safe(extractEmail(text)),
-    projectAddress: safe(extractAddress(text)),
-    quoteNumber: safe(extractQuoteNumber(text)),
+    projectAddress: deliveryAddr || streetAddr,
+    quoteNumber: quoteNum || serviceOrderNum,
     quoteDate: safe(extractQuoteDate(text)),
     existingNotes: '',
   }

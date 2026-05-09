@@ -21,6 +21,16 @@ import {
   updateQueueItem,
   queueItemCountLabel,
 } from '../lib/bulkIntakeQueue.js'
+import {
+  PAGE_STATUS,
+  PAGE_STATUS_LABELS,
+  PAGE_STATUS_CLS,
+  createPageItem,
+  updatePageItem as updatePageItemFn,
+  pageItemCountLabel,
+  detectPageGroupSuggestions,
+} from '../lib/bulkIntakePageQueue.js'
+import { detectDocType, DOC_TYPE_LABELS } from '../lib/scanDocTypeDetector.js'
 
 // ---- Row-level status badge (for review rows) --------------------------------
 
@@ -152,6 +162,49 @@ function QueueRow({ item, isActive, onActivate, onRemove }) {
   )
 }
 
+// ---- Page list row (multi-page scanned PDF) ---------------------------------
+
+function PageRow({ page, isActive, onActivate }) {
+  const docLabel = DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'
+  const countLabel = pageItemCountLabel(page)
+  const customerName = page.draftSummary?.customerName || page.scanDraftFields?.customerName || ''
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onActivate(page.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onActivate(page.id) }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+        cursor: 'pointer', borderRadius: 6, marginBottom: 3,
+        background: isActive ? 'var(--stone-100)' : 'transparent',
+        borderLeft: isActive ? '3px solid var(--brass)' : '3px solid transparent',
+      }}
+    >
+      <div style={{ width: 26, flexShrink: 0, textAlign: 'right' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--slate)' }}>{page.pageNumber}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--slate)' }}>{docLabel}</span>
+          <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '1px 5px' }}>
+            {PAGE_STATUS_LABELS[page.status]}
+          </span>
+          {countLabel && <span style={{ fontSize: 11, color: 'var(--brass)' }}>{countLabel}</span>}
+        </div>
+        {customerName && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {customerName}
+          </div>
+        )}
+        {page.status === PAGE_STATUS.ocrRunning && page.progressLabel && (
+          <div style={{ fontSize: 10, color: 'var(--slate)' }}>{page.progressLabel}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ---- Default selection logic ------------------------------------------------
 
 function defaultSelected(rows) {
@@ -174,6 +227,7 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
   const [existingFiles, setExistingFiles] = useState([])
   const [importing, setImporting] = useState(false)
   const [showScanOcrText, setShowScanOcrText] = useState(false)
+  const [showPageOcrText, setShowPageOcrText] = useState(false)
   const fileInputRef = useRef(null)
   const addMoreRef = useRef(null)
 
@@ -236,9 +290,74 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
         updateQueueItem(prev, itemId, { status: QUEUE_STATUS.extracting, progressLabel: 'Reading PDF…' }),
       )
       try {
-        const { extractTextFromPdf, extractOcrFromPdf } = await import('../lib/pdfTextExtraction.js')
+        const { extractTextFromPdf, extractOcrFromPdf, extractOcrPageByPage } = await import('../lib/pdfTextExtraction.js')
         const { rawText, embeddedTextLikelyMissing, pageCount } = await extractTextFromPdf(file)
+
+        if (embeddedTextLikelyMissing && pageCount > 1) {
+          // Multi-page scanned packet → page-by-page OCR mode
+          const pageLimit = Math.min(pageCount, OCR_PAGE_LIMIT)
+          const pageWarn = ocrPageWarning(pageCount)
+          const initialPageItems = Array.from({ length: pageLimit }, (_, i) =>
+            createPageItem(i + 1, pageLimit, itemId),
+          )
+          const pageIdMap = {}
+          for (const p of initialPageItems) pageIdMap[p.pageNumber] = p.id
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, {
+              status: QUEUE_STATUS.ocrRunning,
+              isMultiPage: true,
+              phase: 'pages',
+              pageItems: initialPageItems,
+              progressLabel: `Scanning page 1 of ${pageLimit}…`,
+              errorMessage: pageWarn || '',
+            }),
+          )
+          await extractOcrPageByPage(file, {
+            maxPages: pageLimit,
+            onProgress: (prog) => {
+              if (prog.stage === 'rendering' || prog.stage === 'ocr') {
+                const label = prog.stage === 'rendering'
+                  ? `Preparing page ${prog.pageNumber} of ${prog.pageCount}…`
+                  : `Scanning page ${prog.pageNumber} of ${prog.pageCount}…`
+                setQueue((prev) => {
+                  const it = prev.find((q) => q.id === itemId)
+                  if (!it) return prev
+                  return updateQueueItem(prev, itemId, {
+                    progressLabel: label,
+                    pageItems: updatePageItemFn(it.pageItems, pageIdMap[prog.pageNumber], {
+                      status: PAGE_STATUS.ocrRunning,
+                      progressLabel: label,
+                    }),
+                  })
+                })
+              }
+            },
+            onPageComplete: ({ pageNumber, text }) => {
+              const pageId = pageIdMap[pageNumber]
+              const docType = detectDocType(text)
+              const weak = isOcrTextWeak(text)
+              setQueue((prev) => {
+                const it = prev.find((q) => q.id === itemId)
+                if (!it) return prev
+                return updateQueueItem(prev, itemId, {
+                  pageItems: updatePageItemFn(it.pageItems, pageId, {
+                    extractedText: text,
+                    detectedDocType: docType,
+                    status: weak ? PAGE_STATUS.needsCleanup : PAGE_STATUS.readyToReview,
+                    progressLabel: '',
+                  }),
+                })
+              })
+            },
+          })
+          setQueue((prev) =>
+            updateQueueItem(prev, itemId, { status: QUEUE_STATUS.parsed, progressLabel: '' }),
+          )
+          return
+        }
+
         if (embeddedTextLikelyMissing) {
+          // Single-page scanned PDF → existing single-blob OCR
           const pageWarn = ocrPageWarning(pageCount)
           const maxPages = Math.min(pageCount, OCR_PAGE_LIMIT)
           setQueue((prev) =>
@@ -484,6 +603,117 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
   }
 
+  // ---- Page-level handlers ---------------------------------------------------
+
+  function handleActivatePage(pageId) {
+    if (!activeItem) return
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { activePageId: pageId }))
+    setShowPageOcrText(false)
+    setGlobalError('')
+  }
+
+  function handleDeactivatePage() {
+    if (!activeItem) return
+    setQueue((prev) => updateQueueItem(prev, activeItem.id, { activePageId: null }))
+    setShowPageOcrText(false)
+    setGlobalError('')
+  }
+
+  function handleMarkPageReferenceOnly(pageId) {
+    if (!activeItem) return
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === activeItem.id)
+      if (!it) return prev
+      return updateQueueItem(prev, activeItem.id, {
+        pageItems: updatePageItemFn(it.pageItems, pageId, { status: PAGE_STATUS.referenceOnly }),
+        activePageId: null,
+      })
+    })
+    setGlobalError('')
+  }
+
+  function handleUpdatePageText(pageId, text) {
+    if (!activeItem) return
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === activeItem.id)
+      if (!it) return prev
+      return updateQueueItem(prev, activeItem.id, {
+        pageItems: updatePageItemFn(it.pageItems, pageId, { extractedText: text }),
+      })
+    })
+  }
+
+  function handleBuildPageScanDraft(page) {
+    if (!activeItem || !page) return
+    const { fields, warnings } = buildScannedCustomerDraft(page.extractedText, { existingFiles })
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === activeItem.id)
+      if (!it) return prev
+      return updateQueueItem(prev, activeItem.id, {
+        pageItems: updatePageItemFn(it.pageItems, page.id, {
+          status: PAGE_STATUS.draftBuilt,
+          scanDraftFields: fields,
+          scanDraftWarnings: warnings,
+          draftSummary: {
+            customerName: fields.customerName,
+            quoteNumber: fields.quoteNumber,
+          },
+        }),
+      })
+    })
+    setGlobalError('')
+  }
+
+  function handleUpdatePageDraftField(pageId, key, value) {
+    if (!activeItem) return
+    setQueue((prev) => {
+      const it = prev.find((q) => q.id === activeItem.id)
+      if (!it) return prev
+      const pg = it.pageItems.find((p) => p.id === pageId)
+      if (!pg) return prev
+      const updated = { ...(pg.scanDraftFields || {}), [key]: value }
+      const warnings = detectScannedDraftWarnings(updated, existingFiles)
+      return updateQueueItem(prev, activeItem.id, {
+        pageItems: updatePageItemFn(it.pageItems, pageId, {
+          scanDraftFields: updated,
+          scanDraftWarnings: warnings,
+        }),
+      })
+    })
+  }
+
+  async function handleImportPageDraft(page) {
+    if (!activeItem || !page || importing) return
+    const fields = page.scanDraftFields || {}
+    if (!fields.customerName) { setGlobalError('Name is required before importing.'); return }
+    setImporting(true)
+    setGlobalError('')
+    try {
+      const ready = await ensureSalesOsBoot()
+      if (!ready.ok) { setGlobalError(ready.error || 'Storage unavailable'); return }
+      const storage = getSalesOsStorage()
+      const imported = await commitScannedDraft(fields, storage)
+      const freshFiles = await listCustomerFilesDurable(storage)
+      setExistingFiles(freshFiles)
+      setQueue((prev) => {
+        const it = prev.find((q) => q.id === activeItem.id)
+        if (!it) return prev
+        return updateQueueItem(prev, activeItem.id, {
+          pageItems: updatePageItemFn(it.pageItems, page.id, {
+            status: PAGE_STATUS.imported,
+            importedCount: 1,
+            importedFileId: imported.id,
+          }),
+          activePageId: null,
+        })
+      })
+    } catch (err) {
+      setGlobalError(err.message || String(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   function handleUpdateActiveText(text) {
     if (!activeItem) return
     setQueue((prev) => updateQueueItem(prev, activeItem.id, { extractedText: text }))
@@ -511,6 +741,261 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     a.download = 'bulk-import-template.csv'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // ---- Pages phase (multi-page scanned PDF) ----------------------------------
+
+  function renderPageDraftEditor(page) {
+    const fields = page.scanDraftFields || {
+      customerName: '', customerPhone: '', customerEmail: '',
+      projectAddress: '', quoteNumber: '', quoteDate: '', existingNotes: '',
+    }
+    const warnings = page.scanDraftWarnings || []
+    const canImport = Boolean(fields.customerName)
+    const FS = { marginTop: 4, width: '100%' }
+    const LS = { fontSize: 10 }
+    return (
+      <div>
+        <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 10 }}>
+          OCR finished. Review before importing.
+        </p>
+        {warnings.length > 0 && (
+          <div className="card" style={{ padding: 8, marginBottom: 10, borderLeft: '3px solid var(--ember-dark)' }}>
+            {warnings.map((w, i) => (
+              <p key={i} className="body-sm" style={{ color: 'var(--ember-dark)', margin: i > 0 ? '4px 0 0' : 0 }}>{w}</p>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 14px', marginBottom: 10 }}>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>NAME</label>
+            <input className="field" value={fields.customerName} onChange={(e) => handleUpdatePageDraftField(page.id, 'customerName', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>PHONE</label>
+            <input className="field" value={fields.customerPhone} onChange={(e) => handleUpdatePageDraftField(page.id, 'customerPhone', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>EMAIL</label>
+            <input className="field" value={fields.customerEmail} onChange={(e) => handleUpdatePageDraftField(page.id, 'customerEmail', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>ADDRESS</label>
+            <input className="field" value={fields.projectAddress} onChange={(e) => handleUpdatePageDraftField(page.id, 'projectAddress', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>QUOTE / ORDER #</label>
+            <input className="field" value={fields.quoteNumber} onChange={(e) => handleUpdatePageDraftField(page.id, 'quoteNumber', e.target.value)} style={FS} />
+          </div>
+          <div>
+            <label className="eyebrow eyebrow-ink" style={LS}>DATE</label>
+            <input className="field" value={fields.quoteDate} onChange={(e) => handleUpdatePageDraftField(page.id, 'quoteDate', e.target.value)} style={FS} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <label className="eyebrow eyebrow-ink" style={LS}>NOTES</label>
+          <textarea
+            className="field"
+            value={fields.existingNotes}
+            onChange={(e) => handleUpdatePageDraftField(page.id, 'existingNotes', e.target.value)}
+            rows={2}
+            style={{ marginTop: 4, width: '100%', resize: 'vertical' }}
+          />
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            style={{ fontSize: 11, padding: '2px 8px' }}
+            onClick={() => setShowPageOcrText((s) => !s)}
+          >
+            {showPageOcrText ? '▲ Hide OCR text' : '▼ Show OCR text'}
+          </button>
+          {showPageOcrText && (
+            <textarea
+              className="field"
+              value={page.extractedText}
+              onChange={(e) => handleUpdatePageText(page.id, e.target.value)}
+              rows={6}
+              style={{ marginTop: 6, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical' }}
+            />
+          )}
+        </div>
+        {globalError && (
+          <div className="card" style={{ padding: 8, marginBottom: 8, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handleImportPageDraft(page)} disabled={importing || !canImport}>
+            {importing ? 'Importing…' : 'Import this draft →'}
+          </button>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={() => handleMarkPageReferenceOnly(page.id)}>
+            Mark reference only
+          </button>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleDeactivatePage}>
+            ← All pages
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderPageDetail(page) {
+    if (page.status === PAGE_STATUS.imported) {
+      return (
+        <div>
+          <div className="card-flat" style={{ padding: '14px 16px', marginBottom: 12 }}>
+            <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--brass)', margin: 0 }}>Imported</p>
+            {page.scanDraftFields?.customerName && (
+              <p className="body-sm" style={{ color: 'var(--ink)', marginTop: 4 }}>{page.scanDraftFields.customerName}</p>
+            )}
+          </div>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleDeactivatePage}>
+            ← All pages
+          </button>
+        </div>
+      )
+    }
+    if (page.status === PAGE_STATUS.referenceOnly) {
+      return (
+        <div>
+          <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 10 }}>
+            Marked as reference only — no customer file will be created from this page.
+          </p>
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleDeactivatePage}>
+            ← All pages
+          </button>
+        </div>
+      )
+    }
+    if (page.status === PAGE_STATUS.draftBuilt) {
+      return renderPageDraftEditor(page)
+    }
+    const isWeak = page.status === PAGE_STATUS.needsCleanup
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+          <span className={PAGE_STATUS_CLS[page.status]} style={{ fontSize: 10, padding: '2px 6px' }}>
+            {PAGE_STATUS_LABELS[page.status]}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--slate)' }}>{DOC_TYPE_LABELS[page.detectedDocType] || 'Unknown'}</span>
+        </div>
+        {isWeak && (
+          <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderLeft: '3px solid var(--ember-dark)' }}>
+            <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>
+              OCR returned little text — this may be a photo, sketch, or low-quality scan.
+            </p>
+          </div>
+        )}
+        <div style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className="btn btn-quiet"
+            style={{ fontSize: 11, padding: '2px 8px' }}
+            onClick={() => setShowPageOcrText((s) => !s)}
+          >
+            {showPageOcrText ? '▲ Hide extracted text' : '▼ Show / edit OCR text'}
+          </button>
+          {showPageOcrText && (
+            <textarea
+              className="field"
+              value={page.extractedText}
+              onChange={(e) => handleUpdatePageText(page.id, e.target.value)}
+              rows={8}
+              style={{ marginTop: 6, width: '100%', fontFamily: 'var(--font-mono)', fontSize: 12, resize: 'vertical' }}
+            />
+          )}
+        </div>
+        {globalError && (
+          <div className="card" style={{ padding: 8, marginBottom: 8, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ink)' }}>{globalError}</p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {page.status !== PAGE_STATUS.ocrRunning && page.status !== PAGE_STATUS.waiting && (
+            <>
+              <button type="button" className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => handleBuildPageScanDraft(page)}>
+                Build customer draft
+              </button>
+              <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={() => handleMarkPageReferenceOnly(page.id)}>
+                Mark reference only
+              </button>
+            </>
+          )}
+          <button type="button" className="btn btn-quiet" style={{ fontSize: 12 }} onClick={handleDeactivatePage}>
+            ← All pages
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderPagesPhase() {
+    const pages = activeItem.pageItems || []
+    const activePage = pages.find((p) => p.id === activeItem.activePageId) || null
+    const pagesWithDrafts = pages.filter((p) => p.draftSummary)
+    const suggestions = detectPageGroupSuggestions(pagesWithDrafts)
+    const importedCount = pages.filter((p) => p.status === PAGE_STATUS.imported).length
+
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span className="body-sm" style={{ color: 'var(--slate)' }}>
+            {pages.length} page{pages.length === 1 ? '' : 's'}
+          </span>
+          {activeItem.status === QUEUE_STATUS.ocrRunning && (
+            <span className="body-sm" style={{ color: 'var(--slate)' }}>{activeItem.progressLabel}</span>
+          )}
+          {importedCount > 0 && (
+            <span className="body-sm" style={{ color: 'var(--brass)' }}>{importedCount} imported</span>
+          )}
+        </div>
+        {suggestions.length > 0 && (
+          <div className="card" style={{ padding: '8px 12px', marginBottom: 12, borderLeft: '3px solid var(--brass)' }}>
+            {suggestions.map((s, i) => (
+              <p key={i} className="body-sm" style={{ color: 'var(--slate)', margin: i > 0 ? '4px 0 0' : 0 }}>
+                {s.label}
+              </p>
+            ))}
+          </div>
+        )}
+        {activeItem.errorMessage && (
+          <div className="card" style={{ padding: '6px 12px', marginBottom: 10, borderLeft: '3px solid var(--ember)' }}>
+            <p className="body-sm" style={{ color: 'var(--ember-dark)' }}>{activeItem.errorMessage}</p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+          <div style={{ width: 210, flexShrink: 0, maxHeight: '65vh', overflowY: 'auto' }}>
+            {pages.map((page) => (
+              <PageRow
+                key={page.id}
+                page={page}
+                isActive={page.id === activeItem.activePageId}
+                onActivate={handleActivatePage}
+              />
+            ))}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {activePage ? renderPageDetail(activePage) : (
+              <p className="body-sm" style={{ color: 'var(--slate)', paddingTop: 8 }}>
+                Select a page to review it.
+              </p>
+            )}
+          </div>
+        </div>
+        {importedCount > 0 && onOpenFilesList && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ marginTop: 16, fontSize: 12 }}
+            onClick={onOpenFilesList}
+          >
+            View Customer Files →
+          </button>
+        )}
+      </div>
+    )
   }
 
   // ---- Scan draft phase ------------------------------------------------------
@@ -629,6 +1114,12 @@ export default function BulkIntakeScreen({ onBack, onOpenFilesList }) {
     }
 
     const { status, phase, errorMessage } = activeItem
+
+    // Page-split mode takes precedence over status checks so the page list
+    // renders even while OCR is still running on later pages.
+    if (phase === 'pages') {
+      return renderPagesPhase()
+    }
 
     if (status === QUEUE_STATUS.waiting) {
       return (

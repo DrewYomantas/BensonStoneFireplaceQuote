@@ -22,6 +22,7 @@ export const ACTIVITY_KINDS = Object.freeze([
   'follow_up_set',
   'manual_note',
   'bulk_imported',
+  'scan_imported',
 ])
 
 export const ACTIVITY_KIND_LABELS = Object.freeze({
@@ -33,6 +34,7 @@ export const ACTIVITY_KIND_LABELS = Object.freeze({
   follow_up_set: 'Follow-up set',
   manual_note: 'Note',
   bulk_imported: 'Bulk imported',
+  scan_imported: 'Scan imported',
 })
 
 const ACTIVITY_KIND_SET = new Set(ACTIVITY_KINDS)

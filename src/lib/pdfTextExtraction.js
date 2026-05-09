@@ -249,6 +249,64 @@ export async function extractOcrFromPdfForBisTrackScan(file, options = {}) {
   }
 }
 
+// OCR a PDF page by page, calling onPageComplete after each page so callers
+// can update UI incrementally. Images are discarded after OCR — not stored.
+export async function extractOcrPageByPage(file, options = {}) {
+  const { maxPages = Infinity, onProgress, onPageComplete, signal } = options
+  throwIfAborted(signal)
+  const pdf = await loadPdf(file)
+  const pageLimit = Math.min(pdf.numPages, maxPages)
+  throwIfAborted(signal)
+  onProgress?.({ stage: 'loading-engine' })
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('eng')
+  const pages = []
+
+  try {
+    await worker.setParameters({ preserve_interword_spaces: '1' })
+  } catch {
+    // older builds — ignore
+  }
+
+  try {
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+      throwIfAborted(signal)
+      onProgress?.({ stage: 'rendering', pageNumber, pageCount: pageLimit })
+      const page = await pdf.getPage(pageNumber)
+      const viewport = page.getViewport({ scale: 2.25 })
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      canvas.width = Math.floor(viewport.width)
+      canvas.height = Math.floor(viewport.height)
+      await page.render({ canvasContext: ctx, viewport }).promise
+      throwIfAborted(signal)
+
+      onProgress?.({ stage: 'ocr', pageNumber, pageCount: pageLimit })
+      const dataUrl = canvas.toDataURL('image/png')
+      // Release canvas memory immediately after capturing data URL.
+      canvas.width = 0
+      canvas.height = 0
+
+      const result = await worker.recognize(dataUrl)
+      throwIfAborted(signal)
+      const text = result.data?.text || ''
+      const confidence = Math.round(result.data?.confidence || 0)
+      const pageResult = { pageNumber, pageCount: pageLimit, text, confidence }
+      pages.push(pageResult)
+      onPageComplete?.(pageResult)
+    }
+  } finally {
+    await worker.terminate()
+  }
+
+  return {
+    pages,
+    rawText: pages.map((p) => p.text).join('\n\n'),
+    pageCount: pages.length,
+    extractionSource: 'ocr-page-by-page',
+  }
+}
+
 export async function extractOcrFromImage(file, options = {}) {
   const { onProgress, signal } = options
   throwIfAborted(signal)

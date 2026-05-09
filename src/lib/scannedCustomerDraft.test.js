@@ -347,3 +347,86 @@ describe('detectScannedDraftWarnings', () => {
     assert.ok(warnings.includes('Missing contact'))
   })
 })
+
+// ---- Delivery address extraction (Milestone 19.6) ---------------------------
+
+describe('buildScannedCustomerDraft — delivery address', () => {
+  it('prefers delivery address label over generic street', () => {
+    const text = [
+      'Invoice Address: 100 Main St, Rockford, IL 61101',
+      'Delivery Address: 456 Oak Ave, Loves Park, IL 61111',
+      'Customer: Mary Jones',
+    ].join('\n')
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.ok(fields.projectAddress.includes('456 Oak Ave'), `Got: ${fields.projectAddress}`)
+  })
+
+  it('prefers ship-to label as project address', () => {
+    const text = 'Customer: Bob Smith\nShip to: 789 Elm Rd, Rockford, IL 61104\n815-555-9999'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.ok(fields.projectAddress.includes('789 Elm Rd'), `Got: ${fields.projectAddress}`)
+  })
+
+  it('falls back to street address if no delivery label', () => {
+    const { fields } = buildScannedCustomerDraft('Customer: Amy\n123 Oak Street, Rockford, IL 61101')
+    assert.ok(fields.projectAddress.includes('123 Oak Street'), `Got: ${fields.projectAddress}`)
+  })
+})
+
+// ---- Service order number extraction (Milestone 19.6) -----------------------
+
+describe('buildScannedCustomerDraft — service order', () => {
+  it('extracts service order number when no quote number present', () => {
+    const text = 'SERVICE ORDER #SO-4567\nCustomer: Tom Baker\nPhone: 815-555-0202'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.ok(fields.quoteNumber.includes('SO-4567') || fields.quoteNumber.includes('4567'), `Got: ${fields.quoteNumber}`)
+  })
+
+  it('prefers quote number over service order when both present', () => {
+    const text = 'Quote No: Q-1234\nService Order: SO-5678\nCustomer: Pat'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.equal(fields.quoteNumber, 'Q-1234')
+  })
+
+  it('handles work order label', () => {
+    const text = 'Work Order #WO-999\nCustomer: Dana Lee\nPhone: 815-555-0303'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.ok(fields.quoteNumber.includes('WO-999') || fields.quoteNumber.includes('999'), `Got: ${fields.quoteNumber}`)
+  })
+})
+
+// ---- Field measure checklist extraction (Milestone 19.6) --------------------
+
+describe('buildScannedCustomerDraft — field measure checklist', () => {
+  it('extracts customer name from field measure sheet', () => {
+    const text = 'Field Measure Checklist\nCustomer: Sandra Hill\nOrder #: FM-2025-001'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.equal(fields.customerName, 'Sandra Hill')
+  })
+
+  it('extracts order number from field measure via quote pattern', () => {
+    const text = 'Field Measure\nCustomer: Greg Lane\nOrder #: FM-999'
+    const { fields } = buildScannedCustomerDraft(text)
+    assert.ok(fields.quoteNumber.includes('FM-999') || fields.quoteNumber.includes('999'), `Got: ${fields.quoteNumber}`)
+  })
+})
+
+// ---- No sensitive/banned content leakage (Milestone 19.6 reinforcement) -----
+
+describe('buildScannedCustomerDraft — no leakage from service/field-measure text', () => {
+  it('does not expose cost data from service order notes', () => {
+    const text = 'Service Order SO-001\nCustomer: Jim Cost\nParts cost: $150\nPhone: 815-555-0111'
+    const { fields } = buildScannedCustomerDraft(text)
+    for (const v of Object.values(fields)) {
+      assert.ok(!String(v).toLowerCase().includes('parts cost'), `Should not surface "parts cost": ${v}`)
+    }
+  })
+
+  it('does not expose margin data', () => {
+    const text = 'Quotation Q-001\nCustomer: Ann\nMargin: 30%\nPhone: 815-555-0222'
+    const { fields } = buildScannedCustomerDraft(text)
+    for (const v of Object.values(fields)) {
+      assert.ok(!String(v).toLowerCase().includes('margin'), `Should not surface "margin": ${v}`)
+    }
+  })
+})
