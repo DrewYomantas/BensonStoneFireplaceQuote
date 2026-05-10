@@ -223,12 +223,20 @@ DEPOSIT_TERMS  = 50% down at time of signing
 - **New persistent state goes through Sales OS storage** (see "Sales OS Storage" section), not new localStorage keys. The legacy localStorage pattern (`src/lib/showroomDisplayRegister.js`) still applies to existing modules; do not introduce new localStorage keys for Sales OS data.
 - Async storage tests use `createMemoryEngine()` from `salesOsStorage.js` so tests stay in `node --test` without `fake-indexeddb`.
 
+## Post-Milestone Workflow
+
+After each milestone: commit → push → update Notion "00 — Current State + Next Build" (page ID `354876ac-bdee-818f-9280-c8d9811c495f`). Update: HEAD commit, test count, ship table row, Next Pass section, bottom "correct as of" line. Google Drive needs no update for code work — it's the vendor/price-list source of truth only.
+
 ## Reintegration Rules
 
 - Keep BisTrack as the quote data source of truth.
 - Bring back one lane at a time from parked modules.
 - Attach features to the stripped quote-polish flow — do not rebuild the old command-board shell.
 - Private files in `src/data/bistrack-snapshot/` and `Fireplace Department/` stay local, never commit.
+
+### CSS debt in parked components
+
+Pre-V1.1 components (`FollowUpComposer`, `FollowUpPlanPanel`, etc.) use legacy CSS classes that don't exist in `app.css`: `wb-btn`, `wb-btn--primary`, `wb-pill`, `wb-pill--gold/green`, `ghost-button`, `primary-button`, `follow-up-composer`, `panel-heading`. When reintegrating, swap buttons → `btn btn-primary` / `btn btn-quiet`; swap pills → inline `<span>` with `var(--ember)` / `var(--brass)` background.
 
 ## Three Scanned-PDF Intake Paths — Keep Them in Sync
 
