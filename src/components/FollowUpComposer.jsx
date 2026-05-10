@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { followUpChannels, followUpTones } from '../lib/followUpComposer.js'
 
 function titleLabel(value) {
@@ -7,65 +8,103 @@ function titleLabel(value) {
 export default function FollowUpComposer({
   draft,
   opportunity,
-  playbook,
   selectedChannel,
   selectedTone,
   onChannelChange,
-  onCopyDraft,
+  onToneChange,
   onLogSent,
   onSaveDraft,
-  onToneChange,
 }) {
+  const [copied, setCopied] = useState(false)
+  const [fallbackVisible, setFallbackVisible] = useState(false)
+
+  const fullText = draft.subject ? `${draft.subject}\n\n${draft.body}` : draft.body
+
+  function handleCopy() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(fullText).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }).catch(() => setFallbackVisible(true))
+    } else {
+      setFallbackVisible(true)
+    }
+  }
+
   return (
-    <section className="follow-up-composer">
-      <div className="panel-heading">
-        <div>
-          <p className="kicker">Follow-Up Composer</p>
-          <h4>Draft follow-up</h4>
-          <p className="section-caption">{opportunity.customerName || 'Customer'} - {playbook?.name || 'No playbook selected'}</p>
-        </div>
-        <span className={`batch-status is-${draft.unsafeToSend ? 'needs-review' : 'ready'}`}>
+    <section className="card" style={{ padding: 14, marginTop: 12 }}>
+      <div className="hstack" style={{ marginBottom: 10 }}>
+        <span className="eyebrow eyebrow-ink">FOLLOW-UP COMPOSER</span>
+        <span className="spacer" />
+        <span
+          className="source"
+          style={{ background: draft.unsafeToSend ? 'var(--ember)' : 'var(--brass)', color: '#fff' }}
+        >
           {draft.unsafeToSend ? 'Review before sending' : 'Ready to copy'}
         </span>
       </div>
 
-      <div className="composer-controls">
-        <label className="field">
+      <p className="body-sm" style={{ color: 'var(--slate)', marginBottom: 10 }}>
+        {opportunity.customerName || 'Customer'}
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+        <label className="field" style={{ flex: '1 1 160px' }}>
           <span>Channel</span>
-          <select value={selectedChannel} onChange={(event) => onChannelChange(event.target.value)}>
-            {followUpChannels.map((channel) => <option key={channel} value={channel}>{titleLabel(channel)}</option>)}
+          <select value={selectedChannel} onChange={(e) => onChannelChange(e.target.value)}>
+            {followUpChannels.map((ch) => <option key={ch} value={ch}>{titleLabel(ch)}</option>)}
           </select>
         </label>
-        <label className="field">
+        <label className="field" style={{ flex: '1 1 160px' }}>
           <span>Tone</span>
-          <select value={selectedTone} onChange={(event) => onToneChange(event.target.value)}>
-            {followUpTones.map((tone) => <option key={tone} value={tone}>{titleLabel(tone)}</option>)}
+          <select value={selectedTone} onChange={(e) => onToneChange(e.target.value)}>
+            {followUpTones.map((t) => <option key={t} value={t}>{titleLabel(t)}</option>)}
           </select>
         </label>
       </div>
 
-      {draft.warnings.length ? (
-        <div className="opportunity-warning-box">
-          <h4>Review before sending</h4>
-          <ul className="notice-list notice-list--warning">
-            {draft.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+      {draft.warnings.length > 0 && (
+        <div className="card-inset" style={{ marginBottom: 10, borderLeft: '3px solid var(--ember)', padding: '8px 12px' }}>
+          <span className="eyebrow eyebrow-ember" style={{ display: 'block', marginBottom: 4 }}>Review before sending</span>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {draft.warnings.map((w) => <li key={w} className="body-sm">{w}</li>)}
           </ul>
         </div>
-      ) : null}
+      )}
 
-      <label className="field field--wide">
+      <label className="field" style={{ display: 'block', marginBottom: 8 }}>
         <span>Subject</span>
-        <input value={draft.subject} readOnly />
+        <input className="field" value={draft.subject} readOnly style={{ width: '100%' }} />
       </label>
-      <label className="field field--wide">
+      <label className="field" style={{ display: 'block', marginBottom: 10 }}>
         <span>Body</span>
-        <textarea rows={7} value={draft.body} readOnly />
+        <textarea className="field field-textarea" rows={7} value={draft.body} readOnly style={{ width: '100%', resize: 'vertical' }} />
       </label>
 
-      <div className="action-row">
-        <button type="button" className="ghost-button" onClick={onCopyDraft}>Copy message</button>
-        <button type="button" className="ghost-button" onClick={onSaveDraft}>Save draft to timeline</button>
-        <button type="button" className="primary-button" onClick={onLogSent}>Log as sent</button>
+      {fallbackVisible && (
+        <div style={{ marginBottom: 10 }}>
+          <span className="eyebrow eyebrow-ink" style={{ display: 'block', marginBottom: 4 }}>Copy manually:</span>
+          <textarea
+            className="field field-textarea"
+            rows={5}
+            readOnly
+            value={fullText}
+            style={{ width: '100%' }}
+            onFocus={(e) => e.target.select()}
+          />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+        <button type="button" className="btn btn-quiet" onClick={handleCopy}>
+          {copied ? 'Copied!' : 'Copy message'}
+        </button>
+        {onSaveDraft && (
+          <button type="button" className="btn btn-quiet" onClick={onSaveDraft}>Save draft to timeline</button>
+        )}
+        {onLogSent && (
+          <button type="button" className="btn btn-primary" onClick={onLogSent}>Log as sent</button>
+        )}
       </div>
     </section>
   )

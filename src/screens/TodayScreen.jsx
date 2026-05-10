@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
-import { recentCustomerFiles, enrichCustomerFilesListWithFollowUps } from '../lib/customerFilesList.js'
+import { projectCustomerFilesList, enrichCustomerFilesListWithFollowUps, filterCustomerFilesListByFollowUp } from '../lib/customerFilesList.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
 import { listAllFollowUps } from '../lib/visitActivity.js'
 
@@ -43,7 +43,7 @@ function formatStamp(iso) {
   }
 }
 
-function RecentFileRow({ row, onOpen }) {
+function RecentFileRow({ row, onOpen, overdueHighlight }) {
   return (
     <button
       type="button"
@@ -54,7 +54,7 @@ function RecentFileRow({ row, onOpen }) {
         display: 'block', width: '100%', textAlign: 'left',
         padding: 14, marginTop: 10, cursor: 'pointer',
         background: 'var(--paper)', border: '1px solid var(--rule)',
-        borderLeft: '3px solid var(--brass)',
+        borderLeft: `3px solid ${overdueHighlight ? 'var(--ember)' : 'var(--brass)'}`,
       }}
     >
       <div className="hstack">
@@ -154,6 +154,7 @@ function RecentFilesPanel({ state, onOpenFile, onOpenStartVisit, onOpenList, onO
 
 export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenAddQuote }) {
   const [recent, setRecent] = useState({ kind: 'loading' })
+  const [overdue, setOverdue] = useState([])
 
   useEffect(() => {
     let cancelled = false
@@ -171,9 +172,13 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
           listAllFollowUps(storage),
         ])
         if (cancelled) return
-        const baseRows = recentCustomerFiles(raw, RECENT_LIMIT)
-        const rows = enrichCustomerFilesListWithFollowUps(baseRows, followUps, new Date())
-        setRecent(rows.length ? { kind: 'ok', rows } : { kind: 'empty' })
+        const now = new Date()
+        const allRows = enrichCustomerFilesListWithFollowUps(projectCustomerFilesList(raw), followUps, now)
+        const overdueRows = filterCustomerFilesListByFollowUp(allRows, 'dueOrOverdue', now)
+        const overdueIds = new Set(overdueRows.map((r) => r.id))
+        const recentRows = allRows.filter((r) => !overdueIds.has(r.id)).slice(0, RECENT_LIMIT)
+        setOverdue(overdueRows)
+        setRecent(recentRows.length ? { kind: 'ok', rows: recentRows } : (overdueRows.length ? { kind: 'ok', rows: [] } : { kind: 'empty' }))
       } catch (err) {
         if (!cancelled) {
           setRecent({ kind: 'error', error: err.message || String(err) })
@@ -192,11 +197,31 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
             Pick up where you left off, or start a new visit.
           </p>
 
+          {overdue.length > 0 && (
+            <section style={{ marginTop: 20 }} aria-labelledby="today-overdue-heading">
+              <div className="hstack">
+                <span id="today-overdue-heading" className="eyebrow eyebrow-ember">FOLLOW-UPS DUE</span>
+                <span className="spacer" />
+                <span className="body-sm" style={{ color: 'var(--ember)' }}>{overdue.length} waiting</span>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {overdue.map((row) => (
+                  <RecentFileRow
+                    key={row.id}
+                    row={row}
+                    onOpen={onOpenFile}
+                    overdueHighlight
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           <section style={{ marginTop: 20 }} aria-labelledby="today-recent-heading">
             <div className="hstack">
               <span id="today-recent-heading" className="eyebrow eyebrow-ember">RECENT CUSTOMER FILES</span>
               <span className="spacer" />
-              {recent.kind === 'ok' && (
+              {recent.kind === 'ok' && recent.rows.length > 0 && (
                 <span className="body-sm" style={{ color: 'var(--slate)' }}>
                   {recent.rows.length} most recent
                 </span>

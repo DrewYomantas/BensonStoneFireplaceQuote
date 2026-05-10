@@ -63,7 +63,12 @@ export default function FollowUpPlanPanel({ file, onChange }) {
     <section style={{ background: C.paper, border: `1px solid ${C.border}`, borderLeft: `3px solid ${plan.required ? C.copper : C.mid}`, padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ ...eyebrow, color: C.copper, fontSize: 8.5 }}>Follow-Up Plan</div>
-        <span className={`wb-pill ${plan.required ? 'wb-pill--gold' : 'wb-pill--green'}`}>{plan.required ? 'Action needed' : 'Current'}</span>
+        <span style={{
+          fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700,
+          padding: '2px 7px', borderRadius: 3,
+          background: plan.required ? 'var(--ember)' : 'var(--brass)',
+          color: '#fff',
+        }}>{plan.required ? 'Action needed' : 'Current'}</span>
       </div>
       <div style={{ ...serif, fontSize: 16, fontWeight: 700, color: C.ink, marginTop: 4 }}>{plan.nextAction}</div>
 
@@ -77,11 +82,11 @@ export default function FollowUpPlanPanel({ file, onChange }) {
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>{task.label}</div>
                   <div style={{ fontSize: 10.5, color: C.inkMid, marginTop: 2 }}>Due {formatDue(task.dueAt)} · {task.reason}</div>
                 </div>
-                <button type="button" className="wb-btn wb-btn--primary" onClick={() => saveTasks([task])} style={{ fontSize: 10 }}>Add task</button>
+                <button type="button" className="btn btn-primary" onClick={() => saveTasks([task])} style={{ fontSize: 10 }}>Add task</button>
               </div>
             ))}
           </div>
-          <button type="button" className="wb-btn" onClick={() => saveTasks(plan.tasks)} style={{ marginTop: 8, fontSize: 11 }}>Add all suggested tasks</button>
+          <button type="button" className="btn btn-quiet" onClick={() => saveTasks(plan.tasks)} style={{ marginTop: 8, fontSize: 11 }}>Add all suggested tasks</button>
         </div>
       )}
 
@@ -95,8 +100,8 @@ export default function FollowUpPlanPanel({ file, onChange }) {
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>{task.label}</div>
                   <div style={{ fontSize: 10.5, color: C.inkMid, marginTop: 2 }}>Due {formatDue(task.dueAt)}{task.snoozedAt ? ' · snoozed' : ''}</div>
                 </div>
-                <button type="button" className="wb-btn" onClick={() => snooze(task, 1)} style={{ fontSize: 10 }}>Snooze +1 day</button>
-                <button type="button" className="wb-btn wb-btn--primary" onClick={() => markDone(task)} style={{ fontSize: 10 }}>Done</button>
+                <button type="button" className="btn btn-quiet" onClick={() => snooze(task, 1)} style={{ fontSize: 10 }}>Snooze +1 day</button>
+                <button type="button" className="btn btn-primary" onClick={() => markDone(task)} style={{ fontSize: 10 }}>Done</button>
               </div>
             ))}
           </div>
@@ -112,7 +117,7 @@ export default function FollowUpPlanPanel({ file, onChange }) {
           <span style={{ ...eyebrow, color: C.inkLight, fontSize: 7.5 }}>Due date</span>
           <input type="date" value={customDue} onChange={(e) => setCustomDue(e.target.value)} style={inputStyle} />
         </label>
-        <button type="button" className="wb-btn wb-btn--primary" onClick={addCustom} style={{ fontSize: 11 }}>Add</button>
+        <button type="button" className="btn btn-primary" onClick={addCustom} style={{ fontSize: 11 }}>Add</button>
       </div>
     </section>
   )

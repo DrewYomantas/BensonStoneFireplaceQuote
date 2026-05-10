@@ -48,7 +48,7 @@ Treat those docs as more authoritative than the older "Active vs. Parked Modules
 
 ## V1.1 Sales OS Shell (active mount)
 
-The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,BackstageScreen}.jsx`. Routing is a small `useState` in `App.jsx`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
+The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,ProposalPreviewScreen,SingleQuoteIntakeScreen,BulkIntakeScreen,BackstageScreen}.jsx`. Routing is a small `useState` in `App.jsx`. Routes: `today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
 
 - `src/styles/tokens.css` — V1.1 design tokens (paper/stone/ember/state colors, Lora/Raleway/JetBrains type, spacing, radii, shadows, touch targets). No raw hex outside this file.
 - `src/styles/app.css` — base reset + shared primitives (cards, badges, source pills, fields, chips, shell, next-bar, save-status). Direction A/B/C utilities from the design canvas were intentionally not copied.
@@ -139,10 +139,10 @@ Customer-facing copy (proposals, disclaimers, warm recap, goal summary): do not 
 
 React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `bulkIntake`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
 - `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
 - `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
-- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `BulkIntakeScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `SingleQuoteIntakeScreen`, `BulkIntakeScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
@@ -230,12 +230,13 @@ DEPOSIT_TERMS  = 50% down at time of signing
 - Attach features to the stripped quote-polish flow — do not rebuild the old command-board shell.
 - Private files in `src/data/bistrack-snapshot/` and `Fireplace Department/` stay local, never commit.
 
-## Two Scanned-PDF Intake Paths — Keep Them in Sync
+## Three Scanned-PDF Intake Paths — Keep Them in Sync
 
-Image-only / scanned BisTrack PDFs flow through **two** separate code paths. Any change to OCR, scan classification, or scan→fields merging must touch both:
+Image-only / scanned BisTrack PDFs flow through **three** separate code paths. Any change to OCR, scan classification, or scan→fields merging must touch all three:
 
 1. `src/components/WorkbenchShell.jsx` `handleFile` — top-bar "Drop BisTrack PDF" button
 2. `src/lib/recoveryUploadIntake.js` `parseRecoveryUploadFile` — Old Quote Recovery upload
+3. `src/screens/SingleQuoteIntakeScreen.jsx` → `commitSingleQuoteIntakeDraft` in `src/lib/scannedCustomerDraft.js` — daily "Add Quote PDF" intake (`addQuote` route, Milestone 20)
 
 Both should call `extractOcrFromPdfForBisTrackScan` → `parseBisTrackScannedQuoteFromZones`, then overlay onto `parsed.fields` with **scan-wins** semantics for scanned BisTrack quotes. `setIfBlank` is wrong here: `extractScannedBisTrackFields` runs `parseBisTrackText` first and fills slots with garbage that blocks the cleaner zone-OCR value.
 
@@ -255,7 +256,16 @@ Two intentional violations exist; `npm run lint` reports both. Leave alone in un
 - `src/lib/bisTrackScanParser.js` `buildScannedBisTrackIssues` has an unused `header` parameter — fixing it would change a public function signature.
 - `src/lib/customerPipelineCsv.js` `parseCsv` line 24 has an irregular-whitespace character — see the "CSV Parsing — Intentional Lenience" section below for why.
 
-## Bulk Intake — Multi-File Queue
+## Single Quote Intake (primary daily path)
+
+`SingleQuoteIntakeScreen` (`addQuote` route) — drop one PDF, preview page 1, edit the auto-extracted customer card, create one Customer File. No queue machinery. Multi-page PDFs surface a calm note pointing to Old Quote Batch Cleanup.
+
+- `buildSingleQuoteIntakePayload` + `commitSingleQuoteIntakeDraft` in `src/lib/scannedCustomerDraft.js` — safe whitelisted payload, sourceLabel "Quote PDF intake", source trail with file name + page numbers + doc type + quote number + page count, appends `scan_imported` activity.
+- Entry points: `TodayScreen` "Add Quote PDF" button and `CustomerFilesListScreen`. `SingleQuoteIntakeScreen` links out to Bulk Intake for multi-page packets.
+
+## Bulk Intake — Multi-File Queue (Old Quote Batch Cleanup)
+
+**Off the main path as of Milestone 20.** Reachable from Backstage and from `SingleQuoteIntakeScreen` for multi-page packets. Title is now "Old Quote Batch Cleanup" in the app.
 
 `BulkIntakeScreen` manages a session-only queue of files (CSV, TSV, TXT, PDF). Each item tracks extraction state independently; only one item is active at a time.
 

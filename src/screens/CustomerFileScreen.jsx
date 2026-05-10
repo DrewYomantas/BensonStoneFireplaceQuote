@@ -3,9 +3,13 @@ import { DOC_TYPE_LABELS } from '../lib/scanDocTypeDetector.js'
 import CustomerFileHeader from '../components/file/CustomerFileHeader.jsx'
 import FactRow from '../components/file/FactRow.jsx'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
+import FollowUpComposer from '../components/FollowUpComposer.jsx'
+import FollowUpPlanPanel from '../components/FollowUpPlanPanel.jsx'
 import ManagerReviewReasons from '../components/file/ManagerReviewReasons.jsx'
 import ProductsDiscussedCard from '../components/file/ProductsDiscussedCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
+import { composeFollowUpDraft } from '../lib/followUpComposer.js'
+import { customerFileToOpportunity } from '../lib/customerFileFollowUpAdapter.js'
 import { ensureSalesOsBoot, getSalesOsStorage } from '../lib/salesOsStorageBoot.js'
 import { getCustomerFileDurable } from '../lib/customerFileDurable.js'
 import { projectCustomerFileForDisplay, deriveFileWarnings } from '../lib/customerFileView.js'
@@ -367,6 +371,9 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
   const [errorMsg, setErrorMsg] = useState('')
   const [activity, setActivity] = useState([])
   const [followUp, setFollowUp] = useState(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [selectedChannel, setSelectedChannel] = useState('email')
+  const [selectedTone, setSelectedTone] = useState('warm')
 
   async function reloadActivityAndFollowUp(storage, id) {
     try {
@@ -451,6 +458,24 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
       return true
     } catch {
       return false
+    }
+  }
+
+  function handlePlanChange(updated) {
+    if (updated) setFile(projectCustomerFileForDisplay(updated))
+  }
+
+  async function handleLogSent() {
+    if (!fileId || !display) return
+    try {
+      const storage = getSalesOsStorage()
+      await appendActivityForFile(storage, fileId, {
+        kind: 'manual_note',
+        summary: 'Follow-up draft logged as sent.',
+      })
+      await reloadActivityAndFollowUp(storage, fileId)
+    } catch {
+      // best-effort
     }
   }
 
@@ -573,6 +598,35 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             onClear={handleClearFollowUp}
             disabled={!fileId}
           />
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <FollowUpPlanPanel file={display} onChange={handlePlanChange} />
+          {display && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => setComposerOpen((v) => !v)}
+              >
+                {composerOpen ? 'Hide follow-up composer' : 'Draft follow-up message'}
+              </button>
+              {composerOpen && (() => {
+                const opportunity = customerFileToOpportunity(display, followUp, warnings)
+                const draft = composeFollowUpDraft({ opportunity, tone: selectedTone, channel: selectedChannel })
+                return (
+                  <FollowUpComposer
+                    draft={draft}
+                    opportunity={opportunity}
+                    selectedChannel={selectedChannel}
+                    selectedTone={selectedTone}
+                    onChannelChange={setSelectedChannel}
+                    onToneChange={setSelectedTone}
+                    onLogSent={handleLogSent}
+                  />
+                )
+              })()}
+            </div>
+          )}
         </div>
         <div style={{ marginTop: 18 }}>
           <ActivityCard
