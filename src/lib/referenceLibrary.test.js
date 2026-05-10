@@ -6,6 +6,7 @@ import {
   buildVendorReference,
   deriveReferenceMatches,
   getReferenceAutocompleteOptions,
+  inferReferenceNeeds,
   searchReferences,
   buildWebReference,
 } from './referenceLibrary.js'
@@ -117,4 +118,26 @@ test('buildWebReference exposes current vendor brochure/manual sources as search
   assert.equal(ref.safety.customerSafe, true)
   assert.match(ref.subtitle, /Kingsman/)
   assert.match(ref.fileName, /kingsman-idv\.pdf/)
+})
+
+test('inferReferenceNeeds detects masonry from existingApplianceType', () => {
+  const needs = inferReferenceNeeds({ file: { existingApplianceType: 'masonry fireplace' } })
+  assert.ok(needs.some((n) => n.id === 'masonry'), `expected masonry need, got: ${needs.map((n) => n.id).join(', ')}`)
+})
+
+test('inferReferenceNeeds detects insert from customerGoal heat', () => {
+  const needs = inferReferenceNeeds({ file: { customerGoal: 'more heat from the fireplace' } })
+  assert.ok(needs.some((n) => n.id === 'insert'), 'expected insert need')
+})
+
+test('inferReferenceNeeds returns empty for a blank file', () => {
+  const needs = inferReferenceNeeds({ file: {} })
+  assert.deepEqual(needs, [])
+})
+
+test('buildReferenceLibrary returns vendors and guardrails when display and web refs are empty', () => {
+  const lib = buildReferenceLibrary({ displayRecords: [], webReferences: [] })
+  assert.ok(lib.some((r) => r.type === 'vendor-price-book'), 'expected vendor entries')
+  assert.ok(lib.some((r) => r.type === 'sales-guardrail'), 'expected guardrail entries')
+  assert.ok(!lib.some((r) => r.type === 'showroom-display'), 'expected no display entries')
 })

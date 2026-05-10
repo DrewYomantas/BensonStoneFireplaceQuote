@@ -5,6 +5,7 @@ import FactRow from '../components/file/FactRow.jsx'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import FollowUpComposer from '../components/FollowUpComposer.jsx'
 import FollowUpPlanPanel from '../components/FollowUpPlanPanel.jsx'
+import SmartContextPanel from '../components/SmartContextPanel.jsx'
 import ManagerReviewReasons from '../components/file/ManagerReviewReasons.jsx'
 import ProductsDiscussedCard from '../components/file/ProductsDiscussedCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
@@ -372,6 +373,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
   const [activity, setActivity] = useState([])
   const [followUp, setFollowUp] = useState(null)
   const [composerOpen, setComposerOpen] = useState(false)
+  const [showSmartContext, setShowSmartContext] = useState(false)
   const [selectedChannel, setSelectedChannel] = useState('email')
   const [selectedTone, setSelectedTone] = useState('warm')
 
@@ -628,6 +630,25 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             </div>
           )}
         </div>
+        {display && (
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => setShowSmartContext((v) => !v)}
+            >
+              {showSmartContext ? 'Hide Smart Context' : 'Show Smart Context'}
+            </button>
+            {showSmartContext && (
+              <div style={{ marginTop: 8 }}>
+                <SmartContextPanel
+                  file={display}
+                  quotePrepLines={display.quotePrepLines || []}
+                />
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginTop: 18 }}>
           <ActivityCard
             events={activity}
