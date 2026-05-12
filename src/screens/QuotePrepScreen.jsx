@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import FieldRulesCard from '../components/file/FieldRulesCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import SourceContextPanel from '../components/quotePrep/SourceContextPanel.jsx'
+import SmartContextPanel from '../components/SmartContextPanel.jsx'
 import {
   ensureSalesOsBoot,
   getSalesOsStorage,
@@ -438,7 +439,7 @@ function GateCard({ result, gateDraft, onPatch, onReasonAction, disabled, quoteT
   )
 }
 
-export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHandoff, onOpenProposalPreview }) {
+export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHandoff, onOpenProposalPreview, onOpenHearthSession }) {
   const [file, setFile] = useState(null)
   const [draft, setDraft] = useState(emptyQuotePrepDraft())
   const [loading, setLoading] = useState(true)
@@ -793,6 +794,16 @@ export default function QuotePrepScreen({ fileId, onBack, onOpenLens, onOpenHand
 
             <div>
               <VerifiedFromLensCard file={file} />
+              <div style={{ marginTop: 18 }}>
+                <SmartContextPanel
+                  file={file}
+                  quotePrepLines={draft.lines}
+                  onOpenHearthSession={onOpenHearthSession}
+                  compact
+                  collapsible
+                  defaultCollapsed
+                />
+              </div>
               <div style={{ marginTop: 18 }}>
                 <span className="eyebrow eyebrow-ink">SOURCE CHECK</span>
                 <p className="body-sm" style={{ marginTop: 6 }}>

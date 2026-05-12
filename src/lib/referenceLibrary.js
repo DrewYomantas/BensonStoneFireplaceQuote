@@ -2,6 +2,7 @@ import { categoryOptions, getPriceBookPath, listVendors } from './vendorPriceBoo
 import { listDisplayRecords } from './showroomDisplayRegister.js'
 import { vendorWebReferenceManifest } from '../data/vendorWebReferenceManifest.js'
 import { normalizeManifest } from './binderPageIndex.js'
+import { CHAPTER_LABELS, SESSION_STATUS, projectHearthStudioSessionForDisplay } from './hearthStudioSessionStorage.js'
 
 const stopWords = new Set([
   'and', 'the', 'for', 'with', 'from', 'into', 'onto', 'that', 'this', 'there', 'their', 'they',
@@ -40,6 +41,50 @@ function hasAny(value, needles = []) {
 
 function safeDateLabel(value) {
   return compact(value) || 'date unknown'
+}
+
+function safeTime(value) {
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function relativeTimeLabel(value, now = new Date()) {
+  const time = safeTime(value)
+  if (!time) return 'date unknown'
+  const diff = Math.max(0, new Date(now).getTime() - time)
+  const days = Math.floor(diff / 86400000)
+  if (days < 1) return 'today'
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 9) return `${weeks} week${weeks === 1 ? '' : 's'} ago`
+  const months = Math.floor(days / 30)
+  return `${months} month${months === 1 ? '' : 's'} ago`
+}
+
+function chapterLabel(session = {}, now = new Date()) {
+  const chapter = Number.isFinite(Number(session.currentChapter)) ? Number(session.currentChapter) : 0
+  const padded = String(chapter).padStart(2, '0')
+  const label = CHAPTER_LABELS[chapter] || 'Hearth Studio'
+  if (session.status === SESSION_STATUS.completed) return `Completed ${relativeTimeLabel(session.completedAt || session.lastTouchedAt, now)}`
+  if (session.status === SESSION_STATUS.paused) return `Paused at Chapter ${padded} - ${label}`
+  return `Chapter ${padded} - ${label}`
+}
+
+function dimensionLabel(dimensions) {
+  if (!dimensions || typeof dimensions !== 'object') return ''
+  const parts = [dimensions.w, dimensions.h, dimensions.d]
+    .filter((value) => value !== undefined && value !== null && String(value).trim())
+    .map((value) => String(value).trim())
+  return parts.length ? parts.join(' x ') : ''
+}
+
+function sessionSelectionLine(selections = {}) {
+  const stone = compact(selections.stoneSeries)
+  const dims = dimensionLabel(selections.dimensions)
+  if (stone && dims) return `${stone} - ${dims}`
+  if (stone) return stone
+  if (dims) return dims
+  return 'Selections not yet recorded'
 }
 
 function referenceSafety(reference = {}) {
@@ -89,12 +134,94 @@ function referenceSafety(reference = {}) {
     }
   }
 
+  if (reference.type === 'hearthSession') {
+    return {
+      tone: 'internal',
+      label: 'Hearth Studio',
+      warning: 'Rep-side session context. Use as discovery support; BisTrack remains the quote source of truth.',
+      customerSafe: false,
+    }
+  }
+
   return {
     tone: 'guardrail',
     label: 'Sales guardrail',
     warning: 'Use as internal decision support. Confirm field conditions before making product promises.',
     customerSafe: false,
   }
+}
+
+export function buildHearthSessionReference(session = {}, { now = new Date() } = {}) {
+  const view = projectHearthStudioSessionForDisplay(session)
+  if (!view || !view.id) return null
+  const selections = view.selections || {}
+  const rules = Array.isArray(view.flags?.fieldRulesTriggered) ? view.flags.fieldRulesTriggered.filter(Boolean) : []
+  const title = chapterLabel(view, now)
+  const subtitle = sessionSelectionLine(selections)
+  const setupGoal = [selections.setupType, selections.goal].map(compact).filter(Boolean).join(' - ')
+  const lastTouched = relativeTimeLabel(view.lastTouchedAt, now)
+  const ruleLine = rules.length
+    ? `${rules.length} rule${rules.length === 1 ? '' : 's'}: ${rules.join(', ')}`
+    : ''
+  const reference = {
+    id: `hearth-session:${view.id}`,
+    type: 'hearthSession',
+    title,
+    subtitle,
+    category: 'hearth-session',
+    categoryLabel: 'Hearth Studio Session',
+    sourceLabel: 'Hearth Studio session',
+    sessionId: view.id,
+    customerFileId: view.customerFileId,
+    status: view.status,
+    currentChapter: view.currentChapter,
+    lastTouchedAt: view.lastTouchedAt,
+    completedAt: view.completedAt,
+    pausedAt: view.pausedAt,
+    selections,
+    flags: view.flags || {},
+    aliases: unique([
+      title,
+      subtitle,
+      selections.setupType,
+      selections.goal,
+      selections.stoneSeries,
+      dimensionLabel(selections.dimensions),
+      ...rules,
+    ]),
+    tags: unique(['hearth studio', 'hearth session', view.status, `chapter ${String(view.currentChapter).padStart(2, '0')}`]),
+    details: [
+      setupGoal ? `Setup + goal: ${setupGoal}` : '',
+      `Last touched: ${lastTouched}`,
+      ruleLine,
+    ].filter(Boolean),
+    detectedReason: 'Hearth Studio session context',
+    customerSafeSummary: '',
+  }
+  return { ...reference, safety: referenceSafety(reference) }
+}
+
+export function buildHearthSessionReferences(sessions = [], { limit = 3, now = new Date() } = {}) {
+  const all = sessions
+    .map((session) => projectHearthStudioSessionForDisplay(session))
+    .filter(Boolean)
+    .filter((session) => session.status !== SESSION_STATUS.soft_deleted && !session.softDeletedAt)
+    .sort((left, right) => safeTime(right.lastTouchedAt) - safeTime(left.lastTouchedAt))
+    .map((session) => buildHearthSessionReference(session, { now }))
+    .filter(Boolean)
+  const visible = all.slice(0, limit)
+  Object.defineProperty(visible, 'hiddenCount', { value: Math.max(0, all.length - visible.length), enumerable: false })
+  Object.defineProperty(visible, 'allCount', { value: all.length, enumerable: false })
+  return visible
+}
+
+export function hasCriticalSmartContextReferences(references = []) {
+  return references.some((reference) => {
+    if (reference.type !== 'hearthSession') return reference.safety?.tone === 'danger'
+    const rules = reference.flags?.fieldRulesTriggered
+    return (Array.isArray(rules) && rules.length > 0) ||
+      (reference.status === SESSION_STATUS.paused && (reference.flags?.needsFieldMeasure || reference.flags?.hasComplexSetup))
+  })
 }
 
 function categoryLabel(category) {
@@ -303,6 +430,7 @@ function referenceSearchText(reference = {}) {
     reference.productCode,
     reference.modelName,
     reference.internalNote,
+    reference.searchText,
     ...(reference.aliases || []),
     ...(reference.tags || []),
     ...(reference.details || []),
@@ -407,6 +535,7 @@ export function searchReferences(library = [], query = '', { limit = 12, categor
     if (category === 'web') return reference.type === 'web-reference' || reference.type === 'binder-page'
     if (category === 'displays') return reference.type === 'showroom-display'
     if (category === 'guardrails') return reference.type === 'sales-guardrail'
+    if (category === 'hearth-sessions') return reference.type === 'hearthSession'
     return reference.category === category
   })
 
@@ -440,10 +569,11 @@ export function getReferenceAutocompleteOptions(library = [], query = '', { limi
     .slice(0, limit)
 }
 
-export function deriveReferenceMatches({ library = [], file = {}, fields = {}, lineItems = [], limit = 8 } = {}) {
+export function deriveReferenceMatches({ library = [], file = {}, fields = {}, lineItems = [], hearthSessions = [], hearthSessionLimit = 3, limit = 8 } = {}) {
   const needs = inferReferenceNeeds({ file, fields, lineItems })
   const contextText = buildContextText({ file, fields, lineItems })
   const directMatches = searchReferences(library, contextText, { limit: Math.max(limit * 2, 12) })
+  const hearthMatches = buildHearthSessionReferences(hearthSessions, { limit: hearthSessionLimit })
 
   const needMatches = needs.flatMap((need) => (
     searchReferences(library, need.query, { limit: 4 }).map((reference) => ({
@@ -452,19 +582,21 @@ export function deriveReferenceMatches({ library = [], file = {}, fields = {}, l
     }))
   ))
 
-  const combined = [...needMatches, ...directMatches.map((reference) => ({ ...reference, detectedReason: 'Matched from active customer file / quote text' }))]
+  const combined = [...hearthMatches, ...needMatches, ...directMatches.map((reference) => ({ ...reference, detectedReason: 'Matched from active customer file / quote text' }))]
   const seen = new Set()
-  return combined
+  const visible = combined
     .filter((reference) => {
       if (seen.has(reference.id)) return false
       seen.add(reference.id)
       return true
     })
     .sort((left, right) => {
-      const priority = { 'sales-guardrail': 3, 'showroom-display': 2, 'vendor-price-book': 1 }
+      const priority = { hearthSession: 4, 'sales-guardrail': 3, 'showroom-display': 2, 'vendor-price-book': 1 }
       return (priority[right.type] || 0) - (priority[left.type] || 0) || (right.searchScore || 0) - (left.searchScore || 0)
     })
     .slice(0, limit)
+  Object.defineProperty(visible, 'hiddenCount', { value: hearthMatches.hiddenCount || 0, enumerable: false })
+  return visible
 }
 
 export function buildPinnedReferenceItem(reference = {}, now = new Date()) {

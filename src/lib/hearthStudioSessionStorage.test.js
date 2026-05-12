@@ -310,6 +310,24 @@ describe('hearthStudioSessionStorage — CRUD', () => {
   it('listSessions returns [] with no sessions', async () => {
     assert.deepEqual(await listSessions(storage), [])
   })
+
+  it('listSessions filters by customerFileId and excludes soft-deleted sessions by default', async () => {
+    const active = await createSession(storage, 'file-abc', 'rep-drew', NOW)
+    const completed = await createSession(storage, 'file-abc', 'rep-drew', NOW)
+    await completeSession(storage, completed.id, 'rep-drew', NOW)
+    const deleted = await createSession(storage, 'file-abc', 'rep-drew', NOW)
+    await softDeleteSession(storage, deleted.id, 'rep-drew', NOW)
+    await createSession(storage, 'file-other', 'rep-drew', NOW)
+    const sessions = await listSessions(storage, { customerFileId: 'file-abc' })
+    assert.deepEqual(sessions.map((s) => s.id).sort(), [active.id, completed.id].sort())
+  })
+
+  it('listSessions can include soft-deleted sessions when explicitly requested', async () => {
+    const deleted = await createSession(storage, 'file-abc', 'rep-drew', NOW)
+    await softDeleteSession(storage, deleted.id, 'rep-drew', NOW)
+    const sessions = await listSessions(storage, { customerFileId: 'file-abc', includeSoftDeleted: true })
+    assert.ok(sessions.some((s) => s.id === deleted.id))
+  })
 })
 
 // ---- Lifecycle ops -----------------------------------------------------

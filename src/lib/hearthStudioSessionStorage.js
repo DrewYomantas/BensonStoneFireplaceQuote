@@ -152,9 +152,13 @@ export function sessionTopLineSummary(session) {
 
 // ---- Durable storage --------------------------------------------------
 
-export async function listSessions(storage) {
+export async function listSessions(storage, { customerFileId = '', includeSoftDeleted = false } = {}) {
   const rows = unwrap(await storage.getAll(SESSION_STORE), [])
-  return rows.map((r) => normalizeSession(r)).filter(Boolean)
+  return rows.map((r) => normalizeSession(r)).filter(Boolean).filter((session) => {
+    if (customerFileId && session.customerFileId !== customerFileId) return false
+    if (!includeSoftDeleted && (session.status === SESSION_STATUS.soft_deleted || session.softDeletedAt)) return false
+    return true
+  })
 }
 
 export async function getSession(storage, id) {

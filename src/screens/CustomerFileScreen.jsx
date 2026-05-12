@@ -675,6 +675,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
                 <SmartContextPanel
                   file={display}
                   quotePrepLines={display.quotePrepLines || []}
+                  onOpenHearthSession={handleOpenHearthSession}
                 />
               </div>
             )}

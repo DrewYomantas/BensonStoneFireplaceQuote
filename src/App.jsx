@@ -156,6 +156,7 @@ export default function App() {
           onOpenLens={openLens}
           onOpenHandoff={openHandoff}
           onOpenProposalPreview={openProposalPreview}
+          onOpenHearthSession={(sessionId) => openHearthSession(sessionId, route.fileId)}
         />
       )}
       {route.screen === 'proposalPreview' && (
