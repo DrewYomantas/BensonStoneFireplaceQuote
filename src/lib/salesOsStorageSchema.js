@@ -3,7 +3,7 @@
 
 export const APP_NAME = 'benson-fireplace-sales-os'
 export const DB_NAME = 'benson-fireplace-sales-os'
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 export const BACKUP_VERSION = 1
 
 export const STORE_NAMES = Object.freeze({
@@ -14,6 +14,7 @@ export const STORE_NAMES = Object.freeze({
   activityTimeline: 'activityTimeline',
   recoveryQueue: 'recoveryQueue',
   appMeta: 'appMeta',
+  reps: 'reps',
 })
 
 export const STORE_LIST = Object.freeze(Object.values(STORE_NAMES))

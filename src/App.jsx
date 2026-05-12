@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './styles/tokens.css'
 import './styles/app.css'
 import AppShell from './components/shell/AppShell.jsx'
@@ -14,7 +14,8 @@ import BulkIntakeScreen from './screens/BulkIntakeScreen.jsx'
 import SingleQuoteIntakeScreen from './screens/SingleQuoteIntakeScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
-import { ensureSalesOsBoot } from './lib/salesOsStorageBoot.js'
+import RepLoginScreen from './screens/RepLoginScreen.jsx'
+import useLoggedInRep from './lib/useLoggedInRep.js'
 
 const TITLES = {
   today: 'Today at the desk',
@@ -46,8 +47,7 @@ const CRUMBS = {
 
 export default function App() {
   const [route, setRoute] = useState({ screen: 'today', fileId: null })
-
-  useEffect(() => { ensureSalesOsBoot() }, [])
+  const { rep: loggedInRep, loading: repLoading, login, logout } = useLoggedInRep()
 
   function navigate(screen) {
     if (screen === 'today' || screen === 'visit' || screen === 'backstage') {
@@ -94,6 +94,10 @@ export default function App() {
   function onCustomerFileCreated(file) {
     setRoute({ screen: 'files', fileId: file.id })
   }
+
+  if (repLoading) return null
+
+  if (!loggedInRep) return <RepLoginScreen onLogin={login} />
 
   return (
     <AppShell
@@ -179,6 +183,7 @@ export default function App() {
         <BackstageScreen
           onBack={() => navigate('today')}
           onOpenBatchCleanup={openBulkIntake}
+          onLogout={logout}
         />
       )}
     </AppShell>

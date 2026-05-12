@@ -6,6 +6,8 @@ import { createIndexedDbEngine, createSalesOsStorage } from './salesOsStorage.js
 import { createSaveState } from './salesOsSaveState.js'
 import { migrateLegacyLocalStorage } from './salesOsMigration.js'
 import { setCustomerFileDurableMirror } from './customerFile.js'
+import { listReps, addRep } from './repStorage.js'
+import { INITIAL_REPS } from '../config/initialReps.js'
 
 const saveState = createSaveState()
 const storage = createSalesOsStorage({ engine: createIndexedDbEngine() })
@@ -37,6 +39,14 @@ export function ensureSalesOsBoot() {
       return { ok: false, error: message }
     }
     if (!migration.skipped) saveState.markSaved()
+    try {
+      const reps = await listReps(storage)
+      if (reps.length === 0) {
+        for (const rep of INITIAL_REPS) {
+          await addRep(storage, rep)
+        }
+      }
+    } catch { /* seeding failure is non-fatal; rep can be added manually */ }
     return { ok: true }
   })()
   return initPromise

@@ -1,7 +1,7 @@
 import FieldRulesAdmin from '../components/backstage/FieldRulesAdmin.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 
-export default function BackstageScreen({ onBack, onOpenBatchCleanup }) {
+export default function BackstageScreen({ onBack, onOpenBatchCleanup, onLogout }) {
   return (
     <>
       <div className="shell-content">
@@ -13,6 +13,20 @@ export default function BackstageScreen({ onBack, onOpenBatchCleanup }) {
           </p>
           <hr className="rule-brass" style={{ margin: '20px 0' }} />
           <FieldRulesAdmin />
+
+          {onLogout && (
+            <section className="card-flat" style={{ marginTop: 24, padding: 18 }}>
+              <span className="eyebrow eyebrow-ink">REP SESSION</span>
+              <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
+                Log out to switch reps or secure this device.
+              </p>
+              <div style={{ marginTop: 10 }}>
+                <button type="button" className="btn btn-quiet" onClick={onLogout}>
+                  Log out
+                </button>
+              </div>
+            </section>
+          )}
 
           {onOpenBatchCleanup && (
             <section className="card-flat" style={{ marginTop: 24, padding: 18 }}>

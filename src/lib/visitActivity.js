@@ -115,7 +115,8 @@ export function normalizeActivityEvent(input = {}, now = new Date()) {
   const at = safe.at ? clampString(safe.at) : nowIso(now)
   const id = clampString(safe.id).trim() || safeId(`${fileId}-${kind}`)
   const summary = safeActivitySummary(safe.summary)
-  return Object.freeze({ id, fileId, at, kind, summary })
+  const repId = clampString(safe.repId).trim() || null
+  return Object.freeze({ id, fileId, at, kind, summary, repId })
 }
 
 export function normalizeActivityEvents(input) {

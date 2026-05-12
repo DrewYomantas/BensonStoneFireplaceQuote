@@ -13,6 +13,10 @@ Run `npm run lint`, `npm test`, and `npm run build` after each pass.
 
 GitHub Pages deploy workflow was removed in `5d3e5a6` (account billing-locked over an unrelated $0.32 Copilot balance from Feb). Pushes succeed; deploy is dormant. When ready, prefer Netlify drag-deploy of `dist/` over re-adding the Action.
 
+## Rep Login — Never Commit Real SSN
+
+`src/config/initialReps.js` ships with `last4Ssn: 'XXXX'` as a placeholder. Drew replaces this locally with his real last-4 SSN before first run (one-time seeding). **Never commit the real value.** After the reps store is seeded, the real last-4 lives only in IndexedDB — the config file can be reset to `'XXXX'` before any `git add`.
+
 ## Source of Truth — Fireplace Department Drive
 
 `Fireplace Department/Fireplace Department/` is the absolute source of truth for this project. It is a direct export from the Benson Stone backend — the real department knowledge base. Use it to inform every feature, field, pricing rule, vendor detail, and customer-facing output.
@@ -111,6 +115,10 @@ Rules:
 
 Both `CustomerFilesListScreen` and `TodayScreen` consume from `listCustomerFilesDurable` → these helpers. Do not duplicate the projection elsewhere.
 
+Today's three-section cockpit is derived in `src/lib/todayCockpit.js` (`deriveTodayCockpit`, `deriveOneThing`) — pure logic, no storage access, reuses `recommendFollowUpCadence` for display copy.
+
+`src/lib/visitActivity.js` owns follow-up and activity timeline storage for Customer Files: `saveFollowUpForFile`, `getFollowUpForFile`, `clearFollowUpForFile`, `listAllFollowUps` (used by TodayScreen), `appendActivityForFile`, `listActivityForFile`. `customerFileFollowUpAdapter.js` bridges a Customer File display projection → opportunity shape for `composeFollowUpDraft`.
+
 ### Quote Prep + Pre-BisTrack Gate + Handoff
 
 The internal prep chain attached to each Customer File. All read-side projections route through the same helpers — do not duplicate gate or readiness logic in JSX.
@@ -134,6 +142,14 @@ Banned phrases — must never appear in any string surfaced through the gate, ha
 Use **"Ready to build in BisTrack"** when the gate helper says so — never customer-readiness language. The list filter, Today signal, and handoff all consume `projectQuotePrepGateStatus` so wording stays consistent across surfaces.
 
 Customer-facing copy (proposals, disclaimers, warm recap, goal summary): do not mention BisTrack by name. Use "official Benson Stone quote process" or "Benson Stone quote" instead. The `customerProposalPreview.js` disclaimer was updated in Milestone 18 for this reason.
+
+### Smart Context Reference Library
+
+`src/components/SmartContextPanel.jsx` — togglable panel on Customer File. Builds the reference library once via `useState(() => buildReferenceLibrary())` (synchronous — reads localStorage display records + static 39-vendor JSON on mount). Auto-detects via `deriveReferenceMatches({ library, file, lineItems })`; free-text search via `searchReferences(library, query)`.
+
+Key exports from `src/lib/referenceLibrary.js`: `buildReferenceLibrary`, `inferReferenceNeeds`, `searchReferences`, `deriveReferenceMatches`, `describeReferenceForDrawer`.
+
+Test isolation: pass `{ displayRecords: [], webReferences: [] }` to `buildReferenceLibrary()` to bypass localStorage in `node --test`.
 
 ## Architecture
 
