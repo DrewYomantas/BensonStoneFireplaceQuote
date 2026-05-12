@@ -52,11 +52,19 @@ Treat those docs as more authoritative than the older "Active vs. Parked Modules
 
 ## V1.1 Sales OS Shell (active mount)
 
-The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,ProposalPreviewScreen,SingleQuoteIntakeScreen,BulkIntakeScreen,BackstageScreen}.jsx`. Routing is a small `useState` in `App.jsx`. Routes: `today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
+The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,ProposalPreviewScreen,SingleQuoteIntakeScreen,BulkIntakeScreen,BackstageScreen,HearthStudioSessionDetailScreen}.jsx`. Routing is a small `useState` in `App.jsx`. Routes: `today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
 
 - `src/styles/tokens.css` — V1.1 design tokens (paper/stone/ember/state colors, Lora/Raleway/JetBrains type, spacing, radii, shadows, touch targets). No raw hex outside this file.
 - `src/styles/app.css` — base reset + shared primitives (cards, badges, source pills, fields, chips, shell, next-bar, save-status). Direction A/B/C utilities from the design canvas were intentionally not copied.
 - Fonts loaded once via `<link>` in root `index.html`; `tokens.css` does not `@import` Google Fonts.
+
+### Rep-login gate (pre-route)
+
+`RepLoginScreen` is **not a route** — it renders in `App.jsx` before the route switch when `useLoggedInRep()` returns no rep (`if (!loggedInRep) return <RepLoginScreen onLogin={login} />`). Once a rep logs in, the rep is persisted in the IDB `reps` store and the route switch takes over. Do not add `repLogin` to the routes list or call `setRoute({ screen: 'repLogin' })`. To force the gate to re-show, clear the logged-in rep via the hook's logout, not by routing.
+
+- `src/screens/RepLoginScreen.jsx` — last-4-SSN entry against reps seeded from `src/config/initialReps.js`
+- `src/lib/repStorage.js` — reps store CRUD (durable, IDB)
+- `src/lib/useLoggedInRep.js` — hook exposing `{ loggedInRep, login, logout }`
 
 ### Screens are real React components, not function calls
 
@@ -112,6 +120,8 @@ Rules:
 - `projectCustomerFilesList(rawFiles)` — sorts most-recently-updated first (falls back through `lensUpdatedAt → visitedAt → createdAt`), strips sensitive keys defensively, builds a `searchHay` string for substring search.
 - `searchCustomerFilesList(rows, query)` — case-insensitive substring across name/phone/email/address/discussion.
 - `recentCustomerFiles(rawFiles, limit=4)` — same shape, capped to the top N. Used by `TodayScreen`'s "Recent Customer Files" section.
+- `enrichCustomerFilesListWithHsSessions(rows, allSessions)` — groups flat sessions by `customerFileId`, attaches `hearthStudio: { hasActive, hasCompleted, activeCount, totalCount }` (soft_deleted excluded). Call after `enrichCustomerFilesListWithFollowUps`.
+- `filterCustomerFilesListByHs(rows, filter)` — filters by `HS_FILTER_VALUES`: `'all'`, `'hasActive'`, `'hasCompleted'`.
 
 Both `CustomerFilesListScreen` and `TodayScreen` consume from `listCustomerFilesDurable` → these helpers. Do not duplicate the projection elsewhere.
 
@@ -149,16 +159,31 @@ Customer-facing copy (proposals, disclaimers, warm recap, goal summary): do not 
 
 Key exports from `src/lib/referenceLibrary.js`: `buildReferenceLibrary`, `inferReferenceNeeds`, `searchReferences`, `deriveReferenceMatches`, `describeReferenceForDrawer`.
 
+Hearth Studio sessions surface as Smart Context references (Milestone 26). `buildHearthSessionReference(session, { now })` and `buildHearthSessionReferences(sessions, { limit=3, now })` project a session via `projectHearthStudioSessionForDisplay` (sensitive-key scrub) and label it with chapter/status — `Chapter NN - {CHAPTER_LABELS[n]}`, `Paused at Chapter NN - ...`, or `Completed {relative time} ago`. These references carry `referenceSafety({type:'hearthSession'}) = { tone: 'internal', customerSafe: false }` — internal-only, never rendered into customer-facing output. `SmartContextPanel` reads sessions via `listSessions` from `hearthStudioSessionStorage.js`.
+
 Test isolation: pass `{ displayRecords: [], webReferences: [] }` to `buildReferenceLibrary()` to bypass localStorage in `node --test`.
+
+### Hearth Studio Sessions
+
+`src/lib/hearthStudioSessionStorage.js` — async session lifecycle API. Sessions capture a rep-guided discovery journey (13 chapters, 0–12) for a Customer File.
+
+- `SESSION_STATUS`: `{ active, paused, completed, soft_deleted }`
+- `CHAPTER_LABELS`: chapters 0–12 (Setup Type → Next Steps)
+- `normalizeSession(input)` — validates and freezes; `chaptersCompleted` filter uses `n != null && Number.isFinite(Number(n))` to exclude null (`Number(null)===0` passes isFinite — explicit null guard required).
+- `projectHearthStudioSessionForDisplay(session)` — strips `selections.investment` + `selections.roomContext` before rendering.
+- `scrubSessionRecord(record)` — same scrub for backup export (nested keys; used via `scrubStoreRow` in `salesOsBackup.js`).
+- Lifecycle ops: `createSession`, `updateSession`, `pauseSession`, `resumeSession`, `completeSession`, `softDeleteSession`, `restoreSession`. Each emits activity via `appendActivityForFile(...).catch(() => {})`.
+- `getActiveSessionsForCustomer(storage, customerFileId)` — returns `active` + `paused` sessions only (excludes completed + soft_deleted).
+- `visitActivity.js` ACTIVITY_KINDS includes 6 HS kinds: `hearth_session_{created,paused,resumed,completed,soft_deleted,restored}`.
 
 ## Architecture
 
 React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
 - `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
 - `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
-- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `SingleQuoteIntakeScreen`, `BulkIntakeScreen`, `BackstageScreen`. Each returns `<>{shell-content}{NextActionBar}</>`.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `SingleQuoteIntakeScreen`, `BulkIntakeScreen`, `BackstageScreen`, `HearthStudioSessionDetailScreen`. Each returns `<>{shell-content}{NextActionBar}</>`. `RepLoginScreen.jsx` also lives here but is a pre-route gate (see "Rep-login gate" above), not a routed screen.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
@@ -166,18 +191,20 @@ React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Ta
 
 ## Sales OS Storage
 
-Durable local storage for the next shell lives in IndexedDB, namespace `benson-fireplace-sales-os`, schema version 1.
+Durable local storage for the next shell lives in IndexedDB, namespace `benson-fireplace-sales-os`, schema version 3. `SCHEMA_VERSION` is bumped in `salesOsStorageSchema.js`; `onupgradeneeded` auto-creates missing stores from `STORE_LIST` — skip-version migrations (v1→v3, v2→v3) are handled transparently.
 
 Layout:
 - `src/lib/salesOsStorageSchema.js` — DB name, schema version, store names, sensitive-key scrub
 - `src/lib/salesOsStorage.js` — IndexedDB engine + in-memory engine (for tests) + `createSalesOsStorage({ engine })` wrapper. Result shape `{ ok, data } | { ok, error }`.
 - `src/lib/salesOsBackup.js` — JSON export/validate/import/summary; replace and merge modes; sensitive keys are scrubbed and rejected.
+  - `scrubStoreRow(store, row)` applies `scrubSensitiveKeys` then `scrubSessionRecord` for the `hearthStudioSessions` store (nested `selections.investment` + `selections.roomContext` require a second pass the top-level scrubber cannot reach).
+  - `validateSalesOsBackup` accepts `schemaVersion` in range `[MIN_BACKUP_SCHEMA_VERSION, SCHEMA_VERSION]` (currently 2–3). Backups from schema v1 are rejected (pre-backup release).
 - `src/lib/salesOsSaveState.js` — observable save state (idle/saving/saved/error) for the storage status widget.
 - `src/lib/salesOsMigration.js` — one-shot migrate of legacy localStorage keys; idempotent via `appMeta.salesOsMigration:v1`. Old localStorage keys are NOT deleted.
 - `src/lib/customerFileDurable.js` — async customer-file API for new shell code (`saveCustomerFileDurable`, `listCustomerFilesDurable`, etc.).
 - `src/components/SalesOsStorageStatus.jsx` — bottom-right widget: "Saved locally · HH:MM" + Backup + Restore buttons. Mounted in `App.jsx`.
 
-Stores: `customerFiles`, `visitSessions`, `quotePrepRecords`, `followUpRecords`, `activityTimeline`, `recoveryQueue`, `appMeta`.
+Stores: `customerFiles`, `visitSessions`, `quotePrepRecords`, `followUpRecords`, `activityTimeline`, `recoveryQueue`, `appMeta`, `reps`, `hearthStudioSessions`.
 
 ### Customer File dual-write (sync API → IDB mirror)
 
