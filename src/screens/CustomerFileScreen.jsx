@@ -8,6 +8,7 @@ import FollowUpPlanPanel from '../components/FollowUpPlanPanel.jsx'
 import SmartContextPanel from '../components/SmartContextPanel.jsx'
 import ManagerReviewReasons from '../components/file/ManagerReviewReasons.jsx'
 import ProductsDiscussedCard from '../components/file/ProductsDiscussedCard.jsx'
+import HearthStudioSessionsCard from '../components/file/HearthStudioSessionsCard.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 import { composeFollowUpDraft } from '../lib/followUpComposer.js'
 import { customerFileToOpportunity } from '../lib/customerFileFollowUpAdapter.js'
@@ -30,6 +31,8 @@ import {
   clearFollowUpForFile,
   describeFollowUp,
 } from '../lib/visitActivity.js'
+import { listSessions, createSession } from '../lib/hearthStudioSessionStorage.js'
+import useLoggedInRep from '../lib/useLoggedInRep.js'
 
 function SourceTrailCard({ file }) {
   const trail = Array.isArray(file.sourceTrail) && file.sourceTrail.length > 0
@@ -366,12 +369,14 @@ function FollowUpCard({ followUp, onSave, onClear, disabled }) {
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview, onOpenHearthSession }) {
+  const { rep } = useLoggedInRep()
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [activity, setActivity] = useState([])
   const [followUp, setFollowUp] = useState(null)
+  const [hsSessions, setHsSessions] = useState([])
   const [composerOpen, setComposerOpen] = useState(false)
   const [showSmartContext, setShowSmartContext] = useState(false)
   const [selectedChannel, setSelectedChannel] = useState('email')
@@ -379,12 +384,14 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
 
   async function reloadActivityAndFollowUp(storage, id) {
     try {
-      const [acts, fu] = await Promise.all([
+      const [acts, fu, allSessions] = await Promise.all([
         listActivityForFile(storage, id, { limit: 8 }),
         getFollowUpForFile(storage, id),
+        listSessions(storage),
       ])
       setActivity(acts)
       setFollowUp(fu)
+      setHsSessions(allSessions.filter((s) => s.customerFileId === id))
     } catch {
       // Activity is best-effort — don't block the file view if storage hiccups.
     }
@@ -478,6 +485,23 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
       await reloadActivityAndFollowUp(storage, fileId)
     } catch {
       // best-effort
+    }
+  }
+
+  async function handleOpenHearthSession(sessionId) {
+    if (!fileId) return
+    try {
+      const storage = getSalesOsStorage()
+      const repId = rep ? rep.id : null
+      if (sessionId) {
+        onOpenHearthSession && onOpenHearthSession(sessionId)
+      } else {
+        const newSession = await createSession(storage, fileId, repId)
+        await reloadActivityAndFollowUp(storage, fileId)
+        onOpenHearthSession && onOpenHearthSession(newSession.id)
+      }
+    } catch {
+      // creation failure is non-fatal for the file view
     }
   }
 
@@ -598,6 +622,13 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             followUp={followUp}
             onSave={handleSaveFollowUp}
             onClear={handleClearFollowUp}
+            disabled={!fileId}
+          />
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <HearthStudioSessionsCard
+            sessions={hsSessions}
+            onOpenHearthSession={handleOpenHearthSession}
             disabled={!fileId}
           />
         </div>

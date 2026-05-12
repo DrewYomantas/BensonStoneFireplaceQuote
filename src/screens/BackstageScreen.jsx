@@ -1,4 +1,5 @@
 import FieldRulesAdmin from '../components/backstage/FieldRulesAdmin.jsx'
+import HearthStudioSessionsAdmin from '../components/backstage/HearthStudioSessionsAdmin.jsx'
 import NextActionBar from '../components/shell/NextActionBar.jsx'
 
 export default function BackstageScreen({ onBack, onOpenBatchCleanup, onLogout }) {
@@ -13,6 +14,9 @@ export default function BackstageScreen({ onBack, onOpenBatchCleanup, onLogout }
           </p>
           <hr className="rule-brass" style={{ margin: '20px 0' }} />
           <FieldRulesAdmin />
+          <div style={{ marginTop: 24 }}>
+            <HearthStudioSessionsAdmin />
+          </div>
 
           {onLogout && (
             <section className="card-flat" style={{ marginTop: 24, padding: 18 }}>

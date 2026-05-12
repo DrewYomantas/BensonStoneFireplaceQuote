@@ -15,6 +15,7 @@ import SingleQuoteIntakeScreen from './screens/SingleQuoteIntakeScreen.jsx'
 import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import RepLoginScreen from './screens/RepLoginScreen.jsx'
+import HearthStudioSessionDetailScreen from './screens/HearthStudioSessionDetailScreen.jsx'
 import useLoggedInRep from './lib/useLoggedInRep.js'
 
 const TITLES = {
@@ -29,6 +30,7 @@ const TITLES = {
   bulkIntake: 'Old Quote Batch Cleanup',
   addQuote: 'Add Quote PDF',
   backstage: 'Backstage',
+  hearthSession: 'Hearth Studio',
 }
 
 const CRUMBS = {
@@ -43,6 +45,7 @@ const CRUMBS = {
   bulkIntake: ['Backstage', 'Old Quote Batch Cleanup'],
   addQuote: ['Add Quote PDF'],
   backstage: ['Backstage'],
+  hearthSession: ['Customer files', 'Hearth Studio'],
 }
 
 export default function App() {
@@ -83,6 +86,10 @@ export default function App() {
     setRoute({ screen: 'proposalPreview', fileId })
   }
 
+  function openHearthSession(sessionId, fileId) {
+    setRoute({ screen: 'hearthSession', fileId, sessionId })
+  }
+
   function openBulkIntake() {
     setRoute({ screen: 'bulkIntake', fileId: null })
   }
@@ -101,7 +108,7 @@ export default function App() {
 
   return (
     <AppShell
-      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview', 'bulkIntake', 'addQuote'].includes(route.screen) ? 'files' : route.screen}
+      active={['lens', 'filesList', 'quotePrep', 'handoff', 'proposalPreview', 'bulkIntake', 'addQuote', 'hearthSession'].includes(route.screen) ? 'files' : route.screen}
       onNavigate={navigate}
       title={TITLES[route.screen]}
       crumbs={CRUMBS[route.screen]}
@@ -133,6 +140,7 @@ export default function App() {
           onOpenQuotePrep={openQuotePrep}
           onOpenHandoff={openHandoff}
           onOpenProposalPreview={openProposalPreview}
+          onOpenHearthSession={(sessionId) => openHearthSession(sessionId, route.fileId)}
         />
       )}
       {route.screen === 'lens' && (
@@ -177,6 +185,13 @@ export default function App() {
           onCustomerFileCreated={onCustomerFileCreated}
           onOpenBatchCleanup={openBulkIntake}
           onBack={() => navigate('today')}
+        />
+      )}
+      {route.screen === 'hearthSession' && (
+        <HearthStudioSessionDetailScreen
+          sessionId={route.sessionId}
+          onBack={() => openFile(route.fileId)}
+          rep={loggedInRep}
         />
       )}
       {route.screen === 'backstage' && (

@@ -10,6 +10,16 @@ import {
   isSensitiveKey,
   scrubSensitiveKeys,
 } from './salesOsStorageSchema.js'
+import { scrubSessionRecord } from './hearthStudioSessionStorage.js'
+
+// Oldest schema version whose backups we still accept (v2 = first backup-capable release).
+const MIN_BACKUP_SCHEMA_VERSION = 2
+
+function scrubStoreRow(store, row) {
+  const base = scrubSensitiveKeys(row)
+  if (store === STORE_NAMES.hearthStudioSessions) return scrubSessionRecord(base)
+  return base
+}
 
 export async function exportSalesOsBackup(storage, { now = new Date() } = {}) {
   if (!storage) throw new Error('exportSalesOsBackup: storage required')
@@ -19,7 +29,7 @@ export async function exportSalesOsBackup(storage, { now = new Date() } = {}) {
     if (!result.ok) {
       throw new Error(`Failed to read ${store}: ${result.error.message}`)
     }
-    stores[store] = (result.data || []).map(scrubSensitiveKeys)
+    stores[store] = (result.data || []).map((row) => scrubStoreRow(store, row))
   }
   return {
     appName: APP_NAME,
@@ -37,7 +47,10 @@ export function validateSalesOsBackup(payload) {
   }
   if (payload.appName !== APP_NAME) errors.push(`Unexpected appName: ${payload.appName}`)
   if (payload.backupVersion !== BACKUP_VERSION) errors.push(`Unsupported backupVersion: ${payload.backupVersion}`)
-  if (payload.schemaVersion !== SCHEMA_VERSION) errors.push(`Unsupported schemaVersion: ${payload.schemaVersion}`)
+  const sv = payload.schemaVersion
+  if (!Number.isInteger(sv) || sv < MIN_BACKUP_SCHEMA_VERSION || sv > SCHEMA_VERSION) {
+    errors.push(`Unsupported schemaVersion: ${sv}`)
+  }
   if (typeof payload.exportedAt !== 'string' || !payload.exportedAt) errors.push('Missing exportedAt')
   if (!payload.stores || typeof payload.stores !== 'object' || Array.isArray(payload.stores)) {
     errors.push('Missing stores object')
@@ -71,7 +84,7 @@ export async function importSalesOsBackup(storage, payload, { mode = 'replace' }
 
   const summary = {}
   for (const store of STORE_LIST) {
-    const rows = (payload.stores[store] || []).map(scrubSensitiveKeys)
+    const rows = (payload.stores[store] || []).map((row) => scrubStoreRow(store, row))
     if (mode === 'replace') {
       const cleared = await storage.clearStore(store)
       if (!cleared.ok) return { ok: false, errors: [cleared.error.message] }

@@ -8,13 +8,18 @@ import {
   filterCustomerFilesListByQuotePrep,
   enrichCustomerFilesListWithFollowUps,
   filterCustomerFilesListByFollowUp,
+  enrichCustomerFilesListWithHsSessions,
+  filterCustomerFilesListByHs,
   QUOTE_PREP_FILTER_VALUES,
   QUOTE_PREP_FILTER_LABELS,
   FOLLOW_UP_FILTER_VALUES,
   FOLLOW_UP_FILTER_LABELS,
+  HS_FILTER_VALUES,
+  HS_FILTER_LABELS,
 } from '../lib/customerFilesList.js'
 import { GATE_STATUS } from '../lib/quotePrepGate.js'
 import { listAllFollowUps } from '../lib/visitActivity.js'
+import { listSessions } from '../lib/hearthStudioSessionStorage.js'
 
 function quotePrepPill(status, hasLines) {
   if (!hasLines) return { label: 'NOT STARTED', cls: 'source source-manual' }
@@ -107,6 +112,7 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, 
   const [query, setQuery] = useState('')
   const [quotePrepFilter, setQuotePrepFilter] = useState('all')
   const [followUpFilter, setFollowUpFilter] = useState('all')
+  const [hsFilter, setHsFilter] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -120,13 +126,15 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, 
           return
         }
         const storage = getSalesOsStorage()
-        const [raw, followUps] = await Promise.all([
+        const [raw, followUps, allSessions] = await Promise.all([
           listCustomerFilesDurable(storage),
           listAllFollowUps(storage),
+          listSessions(storage),
         ])
         if (cancelled) return
         const projected = projectCustomerFilesList(raw)
-        setRows(enrichCustomerFilesListWithFollowUps(projected, followUps, new Date()))
+        const withFollowUps = enrichCustomerFilesListWithFollowUps(projected, followUps, new Date())
+        setRows(enrichCustomerFilesListWithHsSessions(withFollowUps, allSessions))
       } catch (err) {
         if (!cancelled) {
           setErrorMsg(err.message || String(err))
@@ -140,8 +148,9 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, 
   const filtered = useMemo(() => {
     const searched = searchCustomerFilesList(rows || [], query)
     const byQuote = filterCustomerFilesListByQuotePrep(searched, quotePrepFilter)
-    return filterCustomerFilesListByFollowUp(byQuote, followUpFilter, new Date())
-  }, [rows, query, quotePrepFilter, followUpFilter])
+    const byFollowUp = filterCustomerFilesListByFollowUp(byQuote, followUpFilter, new Date())
+    return filterCustomerFilesListByHs(byFollowUp, hsFilter)
+  }, [rows, query, quotePrepFilter, followUpFilter, hsFilter])
 
   const loading = rows === null && !errorMsg
   const isEmpty = !loading && !errorMsg && (rows || []).length === 0
@@ -221,6 +230,26 @@ export default function CustomerFilesListScreen({ onOpenFile, onOpenStartVisit, 
                     aria-pressed={active}
                   >
                     {FOLLOW_UP_FILTER_LABELS[v]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <span className="eyebrow eyebrow-ink">HEARTH STUDIO</span>
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {HS_FILTER_VALUES.map((v) => {
+                const active = v === hsFilter
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    className={active ? 'btn btn-primary' : 'btn btn-quiet'}
+                    style={{ padding: '4px 10px' }}
+                    onClick={() => setHsFilter(v)}
+                    aria-pressed={active}
+                  >
+                    {HS_FILTER_LABELS[v]}
                   </button>
                 )
               })}

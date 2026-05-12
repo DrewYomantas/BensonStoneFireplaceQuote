@@ -24,6 +24,12 @@ export const ACTIVITY_KINDS = Object.freeze([
   'bulk_imported',
   'scan_imported',
   'scanned_packet_imported',
+  'hearth_session_created',
+  'hearth_session_paused',
+  'hearth_session_resumed',
+  'hearth_session_completed',
+  'hearth_session_soft_deleted',
+  'hearth_session_restored',
 ])
 
 export const ACTIVITY_KIND_LABELS = Object.freeze({
@@ -37,6 +43,12 @@ export const ACTIVITY_KIND_LABELS = Object.freeze({
   bulk_imported: 'Bulk imported',
   scan_imported: 'Scan imported',
   scanned_packet_imported: 'Packet imported',
+  hearth_session_created: 'Hearth Studio session created',
+  hearth_session_paused: 'Hearth Studio session paused',
+  hearth_session_resumed: 'Hearth Studio session resumed',
+  hearth_session_completed: 'Hearth Studio session completed',
+  hearth_session_soft_deleted: 'Hearth Studio session removed',
+  hearth_session_restored: 'Hearth Studio session restored',
 })
 
 const ACTIVITY_KIND_SET = new Set(ACTIVITY_KINDS)

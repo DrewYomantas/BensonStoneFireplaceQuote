@@ -11,21 +11,33 @@ import {
   stampRecord,
 } from './salesOsStorageSchema.js'
 
-describe('salesOsStorageSchema — v2 constants', () => {
-  it('SCHEMA_VERSION is 2', () => {
-    assert.equal(SCHEMA_VERSION, 2)
+describe('salesOsStorageSchema — v3 constants', () => {
+  it('SCHEMA_VERSION is 3', () => {
+    assert.equal(SCHEMA_VERSION, 3)
   })
 
   it('STORE_NAMES includes reps', () => {
     assert.equal(STORE_NAMES.reps, 'reps')
   })
 
+  it('STORE_NAMES includes hearthStudioSessions', () => {
+    assert.equal(STORE_NAMES.hearthStudioSessions, 'hearthStudioSessions')
+  })
+
   it('STORE_LIST includes reps', () => {
     assert.ok(STORE_LIST.includes('reps'))
   })
 
+  it('STORE_LIST includes hearthStudioSessions', () => {
+    assert.ok(STORE_LIST.includes('hearthStudioSessions'))
+  })
+
   it('RECORD_STORES includes reps (it is not appMeta)', () => {
     assert.ok(RECORD_STORES.includes('reps'))
+  })
+
+  it('RECORD_STORES includes hearthStudioSessions', () => {
+    assert.ok(RECORD_STORES.includes('hearthStudioSessions'))
   })
 
   it('RECORD_STORES does not include appMeta', () => {
@@ -34,6 +46,10 @@ describe('salesOsStorageSchema — v2 constants', () => {
 
   it('keyPathFor reps returns id', () => {
     assert.equal(keyPathFor(STORE_NAMES.reps), 'id')
+  })
+
+  it('keyPathFor hearthStudioSessions returns id', () => {
+    assert.equal(keyPathFor(STORE_NAMES.hearthStudioSessions), 'id')
   })
 
   it('keyPathFor appMeta returns key', () => {

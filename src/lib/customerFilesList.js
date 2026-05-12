@@ -15,6 +15,15 @@ import { isSensitiveKey } from './salesOsStorageSchema.js'
 import { SETUP_TYPE_LABELS } from './setupGoalLens.js'
 import { projectQuotePrepGateStatus, GATE_STATUS } from './quotePrepGate.js'
 import { describeFollowUp, isFollowUpDueOrOverdue } from './visitActivity.js'
+import { SESSION_STATUS } from './hearthStudioSessionStorage.js'
+
+// Hearth Studio session filter buckets for the Customer Files list.
+export const HS_FILTER_VALUES = Object.freeze(['all', 'hasActive', 'hasCompleted'])
+export const HS_FILTER_LABELS = Object.freeze({
+  all: 'All',
+  hasActive: 'Session in progress',
+  hasCompleted: 'Session completed',
+})
 
 // Follow-up filter buckets for the Customer Files list (Milestone 15).
 // Composes alongside the quote prep filter — different filter group.
@@ -58,6 +67,7 @@ const SAFE_LIST_KEYS = new Set([
   'searchHay',
   'quotePrep',
   'followUp',
+  'hearthStudio',
 ])
 
 function pickContact(file) {
@@ -223,6 +233,53 @@ export function filterCustomerFilesListByQuotePrep(rows = [], filter = DEFAULT_Q
     }
     if (key === 'needsVerification') return qp.status === GATE_STATUS.needsVerification
     if (key === 'ready') return qp.status === GATE_STATUS.ready
+    return true
+  })
+}
+
+// Attach Hearth Studio session summary to each row.
+// allSessions is the flat array returned by listSessions(storage).
+export function enrichCustomerFilesListWithHsSessions(rows = [], allSessions = []) {
+  if (!Array.isArray(rows)) return []
+  const sessions = Array.isArray(allSessions) ? allSessions : []
+  const byFile = {}
+  for (const s of sessions) {
+    if (!s || !s.customerFileId) continue
+    if (!byFile[s.customerFileId]) byFile[s.customerFileId] = []
+    byFile[s.customerFileId].push(s)
+  }
+  return rows.map((row) => {
+    if (!row || !row.id) return row
+    const fileSessions = byFile[row.id] || []
+    const nonDeleted = fileSessions.filter((s) => s.status !== SESSION_STATUS.soft_deleted)
+    const hasActive = nonDeleted.some(
+      (s) => s.status === SESSION_STATUS.active || s.status === SESSION_STATUS.paused,
+    )
+    const hasCompleted = nonDeleted.some((s) => s.status === SESSION_STATUS.completed)
+    return Object.freeze({
+      ...row,
+      hearthStudio: Object.freeze({
+        hasActive,
+        hasCompleted,
+        activeCount: nonDeleted.filter(
+          (s) => s.status === SESSION_STATUS.active || s.status === SESSION_STATUS.paused,
+        ).length,
+        totalCount: nonDeleted.length,
+      }),
+    })
+  })
+}
+
+// Filter rows by Hearth Studio session bucket.
+export function filterCustomerFilesListByHs(rows = [], filter = 'all') {
+  const list = Array.isArray(rows) ? rows : []
+  const key = HS_FILTER_VALUES.includes(filter) ? filter : 'all'
+  if (key === 'all') return list
+  return list.filter((r) => {
+    const hs = r && r.hearthStudio
+    if (!hs) return false
+    if (key === 'hasActive') return hs.hasActive
+    if (key === 'hasCompleted') return hs.hasCompleted
     return true
   })
 }
