@@ -403,6 +403,29 @@ describe('projectHearthSessionForGuestMode', () => {
     assert.ok(view.progressLabel.includes('13'))
   })
 
+  it('uses customer-safe chapter labels, not backstage labels', () => {
+    // Backstage label for chapter 2 is "Fit Gauge" — too jargon-y for a customer.
+    const view = projectHearthSessionForGuestMode(
+      makeSession('s1', 'f1', SESSION_STATUS.active, { currentChapter: 2 })
+    )
+    assert.equal(view.chapterLabel, 'How it’ll fit')
+    assert.ok(!view.progressLabel.includes('Fit Gauge'))
+  })
+
+  it('rewords chapters 7, 9, and 11 for customer readability', () => {
+    const cases = [
+      { ch: 7, expected: 'Hearth & surround' },
+      { ch: 9, expected: 'Our recommendation' },
+      { ch: 11, expected: 'Confirming details' },
+    ]
+    for (const { ch, expected } of cases) {
+      const view = projectHearthSessionForGuestMode(
+        makeSession(`s-${ch}`, 'f1', SESSION_STATUS.active, { currentChapter: ch })
+      )
+      assert.equal(view.chapterLabel, expected)
+    }
+  })
+
   it('guestDirection fallback marker', () => {
     const summary = buildHearthSessionBackstageSummary(
       makeSession('s1', 'f1', SESSION_STATUS.active, {

@@ -260,6 +260,26 @@ export function deriveCustomerFileLaunchAction({ sessions = [], customerName = '
   })
 }
 
+// Customer-safe chapter labels (Pass B). Backstage CHAPTER_LABELS use precise
+// rep-side language ("Fit Gauge", "Verification") that reads as jargon when
+// the customer sees the tablet in Guest Mode. This parallel map keeps the
+// backstage taxonomy intact while presenting calmer customer-facing names.
+export const CUSTOMER_CHAPTER_LABELS = Object.freeze({
+  0: 'Setup Type',
+  1: 'Goal',
+  2: 'How it’ll fit',
+  3: 'Your room',
+  4: 'Room conditions',
+  5: 'Stone Series',
+  6: 'Dimensions',
+  7: 'Hearth & surround',
+  8: 'TV / Mantel Plan',
+  9: 'Our recommendation',
+  10: 'Investment',
+  11: 'Confirming details',
+  12: 'Next Steps',
+})
+
 // Customer-safe projection for the Guest Mode shell (Milestone 29).
 // Strips investment, roomContext, and anything else the display projection
 // already removes. Returns a frozen view with only the fields needed to
@@ -268,8 +288,8 @@ export function deriveCustomerFileLaunchAction({ sessions = [], customerName = '
 export function projectHearthSessionForGuestMode(session) {
   const view = projectHearthStudioSessionForDisplay(session)
   if (!view || !view.id) return null
-  const chapterLabel = CHAPTER_LABELS[view.currentChapter] || `Chapter ${view.currentChapter}`
-  const total = Object.keys(CHAPTER_LABELS).length
+  const chapterLabel = CUSTOMER_CHAPTER_LABELS[view.currentChapter] || `Chapter ${view.currentChapter}`
+  const total = Object.keys(CUSTOMER_CHAPTER_LABELS).length
   const done = Array.isArray(view.chaptersCompleted) ? view.chaptersCompleted.length : 0
   return Object.freeze({
     sessionId: view.id,

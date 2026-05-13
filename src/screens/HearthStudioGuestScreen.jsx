@@ -70,7 +70,7 @@ export default function HearthStudioGuestScreen({ sessionId, onExit }) {
         alignItems: 'center',
         gap: 12,
       }}>
-        <span className="eyebrow eyebrow-ember" style={{ fontSize: 11 }}>HEARTH STUDIO · GUEST MODE</span>
+        <span className="eyebrow eyebrow-ember" style={{ fontSize: 11 }}>HEARTH STUDIO</span>
         <span style={{ flex: 1 }} />
         <button type="button" className="btn btn-quiet" onClick={onExit} aria-label="Return to Customer File">
           ← Return to Customer File
@@ -104,16 +104,11 @@ export default function HearthStudioGuestScreen({ sessionId, onExit }) {
                 <p className="body-sm" style={{ marginTop: 6, color: 'var(--slate)' }}>
                   {view.progressLabel}
                 </p>
-                <div style={{ marginTop: 18, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                  <button type="button" className="btn btn-primary" disabled>
-                    Continue chapter (coming soon)
-                  </button>
-                  <button type="button" className="btn btn-quiet" onClick={onExit}>
-                    Return to Customer File
-                  </button>
-                </div>
+                <p className="body-sm" style={{ marginTop: 14, color: 'var(--slate)' }}>
+                  Chapter content opens on your rep&apos;s signal.
+                </p>
                 <p className="body-sm" style={{ marginTop: 16, color: 'var(--slate)' }}>
-                  Your rep is guiding this design conversation. Nothing here is a final quote — the official Benson Stone quote process follows once direction is set.
+                  Your rep guides the conversation. The official Benson Stone quote follows once we&apos;ve set direction.
                 </p>
               </section>
             </>
