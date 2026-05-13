@@ -120,6 +120,7 @@ export default function App() {
           onOpenFile={openFile}
           onOpenFilesList={openFilesList}
           onOpenAddQuote={openAddQuote}
+          onOpenHearthSession={openHearthSession}
         />
       )}
       {route.screen === 'visit' && (

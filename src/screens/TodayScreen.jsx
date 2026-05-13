@@ -5,6 +5,8 @@ import { listCustomerFilesDurable } from '../lib/customerFileDurable.js'
 import { projectCustomerFilesList, enrichCustomerFilesListWithFollowUps } from '../lib/customerFilesList.js'
 import { listAllFollowUps } from '../lib/visitActivity.js'
 import { deriveTodayCockpit } from '../lib/todayCockpit.js'
+import { deriveTodayHearthSessions } from '../lib/todayHearthSessions.js'
+import { listSessions, SESSION_STATUS } from '../lib/hearthStudioSessionStorage.js'
 
 function formatStamp(iso) {
   if (!iso) return ''
@@ -148,6 +150,53 @@ function RecentFileRow({ row, onOpen }) {
   )
 }
 
+// ---- Hearth Studio reopen row -----------------------------------------------
+
+function HearthSessionRow({ entry, onOpen }) {
+  const statusLabel = (() => {
+    if (entry.status === SESSION_STATUS.active) return 'Active session'
+    if (entry.status === SESSION_STATUS.paused) return 'Paused'
+    if (entry.status === SESSION_STATUS.completed) return 'Completed recently'
+    return entry.status
+  })()
+  const isActive = entry.status === SESSION_STATUS.active || entry.status === SESSION_STATUS.paused
+  const accent = isActive ? 'var(--ember)' : 'var(--brass)'
+  return (
+    <button
+      type="button"
+      className="card"
+      onClick={() => onOpen && onOpen(entry.sessionId, entry.customerFileId)}
+      aria-label={`Open Hearth Studio session for ${entry.customerName}`}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left',
+        padding: 14, marginTop: 10, cursor: 'pointer',
+        background: 'var(--paper)', border: '1px solid var(--rule)',
+        borderLeft: `3px solid ${accent}`,
+      }}
+    >
+      <div className="hstack">
+        <span className="eyebrow eyebrow-ink">{entry.customerName}</span>
+        <span className="spacer" />
+        <span className="body-sm" style={{ color: accent }}>{statusLabel}</span>
+      </div>
+      <p className="body-sm" style={{ marginTop: 4, color: 'var(--slate)' }}>
+        Chapter {String(entry.currentChapter).padStart(2, '0')} · {entry.chapterLabel} · {entry.chaptersCompletedCount}/13 chapters
+      </p>
+      {entry.summary && (
+        <p className="body-sm" style={{ marginTop: 2, color: 'var(--ink)' }}>{entry.summary}</p>
+      )}
+      {entry.fieldRuleLabels.length > 0 && (
+        <p className="body-sm" style={{ marginTop: 4, color: 'var(--ember)' }}>
+          Field rule: {entry.fieldRuleLabels.join(', ')}
+        </p>
+      )}
+      <p className="body-sm" style={{ marginTop: 4, color: 'var(--slate)', fontStyle: 'italic' }}>
+        Guest design direction — needs verification before BisTrack build.
+      </p>
+    </button>
+  )
+}
+
 // ---- Empty state panel -------------------------------------------------------
 
 function EmptyPanel({ onOpenStartVisit, onOpenAddQuote, onOpenList }) {
@@ -212,7 +261,7 @@ function deriveNextBar({ oneThing, onOpenFile, onOpenAddQuote, onOpenStartVisit 
 
 // ---- Main screen -----------------------------------------------------------
 
-export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenAddQuote }) {
+export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesList, onOpenAddQuote, onOpenHearthSession }) {
   const [state, setState] = useState({ kind: 'loading' })
 
   useEffect(() => {
@@ -226,16 +275,18 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
           return
         }
         const storage = getSalesOsStorage()
-        const [raw, followUps] = await Promise.all([
+        const [raw, followUps, sessions] = await Promise.all([
           listCustomerFilesDurable(storage),
           listAllFollowUps(storage),
+          listSessions(storage),
         ])
         if (cancelled) return
         const now = new Date()
         const allRows = enrichCustomerFilesListWithFollowUps(projectCustomerFilesList(raw), followUps, now)
         const cockpit = deriveTodayCockpit(allRows, now)
+        const hearthSessions = deriveTodayHearthSessions({ sessions, files: allRows, now })
         const isEmpty = allRows.length === 0
-        setState({ kind: 'ok', cockpit, isEmpty })
+        setState({ kind: 'ok', cockpit, hearthSessions, isEmpty })
       } catch (err) {
         if (!cancelled) setState({ kind: 'error', error: err.message || String(err) })
       }
@@ -245,6 +296,7 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
 
   const cockpit = state.kind === 'ok' ? state.cockpit : null
   const { followUpsToday = [], quoteActionsNeeded = [], recentRows = [], oneThing = null } = cockpit || {}
+  const hearthSessions = state.kind === 'ok' ? (state.hearthSessions || []) : []
 
   const nextBar = deriveNextBar({ oneThing, onOpenFile, onOpenAddQuote, onOpenStartVisit })
 
@@ -310,6 +362,31 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
               <div style={{ marginTop: 8 }}>
                 {quoteActionsNeeded.map((entry) => (
                   <QuoteActionRow key={entry.row.id} entry={entry} onOpen={onOpenFile} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Hearth Studio sessions to reopen */}
+          {hearthSessions.length > 0 && (
+            <section style={{ marginTop: 20 }} aria-labelledby="today-hs-heading">
+              <div className="hstack">
+                <span id="today-hs-heading" className="eyebrow eyebrow-ember">DESIGN SESSIONS TO REOPEN</span>
+                <span className="spacer" />
+                <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                  {hearthSessions.length} Hearth Studio session{hearthSessions.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {hearthSessions.map((entry) => (
+                  <HearthSessionRow
+                    key={entry.sessionId}
+                    entry={entry}
+                    onOpen={(sessionId, fileId) => {
+                      if (onOpenHearthSession) onOpenHearthSession(sessionId, fileId)
+                      else if (onOpenFile) onOpenFile(fileId)
+                    }}
+                  />
                 ))}
               </div>
             </section>
