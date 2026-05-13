@@ -426,7 +426,7 @@ export default function TodayScreen({ onOpenStartVisit, onOpenFile, onOpenFilesL
 
       <NextActionBar
         action={nextBar.action}
-        why={nextBar.why || 'Customer Files stay on this tablet. Backup from the top bar before closing.'}
+        why={nextBar.why || null}
         dontForget="Customer Files stay on this tablet. Backup from the top bar before closing."
         primary={nextBar.primary}
         secondary={

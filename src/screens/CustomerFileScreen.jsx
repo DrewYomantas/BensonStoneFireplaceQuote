@@ -160,7 +160,7 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, 
           disabled={!fileId || !onOpenQuotePrep}
           onClick={() => onOpenQuotePrep && onOpenQuotePrep(fileId)}
         >
-          Open Quote / Prep
+          Work on Quote / Prep
         </button>
         <button
           type="button"
@@ -168,7 +168,7 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, 
           disabled={!fileId || !onOpenProposalPreview}
           onClick={() => onOpenProposalPreview && onOpenProposalPreview(fileId)}
         >
-          Preview Proposal
+          Preview proposal
         </button>
         <button
           type="button"
@@ -176,7 +176,7 @@ function QuotePrepStatusCard({ file, fieldRulesResult, fileId, onOpenQuotePrep, 
           disabled={!fileId || !onOpenHandoff}
           onClick={() => onOpenHandoff && onOpenHandoff(fileId)}
         >
-          Open BisTrack Handoff
+          Hand off to BisTrack
         </button>
       </div>
     </section>
@@ -542,9 +542,14 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
         (f) => f.severity === 'blocker' && f.status === 'triggered'
       )
     : null
+  const hasActiveFieldRules = Boolean(
+    fieldRulesResult &&
+    Array.isArray(fieldRulesResult.findings) &&
+    fieldRulesResult.findings.some((f) => f.status === 'triggered' || f.status === 'soft-warning')
+  )
   const status = display && warnings.length === 0 && !fieldRulesBlocker
-    ? { kind: 'safe', label: 'Active' }
-    : { kind: 'review', label: 'In review' }
+    ? { kind: 'safe', label: 'Clean' }
+    : { kind: 'review', label: 'Needs attention' }
 
   async function acknowledgeZcGasInsert() {
     if (!fileId || !display) return
@@ -566,7 +571,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
   const canOpenLens = Boolean(display && fileId && onOpenLens)
   const nextBar = (
     <NextActionBar
-      action={display ? 'Open Setup + Goal Lens to verify what was captured.' : 'Pick a Customer File from Today or Start Visit.'}
+      action={display ? 'Verify what was captured in Setup + Goal Lens.' : 'Pick a Customer File from Today or Start Visit.'}
       why="Setup + Goal Lens is where assumed facts become verified ones."
       blocking={
         fieldRulesBlocker
@@ -581,12 +586,12 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
           disabled={!canOpenLens}
           onClick={() => canOpenLens && onOpenLens(fileId)}
         >
-          Open Setup + Goal Lens
+          Verify in Setup + Goal Lens
         </button>
       }
       secondary={
         onBack ? (
-          <button type="button" className="btn btn-quiet" onClick={onBack}>← Back to Customer files</button>
+          <button type="button" className="btn btn-quiet" onClick={onBack}>← Customer files</button>
         ) : null
       }
     />
@@ -627,16 +632,24 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
           <FactsCard file={display} />
           <ProductsDiscussedCard products={[]} />
         </div>
-        <div style={{ marginTop: 18 }}>
-          <FieldRulesCard
-            result={fieldRulesResult}
-            onAcknowledgeZcAck={acknowledgeZcGasInsert}
-            canAcknowledge={Boolean(fileId)}
-          />
-        </div>
-        <div style={{ marginTop: 18 }}>
-          <ManagerReviewReasons />
-        </div>
+
+        {hasActiveFieldRules ? (
+          <div style={{ marginTop: 18 }}>
+            <FieldRulesCard
+              result={fieldRulesResult}
+              onAcknowledgeZcAck={acknowledgeZcGasInsert}
+              canAcknowledge={Boolean(fileId)}
+            />
+          </div>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <p className="body-sm" style={{ color: 'var(--slate)' }}>
+              <span className="eyebrow eyebrow-ink" style={{ fontSize: 11, marginRight: 8 }}>FIELD RULES</span>
+              All clear — nothing flagged on this file.
+            </p>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18, marginTop: 18 }}>
           <QuotePrepStatusCard
             file={display}
@@ -685,6 +698,17 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             disabled={!fileId}
           />
         </div>
+        <details style={{ marginTop: 18 }}>
+          <summary style={{ cursor: 'pointer' }}>
+            <span className="eyebrow eyebrow-brass">MANAGER REVIEW REASONS</span>
+            <span className="body-sm" style={{ marginLeft: 8, color: 'var(--slate)' }}>
+              Open to flag this proposal for a second pair of eyes.
+            </span>
+          </summary>
+          <div style={{ marginTop: 12 }}>
+            <ManagerReviewReasons />
+          </div>
+        </details>
         <div style={{ marginTop: 18 }}>
           <FollowUpPlanPanel file={display} onChange={handlePlanChange} />
           {display && (
@@ -694,7 +718,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
                 className="btn btn-quiet"
                 onClick={() => setComposerOpen((v) => !v)}
               >
-                {composerOpen ? 'Hide follow-up composer' : 'Draft follow-up message'}
+                {composerOpen ? 'Done composing' : 'Compose follow-up'}
               </button>
               {composerOpen && (() => {
                 const opportunity = customerFileToOpportunity(display, followUp, warnings)
@@ -721,7 +745,7 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
               className="btn btn-quiet"
               onClick={() => setShowSmartContext((v) => !v)}
             >
-              {showSmartContext ? 'Hide Smart Context' : 'Show Smart Context'}
+              {showSmartContext ? 'Close references' : 'Look up references'}
             </button>
             {showSmartContext && (
               <div style={{ marginTop: 8 }}>
