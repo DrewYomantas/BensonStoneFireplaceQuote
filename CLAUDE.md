@@ -52,7 +52,7 @@ Treat those docs as more authoritative than the older "Active vs. Parked Modules
 
 ## V1.1 Sales OS Shell (active mount)
 
-The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,ProposalPreviewScreen,SingleQuoteIntakeScreen,BulkIntakeScreen,BackstageScreen,HearthStudioSessionDetailScreen}.jsx`. Routing is a small `useState` in `App.jsx`. Routes: `today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`. WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
+The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.jsx` → `AppShell` → one of `src/screens/{TodayScreen,StartVisitScreen,CustomerFilesListScreen,CustomerFileScreen,SetupGoalLensScreen,QuotePrepScreen,BisTrackHandoffScreen,ProposalPreviewScreen,SingleQuoteIntakeScreen,BulkIntakeScreen,BackstageScreen,HearthStudioSessionDetailScreen,HearthStudioGuestScreen}.jsx`. Routing is a small `useState` in `App.jsx`. Routes: `today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`, `hearthGuest`. `hearthGuest` is the only route that renders **without** AppShell (see "Guest-mode shell-bypass" below). WorkbenchShell is unmounted but its `src/lib/` helpers stay for reuse — do not delete.
 
 - `src/styles/tokens.css` — V1.1 design tokens (paper/stone/ember/state colors, Lora/Raleway/JetBrains type, spacing, radii, shadows, touch targets). No raw hex outside this file.
 - `src/styles/app.css` — base reset + shared primitives (cards, badges, source pills, fields, chips, shell, next-bar, save-status). Direction A/B/C utilities from the design canvas were intentionally not copied.
@@ -65,6 +65,19 @@ The mounted product is the V1.1 Sales OS, not WorkbenchShell. Entry: `src/App.js
 - `src/screens/RepLoginScreen.jsx` — last-4-SSN entry against reps seeded from `src/config/initialReps.js`
 - `src/lib/repStorage.js` — reps store CRUD (durable, IDB)
 - `src/lib/useLoggedInRep.js` — hook exposing `{ loggedInRep, login, logout }`
+
+### Guest-mode shell-bypass (post-route)
+
+`HearthStudioGuestScreen` is **the only customer-facing route**, so it renders without `AppShell` — no rail, no rep workflow buttons, no Backstage actions. App.jsx routes around the shell when `route.screen === 'hearthGuest'`:
+
+```js
+if (route.screen === 'hearthGuest') {
+  return <HearthStudioGuestScreen sessionId={route.sessionId} onExit={() => openFile(route.fileId)} />
+}
+return <AppShell ...>{ /* every other route */ }</AppShell>
+```
+
+Any future customer-facing route must follow the same pattern. Never mount a customer-facing screen inside AppShell — the rail's "Quote / Prep", "Smart Context", and "Backstage" entries are not customer-safe.
 
 ### Screens are real React components, not function calls
 
@@ -175,15 +188,32 @@ Test isolation: pass `{ displayRecords: [], webReferences: [] }` to `buildRefere
 - Lifecycle ops: `createSession`, `updateSession`, `pauseSession`, `resumeSession`, `completeSession`, `softDeleteSession`, `restoreSession`. Each emits activity via `appendActivityForFile(...).catch(() => {})`.
 - `getActiveSessionsForCustomer(storage, customerFileId)` — returns `active` + `paused` sessions only (excludes completed + soft_deleted).
 - `visitActivity.js` ACTIVITY_KINDS includes 6 HS kinds: `hearth_session_{created,paused,resumed,completed,soft_deleted,restored}`.
+- `CHAPTER_LABELS` (in `hearthStudioSessionStorage.js`) is **backstage-only** — uses rep-precise labels like "Fit Gauge", "Hearth Geometry", "Verification". Never render these on a customer-facing surface.
+- `CUSTOMER_CHAPTER_LABELS` (in `todayHearthSessions.js`) is the customer-safe parallel map — "How it'll fit", "Hearth & surround", "Confirming details", etc. Guest Mode reads this via `projectHearthSessionForGuestMode`. Any new customer-facing chapter rendering must use this map, not `CHAPTER_LABELS`.
+
+### Cross-surface Hearth Studio helpers (`todayHearthSessions.js`)
+
+Despite the name, this module houses the cross-surface session projections. Each export feeds a specific surface — pick the right one or you'll either leak sensitive fields or use the wrong label set.
+
+| Export | Surface | Sensitive scrub |
+|---|---|---|
+| `deriveTodayHearthSessions` | Today "Design Sessions to Reopen" section | investment, roomContext stripped via display projection |
+| `pickHearthSessionToResume` | Customer File launch logic | n/a — returns raw session for handler use |
+| `deriveCustomerFileLaunchAction` | Customer File "Begin / Resume Hearth Studio" CTA | banned-phrase audited; safe to render |
+| `projectHearthSessionForGuestMode` | **Customer-facing** Guest Mode screen | **must never carry field rules, sales note, investment, roomContext, or backstage `CHAPTER_LABELS`** |
+| `projectHearthSessionForInternalHandoff` | Backstage handoff data shape | display projection scrub |
+| `buildHearthSessionBackstageSummary` | Backstage Handoff Summary card on session detail | display projection scrub + customer-safe wording |
+
+Rule: customer-facing surfaces read only via `projectHearthSessionForGuestMode`. Backstage surfaces may read via any helper, but never reuse a customer-safe projection for backstage display (you'll hide info the rep needs).
 
 ## Architecture
 
 React + Vite + plain CSS (`src/styles/tokens.css` + `src/styles/app.css`). No Tailwind. No component library. No TypeScript.
 
-- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
+- `src/App.jsx` — mounts `<AppShell>` + screen for current route (`today`, `visit`, `filesList`, `files`, `lens`, `quotePrep`, `handoff`, `proposalPreview`, `addQuote`, `bulkIntake`, `backstage`, `hearthSession`). For `hearthGuest`, App.jsx bypasses AppShell entirely (see "Guest-mode shell-bypass"). Routing is a small `useState`. Calls `ensureSalesOsBoot()` once on mount.
 - `src/components/shell/AppShell.jsx` — layout shell; rail + topbar + `topActions` slot (currently `BackstageBackup`).
 - `src/components/WorkbenchShell.jsx` — **legacy, unmounted.** Helpers in `src/lib/` are still reused; do not delete.
-- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `SingleQuoteIntakeScreen`, `BulkIntakeScreen`, `BackstageScreen`, `HearthStudioSessionDetailScreen`. Each returns `<>{shell-content}{NextActionBar}</>`. `RepLoginScreen.jsx` also lives here but is a pre-route gate (see "Rep-login gate" above), not a routed screen.
+- `src/screens/` — one file per route: `TodayScreen`, `StartVisitScreen`, `CustomerFilesListScreen`, `CustomerFileScreen`, `SetupGoalLensScreen`, `QuotePrepScreen`, `BisTrackHandoffScreen`, `ProposalPreviewScreen`, `SingleQuoteIntakeScreen`, `BulkIntakeScreen`, `BackstageScreen`, `HearthStudioSessionDetailScreen`, `HearthStudioGuestScreen`. Each AppShell-mounted screen returns `<>{shell-content}{NextActionBar}</>`; `HearthStudioGuestScreen` is the exception — it renders its own full-page shell. `RepLoginScreen.jsx` also lives here but is a pre-route gate (see "Rep-login gate" above), not a routed screen.
 - `src/lib/` — pure logic modules with co-located `.test.js` files
 - `src/data/fieldMap.json` — field contract driving parse/render
 - `src/data/bistrack-snapshot/` — private BisTrack data, gitignored, never commit
