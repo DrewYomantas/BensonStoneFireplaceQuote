@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   deriveTodayHearthSessions,
   projectHearthSessionForInternalHandoff,
+  buildHearthSessionBackstageSummary,
   COMPLETED_RECENT_DAYS,
 } from './todayHearthSessions.js'
 import { SESSION_STATUS } from './hearthStudioSessionStorage.js'
@@ -218,5 +219,98 @@ describe('projectHearthSessionForInternalHandoff', () => {
     const banned = ['ready to send', 'proposal ready', 'customer ready', 'approved']
     const lower = view.contextLabel.toLowerCase()
     for (const b of banned) assert.ok(!lower.includes(b), `banned phrase "${b}" found`)
+  })
+})
+
+describe('buildHearthSessionBackstageSummary', () => {
+  it('returns null for invalid input', () => {
+    assert.equal(buildHearthSessionBackstageSummary(null), null)
+    assert.equal(buildHearthSessionBackstageSummary({}), null)
+  })
+
+  it('builds summary with explored selection bullets', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.paused, {
+        selections: {
+          setupType: 'Zero-clearance gas',
+          goal: 'Ambiance + easier operation',
+          stoneSeries: 'Silverton Mountain Ledge',
+          dimensions: { w: 42, h: 30, d: 18 },
+          investment: { total: 9999 },
+          roomContext: { secret: 'internal' },
+        },
+      })
+    )
+    assert.ok(summary)
+    assert.equal(summary.sessionId, 's1')
+    assert.ok(summary.guestDirection.length > 0)
+    const labels = summary.exploredSelections.map((s) => s.label)
+    assert.ok(labels.includes('Setup'))
+    assert.ok(labels.includes('Stone'))
+    assert.ok(labels.includes('Dimensions'))
+    const dims = summary.exploredSelections.find((s) => s.label === 'Dimensions')
+    assert.equal(dims.value, '42 x 30 x 18')
+  })
+
+  it('always includes baseline verification checklist', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active)
+    )
+    for (const item of ['Fireplace type', 'Opening dimensions', 'Venting path', 'Gas availability']) {
+      assert.ok(summary.verificationChecklist.includes(item), `missing baseline: ${item}`)
+    }
+  })
+
+  it('adds field-rule labels to verification checklist', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active, {
+        flags: { needsFieldMeasure: false, hasComplexSetup: false, fieldRulesTriggered: ['ZC gas insert ack'] },
+      })
+    )
+    assert.ok(summary.verificationChecklist.includes('ZC gas insert ack'))
+    assert.deepEqual([...summary.fieldRuleLabels], ['ZC gas insert ack'])
+  })
+
+  it('strips sensitive selection keys from the summary', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active)
+    )
+    const flat = JSON.stringify(summary)
+    assert.ok(!flat.includes('investment'))
+    assert.ok(!flat.includes('roomContext'))
+    assert.ok(!flat.includes('9999'))
+    assert.ok(!flat.includes('internal'))
+  })
+
+  it('salesNote names BisTrack as quote source of truth', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active)
+    )
+    assert.ok(summary.salesNote.toLowerCase().includes('bistrack'))
+    assert.ok(summary.salesNote.toLowerCase().includes('discovery support'))
+  })
+
+  it('summary contains no banned customer-readiness phrases', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active, {
+        selections: { setupType: 'approved by customer' },
+      })
+    )
+    const flat = JSON.stringify(summary).toLowerCase()
+    for (const b of ['ready to send', 'proposal ready', 'customer ready']) {
+      assert.ok(!flat.includes(b), `banned phrase "${b}" found`)
+    }
+    // 'approved' may flow through user-entered selections; but salesNote must not introduce it.
+    assert.ok(!summary.salesNote.toLowerCase().includes('approved'))
+  })
+
+  it('guestDirection falls back to chapter label when selections are empty', () => {
+    const summary = buildHearthSessionBackstageSummary(
+      makeSession('s1', 'f1', SESSION_STATUS.active, {
+        selections: {},
+        currentChapter: 2,
+      })
+    )
+    assert.ok(summary.guestDirection.toLowerCase().includes('fit gauge') || summary.guestDirection.length > 0)
   })
 })

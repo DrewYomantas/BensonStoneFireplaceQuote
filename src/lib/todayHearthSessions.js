@@ -142,3 +142,91 @@ export function projectHearthSessionForInternalHandoff(session) {
     contextLabel: 'Hearth Studio guest design direction — needs verification before BisTrack build.',
   })
 }
+
+// Backstage handoff summary (Milestone 28) — display-ready strings layered on
+// top of projectHearthSessionForInternalHandoff. Always internal. Never customer-facing.
+//
+// Shape:
+//   {
+//     guestDirection: string,
+//     exploredSelections: [{ label, value }],
+//     verificationChecklist: string[],
+//     fieldRuleLabels: string[],
+//     salesNote: string,
+//   }
+
+const SELECTION_DISPLAY = [
+  { key: 'setupType', label: 'Setup' },
+  { key: 'goal', label: 'Goal' },
+  { key: 'fitGauge', label: 'Fit gauge' },
+  { key: 'stoneSeries', label: 'Stone' },
+  { key: 'dimensions', label: 'Dimensions' },
+  { key: 'hearthGeometry', label: 'Hearth geometry' },
+  { key: 'tvMantelPlan', label: 'TV / mantel plan' },
+  { key: 'recommendedPath', label: 'Recommended path' },
+]
+
+const BASELINE_CHECKLIST = Object.freeze([
+  'Fireplace type',
+  'Opening dimensions',
+  'Venting path',
+  'Gas availability',
+])
+
+const SALES_NOTE = 'Use as discovery support only. BisTrack remains quote source of truth.'
+
+function formatDimensions(dim) {
+  if (!dim || typeof dim !== 'object') return ''
+  const parts = [dim.w, dim.h, dim.d]
+    .filter((v) => v !== undefined && v !== null && String(v).trim())
+    .map((v) => String(v).trim())
+  return parts.length ? parts.join(' x ') : ''
+}
+
+function selectionDisplayValue(key, value) {
+  if (value === undefined || value === null) return ''
+  if (key === 'dimensions') return formatDimensions(value)
+  if (typeof value === 'object') return ''
+  return String(value).trim()
+}
+
+function buildGuestDirection(handoff) {
+  if (!handoff) return ''
+  if (handoff.guestDirection && handoff.guestDirection.trim()) return handoff.guestDirection
+  // Fallback to chapter label so the summary never reads blank.
+  return `In progress at ${handoff.chapterProgress.chapterLabel}.`
+}
+
+function buildVerificationChecklist(handoff) {
+  const items = new Set(BASELINE_CHECKLIST)
+  const sel = handoff.exploredSelections
+  if (!sel.setupType) items.add('Setup type')
+  if (!formatDimensions(sel.dimensions)) items.add('Opening dimensions')
+  if (!sel.hearthGeometry) items.add('Hearth geometry')
+  if (!sel.stoneSeries) items.add('Stone series availability')
+  for (const label of handoff.fieldRuleLabels) {
+    if (label && typeof label === 'string') items.add(label)
+  }
+  return Array.from(items)
+}
+
+export function buildHearthSessionBackstageSummary(session) {
+  const handoff = projectHearthSessionForInternalHandoff(session)
+  if (!handoff) return null
+  const exploredSelections = []
+  for (const { key, label } of SELECTION_DISPLAY) {
+    const value = selectionDisplayValue(key, handoff.exploredSelections[key])
+    if (value) exploredSelections.push({ label, value })
+  }
+  return Object.freeze({
+    sessionId: handoff.sessionId,
+    customerFileId: handoff.customerFileId,
+    status: handoff.status,
+    chapterLabel: handoff.chapterProgress.chapterLabel,
+    guestDirection: buildGuestDirection(handoff),
+    exploredSelections: Object.freeze(exploredSelections),
+    verificationChecklist: Object.freeze(buildVerificationChecklist(handoff)),
+    fieldRuleLabels: Object.freeze([...handoff.fieldRuleLabels]),
+    salesNote: SALES_NOTE,
+  })
+}

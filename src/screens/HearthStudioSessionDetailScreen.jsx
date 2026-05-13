@@ -12,6 +12,50 @@ import {
   softDeleteSession,
   restoreSession,
 } from '../lib/hearthStudioSessionStorage.js'
+import { buildHearthSessionBackstageSummary } from '../lib/todayHearthSessions.js'
+
+function BackstageSummaryCard({ session }) {
+  const summary = buildHearthSessionBackstageSummary(session)
+  if (!summary) return null
+  return (
+    <section className="card-flat" style={{ padding: 18, marginTop: 16, borderLeft: '3px solid var(--brass)' }}>
+      <div className="hstack">
+        <span className="eyebrow eyebrow-ember">BACKSTAGE HANDOFF SUMMARY</span>
+        <span className="spacer" />
+        <span className="body-sm" style={{ color: 'var(--slate)' }}>Internal sales context</span>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>GUEST DESIGN DIRECTION</span>
+        <p className="body-sm" style={{ marginTop: 4 }}>{summary.guestDirection}</p>
+      </div>
+
+      {summary.exploredSelections.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>EXPLORED SELECTIONS</span>
+          <ul className="body-sm" style={{ marginTop: 4, paddingLeft: 18 }}>
+            {summary.exploredSelections.map(({ label, value }) => (
+              <li key={label}><strong>{label}:</strong> {value}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12 }}>
+        <span className="eyebrow eyebrow-ink" style={{ fontSize: 11 }}>NEEDS VERIFICATION</span>
+        <ul className="body-sm" style={{ marginTop: 4, paddingLeft: 18 }}>
+          {summary.verificationChecklist.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="body-sm" style={{ marginTop: 12, color: 'var(--slate)', fontStyle: 'italic' }}>
+        Sales note: {summary.salesNote}
+      </p>
+    </section>
+  )
+}
 
 function ChapterList({ session }) {
   const total = Object.keys(CHAPTER_LABELS).length
@@ -203,6 +247,8 @@ export default function HearthStudioSessionDetailScreen({ sessionId, onBack, rep
                   )}
                 </div>
               </section>
+
+              <BackstageSummaryCard session={session} />
 
               <section className="card-flat" style={{ padding: 18, marginTop: 16 }}>
                 <span className="eyebrow eyebrow-ink">CHAPTER PROGRESS</span>
