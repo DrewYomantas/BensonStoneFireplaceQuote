@@ -32,6 +32,7 @@ import {
   describeFollowUp,
 } from '../lib/visitActivity.js'
 import { listSessions, createSession } from '../lib/hearthStudioSessionStorage.js'
+import { deriveCustomerFileLaunchAction } from '../lib/todayHearthSessions.js'
 import useLoggedInRep from '../lib/useLoggedInRep.js'
 
 function SourceTrailCard({ file }) {
@@ -369,7 +370,7 @@ function FollowUpCard({ followUp, onSave, onClear, disabled }) {
   )
 }
 
-export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview, onOpenHearthSession }) {
+export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQuotePrep, onOpenHandoff, onOpenProposalPreview, onOpenHearthSession, onLaunchHearthGuest }) {
   const { rep } = useLoggedInRep()
   const [file, setFile] = useState(null)
   const [missing, setMissing] = useState(false)
@@ -505,6 +506,34 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
     }
   }
 
+  const launchAction = deriveCustomerFileLaunchAction({
+    sessions: hsSessions,
+    customerName: file ? file.customerName : '',
+  })
+
+  async function handleLaunchGuestMode() {
+    if (!fileId || !onLaunchHearthGuest) return
+    try {
+      const storage = getSalesOsStorage()
+      const repId = rep ? rep.id : null
+      let sessionId = launchAction.sessionId
+      if (!sessionId) {
+        // Re-pick at launch time to avoid duplicates if state changed.
+        const fresh = deriveCustomerFileLaunchAction({ sessions: hsSessions, customerName: file ? file.customerName : '' })
+        if (fresh.sessionId) {
+          sessionId = fresh.sessionId
+        } else {
+          const created = await createSession(storage, fileId, repId)
+          await reloadActivityAndFollowUp(storage, fileId)
+          sessionId = created.id
+        }
+      }
+      onLaunchHearthGuest(sessionId)
+    } catch {
+      // creation failure is non-fatal — rep can retry from the card.
+    }
+  }
+
   const display = file
   const warnings = display ? deriveFileWarnings(display) : []
   const fieldRulesResult = display ? evaluateFieldRules(display) : null
@@ -624,6 +653,30 @@ export default function CustomerFileScreen({ fileId, onBack, onOpenLens, onOpenQ
             onClear={handleClearFollowUp}
             disabled={!fileId}
           />
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <section className="card" style={{ padding: 18, borderLeft: '3px solid var(--ember)' }}>
+            <div className="hstack">
+              <span className="eyebrow eyebrow-ember">GUEST MODE</span>
+              <span className="spacer" />
+              <span className="body-sm" style={{ color: 'var(--slate)' }}>
+                Customer-facing surface · backstage tools stay hidden
+              </span>
+            </div>
+            <p className="body-sm" style={{ marginTop: 8, color: 'var(--ink)' }}>
+              {launchAction.helperText}
+            </p>
+            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleLaunchGuestMode}
+                disabled={!fileId}
+              >
+                {launchAction.label}
+              </button>
+            </div>
+          </section>
         </div>
         <div style={{ marginTop: 18 }}>
           <HearthStudioSessionsCard

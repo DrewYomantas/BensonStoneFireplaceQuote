@@ -210,6 +210,79 @@ function buildVerificationChecklist(handoff) {
   return Array.from(items)
 }
 
+// Pick the best session to resume from a flat session list (Milestone 29).
+// Priority: active > paused > null. Completed and soft-deleted are never resumed
+// — completed represents a closed customer journey; soft-deleted is excluded.
+// Within a tier, newest lastTouchedAt wins.
+export function pickHearthSessionToResume(sessions = []) {
+  if (!Array.isArray(sessions) || sessions.length === 0) return null
+  const candidates = sessions
+    .map((s) => projectHearthStudioSessionForDisplay(s))
+    .filter(Boolean)
+    .filter((s) => s.status !== SESSION_STATUS.soft_deleted && !s.softDeletedAt)
+  if (candidates.length === 0) return null
+  const active = candidates
+    .filter((s) => s.status === SESSION_STATUS.active)
+    .sort((a, b) => safeTime(b.lastTouchedAt) - safeTime(a.lastTouchedAt))
+  if (active.length > 0) return active[0]
+  const paused = candidates
+    .filter((s) => s.status === SESSION_STATUS.paused)
+    .sort((a, b) => safeTime(b.lastTouchedAt) - safeTime(a.lastTouchedAt))
+  if (paused.length > 0) return paused[0]
+  return null
+}
+
+// Customer File launch action (Milestone 29).
+// Returns a display-safe action descriptor:
+//   { mode: 'resume' | 'start', sessionId, label, helperText }
+// 'resume' carries the session to reopen; 'start' means create a new one.
+// helperText is customer-name-aware but never contains banned phrases.
+export function deriveCustomerFileLaunchAction({ sessions = [], customerName = '' } = {}) {
+  const session = pickHearthSessionToResume(sessions)
+  const safeName = typeof customerName === 'string' ? customerName.trim() : ''
+  if (session) {
+    const chapterLabel = CHAPTER_LABELS[session.currentChapter] || `Chapter ${session.currentChapter}`
+    const status = session.status === SESSION_STATUS.paused ? 'paused' : 'in progress'
+    return Object.freeze({
+      mode: 'resume',
+      sessionId: session.id,
+      label: 'Resume Hearth Studio',
+      helperText: `Pick up ${safeName ? `with ${safeName}` : ''} at ${chapterLabel} — session is ${status}.`.replace(/\s+/g, ' ').trim(),
+    })
+  }
+  return Object.freeze({
+    mode: 'start',
+    sessionId: null,
+    label: 'Begin Guest Design Session',
+    helperText: safeName
+      ? `Open the Hearth Studio guest surface with ${safeName}.`
+      : 'Open the Hearth Studio guest surface.',
+  })
+}
+
+// Customer-safe projection for the Guest Mode shell (Milestone 29).
+// Strips investment, roomContext, and anything else the display projection
+// already removes. Returns a frozen view with only the fields needed to
+// render a calm customer-facing surface. Never includes backstage labels,
+// field-rule labels, sales notes, or quote-prep info.
+export function projectHearthSessionForGuestMode(session) {
+  const view = projectHearthStudioSessionForDisplay(session)
+  if (!view || !view.id) return null
+  const chapterLabel = CHAPTER_LABELS[view.currentChapter] || `Chapter ${view.currentChapter}`
+  const total = Object.keys(CHAPTER_LABELS).length
+  const done = Array.isArray(view.chaptersCompleted) ? view.chaptersCompleted.length : 0
+  return Object.freeze({
+    sessionId: view.id,
+    customerFileId: view.customerFileId,
+    status: view.status,
+    currentChapter: view.currentChapter,
+    chapterLabel,
+    chaptersCompletedCount: done,
+    totalChapters: total,
+    progressLabel: `Chapter ${String(view.currentChapter + 1).padStart(2, '0')} of ${total} — ${chapterLabel}`,
+  })
+}
+
 export function buildHearthSessionBackstageSummary(session) {
   const handoff = projectHearthSessionForInternalHandoff(session)
   if (!handoff) return null

@@ -16,6 +16,7 @@ import BackstageScreen from './screens/BackstageScreen.jsx'
 import BackstageBackup from './components/shell/BackstageBackup.jsx'
 import RepLoginScreen from './screens/RepLoginScreen.jsx'
 import HearthStudioSessionDetailScreen from './screens/HearthStudioSessionDetailScreen.jsx'
+import HearthStudioGuestScreen from './screens/HearthStudioGuestScreen.jsx'
 import useLoggedInRep from './lib/useLoggedInRep.js'
 
 const TITLES = {
@@ -90,6 +91,10 @@ export default function App() {
     setRoute({ screen: 'hearthSession', fileId, sessionId })
   }
 
+  function openHearthGuest(sessionId, fileId) {
+    setRoute({ screen: 'hearthGuest', fileId, sessionId })
+  }
+
   function openBulkIntake() {
     setRoute({ screen: 'bulkIntake', fileId: null })
   }
@@ -105,6 +110,15 @@ export default function App() {
   if (repLoading) return null
 
   if (!loggedInRep) return <RepLoginScreen onLogin={login} />
+
+  if (route.screen === 'hearthGuest') {
+    return (
+      <HearthStudioGuestScreen
+        sessionId={route.sessionId}
+        onExit={() => openFile(route.fileId)}
+      />
+    )
+  }
 
   return (
     <AppShell
@@ -142,6 +156,7 @@ export default function App() {
           onOpenHandoff={openHandoff}
           onOpenProposalPreview={openProposalPreview}
           onOpenHearthSession={(sessionId) => openHearthSession(sessionId, route.fileId)}
+          onLaunchHearthGuest={(sessionId) => openHearthGuest(sessionId, route.fileId)}
         />
       )}
       {route.screen === 'lens' && (

@@ -4,6 +4,9 @@ import {
   deriveTodayHearthSessions,
   projectHearthSessionForInternalHandoff,
   buildHearthSessionBackstageSummary,
+  pickHearthSessionToResume,
+  deriveCustomerFileLaunchAction,
+  projectHearthSessionForGuestMode,
   COMPLETED_RECENT_DAYS,
 } from './todayHearthSessions.js'
 import { SESSION_STATUS } from './hearthStudioSessionStorage.js'
@@ -304,7 +307,103 @@ describe('buildHearthSessionBackstageSummary', () => {
     assert.ok(!summary.salesNote.toLowerCase().includes('approved'))
   })
 
-  it('guestDirection falls back to chapter label when selections are empty', () => {
+  it('placeholder', () => { assert.ok(true) })
+})
+
+describe('pickHearthSessionToResume', () => {
+  it('returns null for empty list', () => {
+    assert.equal(pickHearthSessionToResume([]), null)
+    assert.equal(pickHearthSessionToResume(null), null)
+  })
+  it('picks active over paused over completed', () => {
+    const sessions = [
+      makeSession('paused', 'f1', SESSION_STATUS.paused, { lastTouchedAt: isoMinusDays(0.1) }),
+      makeSession('active', 'f1', SESSION_STATUS.active, { lastTouchedAt: isoMinusDays(3) }),
+      makeSession('done', 'f1', SESSION_STATUS.completed, { completedAt: isoMinusDays(0.05), lastTouchedAt: isoMinusDays(0.05) }),
+    ]
+    assert.equal(pickHearthSessionToResume(sessions).id, 'active')
+  })
+  it('falls through to paused when no active', () => {
+    const sessions = [
+      makeSession('p1', 'f1', SESSION_STATUS.paused, { lastTouchedAt: isoMinusDays(3) }),
+      makeSession('p2', 'f1', SESSION_STATUS.paused, { lastTouchedAt: isoMinusDays(0.5) }),
+    ]
+    assert.equal(pickHearthSessionToResume(sessions).id, 'p2')
+  })
+  it('skips soft-deleted', () => {
+    const sessions = [
+      makeSession('del', 'f1', SESSION_STATUS.soft_deleted, { softDeletedAt: isoMinusDays(0.1) }),
+    ]
+    assert.equal(pickHearthSessionToResume(sessions), null)
+  })
+  it('does not auto-resume completed sessions', () => {
+    const sessions = [makeSession('done', 'f1', SESSION_STATUS.completed, { completedAt: isoMinusDays(0.1) })]
+    assert.equal(pickHearthSessionToResume(sessions), null)
+  })
+})
+
+describe('deriveCustomerFileLaunchAction', () => {
+  it('returns start action when no sessions exist', () => {
+    const action = deriveCustomerFileLaunchAction({ sessions: [], customerName: 'Drew' })
+    assert.equal(action.mode, 'start')
+    assert.equal(action.sessionId, null)
+    assert.ok(/Begin/.test(action.label))
+    assert.ok(action.helperText.includes('Drew'))
+  })
+  it('returns resume action when an active session exists', () => {
+    const sessions = [makeSession('s1', 'f1', SESSION_STATUS.active, { currentChapter: 4 })]
+    const action = deriveCustomerFileLaunchAction({ sessions, customerName: 'Jane' })
+    assert.equal(action.mode, 'resume')
+    assert.equal(action.sessionId, 's1')
+    assert.ok(/Resume/.test(action.label))
+    assert.ok(action.helperText.toLowerCase().includes('jane'))
+  })
+  it('label and helperText contain no banned phrases', () => {
+    const banned = ['ready to send', 'proposal ready', 'customer ready', 'approved']
+    const cases = [
+      deriveCustomerFileLaunchAction({ sessions: [], customerName: 'Drew' }),
+      deriveCustomerFileLaunchAction({
+        sessions: [makeSession('s1', 'f1', SESSION_STATUS.paused)],
+        customerName: 'Drew',
+      }),
+    ]
+    for (const a of cases) {
+      const flat = (a.label + ' ' + a.helperText).toLowerCase()
+      for (const b of banned) assert.ok(!flat.includes(b), `banned phrase "${b}" in: ${flat}`)
+    }
+  })
+  it('safe when customerName is missing', () => {
+    const action = deriveCustomerFileLaunchAction({ sessions: [] })
+    assert.equal(action.mode, 'start')
+    assert.ok(action.helperText.length > 0)
+  })
+})
+
+describe('projectHearthSessionForGuestMode', () => {
+  it('returns null for invalid input', () => {
+    assert.equal(projectHearthSessionForGuestMode(null), null)
+    assert.equal(projectHearthSessionForGuestMode({}), null)
+  })
+  it('exposes only customer-safe fields', () => {
+    const view = projectHearthSessionForGuestMode(
+      makeSession('s1', 'f1', SESSION_STATUS.active, { currentChapter: 5 })
+    )
+    const flat = JSON.stringify(view)
+    assert.ok(!flat.includes('investment'))
+    assert.ok(!flat.includes('roomContext'))
+    assert.ok(!flat.includes('9999'))
+    assert.ok(!flat.includes('fieldRule'))
+    assert.ok(!flat.includes('salesNote'))
+  })
+  it('builds 1-indexed progress label', () => {
+    const view = projectHearthSessionForGuestMode(
+      makeSession('s1', 'f1', SESSION_STATUS.active, { currentChapter: 5 })
+    )
+    assert.ok(view.progressLabel.includes('06'))
+    assert.ok(view.progressLabel.includes('13'))
+  })
+
+  it('guestDirection fallback marker', () => {
     const summary = buildHearthSessionBackstageSummary(
       makeSession('s1', 'f1', SESSION_STATUS.active, {
         selections: {},
